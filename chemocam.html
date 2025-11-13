@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ChemoCam - Crespo.World</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: monospace; text-align: center; background: #000; color: #0f0; }
+  h1 { font-size: 2em; margin-bottom: 0.2em; }
+  #status { font-weight: bold; margin-bottom: 1em; }
+  video { border: 3px solid #0f0; max-width: 90%; height: auto; }
+  canvas { margin-top: 2em; border: 2px solid #0f0; }
+</style>
+</head>
+<body>
+<h1>ChemoCam Live</h1>
+<div id="status">Checking stream...</div>
+<video id="player" controls autoplay muted></video>
+
+<!-- Snake Game Canvas -->
+<canvas id="snake" width="400" height="400"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+const player = document.getElementById('player');
+const status = document.getElementById('status');
+const HLS_URL = 'http://192.168.0.21/stream/index.m3u8'; // Later replace with your public IP/domain
+
+// Try to load the stream
+function loadStream() {
+    fetch(HLS_URL, {method:'HEAD'})
+    .then(resp => {
+        if(resp.ok){
+            status.textContent = 'LIVE 🔴';
+            if(Hls.isSupported()){
+                const hls = new Hls();
+                hls.loadSource(HLS_URL);
+                hls.attachMedia(player);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
+            } else if (player.canPlayType('application/vnd.apple.mpegurl')){
+                player.src = HLS_URL;
+            }
+        } else {
+            status.textContent = 'Offline ⚪';
+        }
+    }).catch(e => { status.textContent = 'Offline ⚪'; });
+}
+
+// Check every 5 seconds
+loadStream();
+setInterval(loadStream, 5000);
+
+// ---- Simple Snake Game ----
+const c = document.getElementById('snake');
+const ctx = c.getContext('2d');
+const grid = 20;
+let snake = [{x:160,y:160}], dx=grid, dy=0, food={x:320,y:320}, score=0, count=0;
+
+function gameLoop(){
+    requestAnimationFrame(gameLoop);
+    if(++count<6) return; count=0;
+    ctx.clearRect(0,0,c.width,c.height);
+    const head={x:snake[0].x+dx, y:snake[0].y+dy};
+    snake.unshift(head);
+
+    // food collision
+    if(head.x===food.x && head.y===food.y){
+        score++;
+        food.x = Math.floor(Math.random()*20)*grid;
+        food.y = Math.floor(Math.random()*20)*grid;
+    } else snake.pop();
+
+    // wall collision
+    if(head.x<0||head.y<0||head.x>=c.width||head.y>=c.height){ snake=[{x:160,y:160}]; dx=grid; dy=0; score=0; }
+
+    // self collision
+    for(let i=1;i<snake.length;i++){ if(head.x===snake[i].x && head.y===snake[i].y){ snake=[{x:160,y:160}]; dx=grid; dy=0; score=0; } }
+
+    // draw
+    ctx.fillStyle="#f00"; ctx.fillRect(food.x,food.y,grid-2,grid-2);
+    ctx.fillStyle="#0f0"; snake.forEach(s=>ctx.fillRect(s.x,s.y,grid-2,grid-2));
+    ctx.fillStyle="#0f0"; ctx.fillText("Score: "+score,10,390);
+}
+
+document.addEventListener("keydown", e=>{
+    if(e.key==="ArrowLeft"&&dx===0){dx=-grid;dy=0;}
+    if(e.key==="ArrowUp"&&dy===0){dy=-grid;dx=0;}
+    if(
