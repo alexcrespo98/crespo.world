@@ -5,22 +5,39 @@
 <title>ChemoCam - Crespo.World</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: monospace; text-align: center; background: #000; color: #0f0; }
+  body { font-family: monospace; text-align: center; background: #000; color: #0f0; margin: 0; padding: 1em; }
   h1 { font-size: 2em; margin-bottom: 0.2em; }
-  #status { font-weight: bold; margin-bottom: 1em; font-size: 1.5em; }
-  video { border: 3px solid #0f0; max-width: 90%; height: auto; }
+  #status { font-weight: bold; margin-bottom: 1em; font-size: 1.2em; }
+  video { border: 3px solid #0f0; max-width: 90%; height: auto; transition: transform 0.3s; }
+  #chat-container { margin-top: 2em; max-width: 90%; margin-left: auto; margin-right: auto; text-align: left; }
+  #messages { border: 2px solid #0f0; padding: 1em; height: 200px; overflow-y: auto; background: #111; }
+  #chat-input { width: 100%; padding: 0.5em; margin-top: 0.5em; background: #000; color: #0f0; border: 2px solid #0f0; }
+  button { background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em 1em; margin: 0.5em; cursor: pointer; }
 </style>
 </head>
 <body>
+
 <h1>ChemoCam Live</h1>
 <div id="status">Checking stream...</div>
 <video id="player" controls autoplay muted></video>
+
+<div>
+  <button onclick="rotate(-90)">Rotate ⬅️</button>
+  <button onclick="rotate(90)">Rotate ➡️</button>
+</div>
+
+<div id="chat-container">
+  <h2>Chat</h2>
+  <div id="messages"></div>
+  <input type="text" id="chat-input" placeholder="Type a message and press Enter" />
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 const player = document.getElementById('player');
 const status = document.getElementById('status');
 const HLS_URL = 'https://undo-aruba-diversity-makeup.trycloudflare.com/stream/index.m3u8';
+let rotation = 0;
 
 function loadStream() {
     fetch(HLS_URL, { method: 'HEAD' })
@@ -45,9 +62,27 @@ function loadStream() {
 
 // Initial load
 loadStream();
-
-// Check every 5 seconds and reload if offline
 setInterval(loadStream, 5000);
+
+// Rotate function
+function rotate(deg) {
+    rotation = (rotation + deg) % 360;
+    player.style.transform = `rotate(${rotation}deg)`;
+}
+
+// Chat functionality (local only)
+const messages = document.getElementById('messages');
+const chatInput = document.getElementById('chat-input');
+
+chatInput.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && chatInput.value.trim() !== '') {
+        const msg = document.createElement('div');
+        msg.textContent = chatInput.value;
+        messages.appendChild(msg);
+        messages.scrollTop = messages.scrollHeight;
+        chatInput.value = '';
+    }
+});
 </script>
 </body>
 </html>
