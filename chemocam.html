@@ -22,10 +22,8 @@ const player = document.getElementById('player');
 const status = document.getElementById('status');
 const HLS_URL = 'https://undo-aruba-diversity-makeup.trycloudflare.com/stream/index.m3u8';
 
-
-
 function loadStream() {
-    fetch(HLS_URL, {method:'HEAD'})
+    fetch(HLS_URL, { method: 'HEAD' })
     .then(resp => {
         if(resp.ok){
             status.textContent = 'LIVE 🔴';
@@ -36,15 +34,19 @@ function loadStream() {
                 hls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
             } else if (player.canPlayType('application/vnd.apple.mpegurl')){
                 player.src = HLS_URL;
+                player.addEventListener('loadedmetadata', () => player.play());
             }
         } else {
             status.textContent = 'Offline ⚪';
         }
-    }).catch(e => { status.textContent = 'Offline ⚪'; });
+    })
+    .catch(e => { status.textContent = 'Offline ⚪'; });
 }
 
-// Check every 5 seconds
+// Initial load
 loadStream();
+
+// Check every 5 seconds and reload if offline
 setInterval(loadStream, 5000);
 </script>
 </body>
