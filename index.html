@@ -13,14 +13,31 @@
       margin: 0;
       padding: 2em;
     }
+    nav {
+      margin-bottom: 1em;
+    }
+    nav a {
+      color: #0f0;
+      text-decoration: none;
+      margin: 0 1em;
+      font-weight: bold;
+    }
+    nav a:hover {
+      text-decoration: underline;
+    }
     h1 { font-size: 2em; margin-bottom: 0.5em; }
     canvas { background: #111; margin-top: 2em; border: 2px solid #0f0; }
   </style>
 </head>
 <body>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="chemocam.html">ChemoCam</a>
+  </nav>
+
   <h1>you better believe it!</h1>
-  <p>chemo cam on the way 🚀</p>
   <canvas id="game" width="400" height="400"></canvas>
+  
   <script>
     const c = document.getElementById("game");
     const ctx = c.getContext("2d");
