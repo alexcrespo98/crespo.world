@@ -18,7 +18,7 @@
 <body>
 
 <h1>ChemoCam Live</h1>
-<div id="status">Loading stream...</div>
+<div id="status">Checking stream...</div>
 <video id="player" controls autoplay muted></video>
 
 <div>
@@ -30,36 +30,43 @@
   <h2>Chat</h2>
   <div id="messages"></div>
   <input type="text" id="chat-input" placeholder="Type a message and press Enter" />
+  <button onclick="clearChat()">Delete All Messages</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 const player = document.getElementById('player');
 const status = document.getElementById('status');
-const HLS_URL = 'https://inform-navigation-charleston-black.trycloudflare.com/stream/index.m3u8';
-
+const messages = document.getElementById('messages');
+const chatInput = document.getElementById('chat-input');
 let rotation = 0;
 
-// Directly attach HLS stream
-function startStream() {
+const HLS_URL = 'https://inform-navigation-charleston-black.trycloudflare.com/stream/index.m3u8';
+
+// Load stream faster
+function loadStream() {
     if(Hls.isSupported()){
-        const hls = new Hls();
+        const hls = new Hls({ maxBufferLength: 2 }); // minimal buffer
         hls.loadSource(HLS_URL);
         hls.attachMedia(player);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            player.play();
             status.textContent = 'LIVE 🔴';
+            player.play();
         });
-    } else if(player.canPlayType('application/vnd.apple.mpegurl')){
+        hls.on(Hls.Events.ERROR, () => status.textContent = 'Offline ⚪');
+    } else if (player.canPlayType('application/vnd.apple.mpegurl')){
         player.src = HLS_URL;
         player.addEventListener('loadedmetadata', () => {
-            player.play();
             status.textContent = 'LIVE 🔴';
+            player.play();
         });
+        player.addEventListener('error', () => status.textContent = 'Offline ⚪');
     }
 }
 
-startStream();
+// Initial load
+loadStream();
+setInterval(loadStream, 5000);
 
 // Rotate function
 function rotate(deg) {
@@ -68,9 +75,6 @@ function rotate(deg) {
 }
 
 // Chat functionality (local only)
-const messages = document.getElementById('messages');
-const chatInput = document.getElementById('chat-input');
-
 chatInput.addEventListener('keydown', e => {
     if(e.key === 'Enter' && chatInput.value.trim() !== ''){
         const msg = document.createElement('div');
@@ -80,6 +84,10 @@ chatInput.addEventListener('keydown', e => {
         chatInput.value = '';
     }
 });
+
+function clearChat(){
+    messages.innerHTML = '';
+}
 </script>
 </body>
 </html>
