@@ -18,7 +18,7 @@
 <body>
 
 <h1>ChemoCam Live</h1>
-<div id="status">Checking stream...</div>
+<div id="status">Loading stream...</div>
 <video id="player" controls autoplay muted></video>
 
 <div>
@@ -40,30 +40,26 @@ const HLS_URL = 'https://inform-navigation-charleston-black.trycloudflare.com/st
 
 let rotation = 0;
 
-function loadStream() {
-    fetch(HLS_URL, { method: 'HEAD' })
-    .then(resp => {
-        if(resp.ok){
+// Directly attach HLS stream
+function startStream() {
+    if(Hls.isSupported()){
+        const hls = new Hls();
+        hls.loadSource(HLS_URL);
+        hls.attachMedia(player);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            player.play();
             status.textContent = 'LIVE 🔴';
-            if(Hls.isSupported()){
-                const hls = new Hls();
-                hls.loadSource(HLS_URL);
-                hls.attachMedia(player);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
-            } else if (player.canPlayType('application/vnd.apple.mpegurl')){
-                player.src = HLS_URL;
-                player.addEventListener('loadedmetadata', () => player.play());
-            }
-        } else {
-            status.textContent = 'Offline ⚪';
-        }
-    })
-    .catch(e => { status.textContent = 'Offline ⚪'; });
+        });
+    } else if(player.canPlayType('application/vnd.apple.mpegurl')){
+        player.src = HLS_URL;
+        player.addEventListener('loadedmetadata', () => {
+            player.play();
+            status.textContent = 'LIVE 🔴';
+        });
+    }
 }
 
-// Initial load
-loadStream();
-setInterval(loadStream, 5000);
+startStream();
 
 // Rotate function
 function rotate(deg) {
@@ -76,7 +72,7 @@ const messages = document.getElementById('messages');
 const chatInput = document.getElementById('chat-input');
 
 chatInput.addEventListener('keydown', e => {
-    if(e.key === 'Enter' && chatInput.value.trim() !== '') {
+    if(e.key === 'Enter' && chatInput.value.trim() !== ''){
         const msg = document.createElement('div');
         msg.textContent = chatInput.value;
         messages.appendChild(msg);
