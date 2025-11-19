@@ -1,108 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Crespo.World</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {
-      background: #000;
-      color: #0f0;
-      font-family: monospace;
-      text-align: center;
-      margin: 0;
-      padding: 2em;
-    }
-    nav {
-      margin-bottom: 1em;
-    }
-    nav a {
-      color: #0f0;
-      text-decoration: none;
-      margin: 0 1em;
-      font-weight: bold;
-    }
-    nav a:hover {
-      text-decoration: underline;
-    }
-    h1 { font-size: 2em; margin-bottom: 0.5em; }
-    canvas { background: #111; margin-top: 2em; border: 2px solid #0f0; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
 </head>
 <body>
-  <nav>
-    <a href="index.html">Home</a>
-    <a href="chemocam.html">ChemoCam</a>
-  </nav>
-
-  <h1>you better believe it!</h1>
-  <canvas id="game" width="400" height="400"></canvas>
-  
-  <script>
-    const c = document.getElementById("game");
-    const ctx = c.getContext("2d");
-    const grid = 20;
-    let snake = [{x: 160, y: 160}];
-    let dx = grid, dy = 0;
-    let food = {x: 320, y: 320};
-    let score = 0;
-
-    function gameLoop() {
-      requestAnimationFrame(gameLoop);
-      if (++count < 6) return;
-      count = 0;
-      ctx.clearRect(0,0,c.width,c.height);
-
-      // move snake
-      const head = {x: snake[0].x + dx, y: snake[0].y + dy};
-      snake.unshift(head);
-
-      // food collision
-      if (head.x === food.x && head.y === food.y) {
-        score++;
-        food.x = Math.floor(Math.random() * 20) * grid;
-        food.y = Math.floor(Math.random() * 20) * grid;
-      } else {
-        snake.pop();
-      }
-
-      // wall collision
-      if (head.x < 0 || head.y < 0 || head.x >= c.width || head.y >= c.height) {
-        snake = [{x:160,y:160}];
-        dx = grid; dy = 0;
-        score = 0;
-      }
-
-      // self collision
-      for (let i = 1; i < snake.length; i++) {
-        if (head.x === snake[i].x && head.y === snake[i].y) {
-          snake = [{x:160,y:160}];
-          dx = grid; dy = 0;
-          score = 0;
-        }
-      }
-
-      // draw food
-      ctx.fillStyle = "#f00";
-      ctx.fillRect(food.x, food.y, grid-2, grid-2);
-
-      // draw snake
-      ctx.fillStyle = "#0f0";
-      snake.forEach(s => ctx.fillRect(s.x, s.y, grid-2, grid-2));
-
-      // draw score
-      ctx.fillStyle = "#0f0";
-      ctx.fillText("Score: " + score, 10, 390);
-    }
-
-    let count = 0;
-    document.addEventListener("keydown", e => {
-      if (e.key === "ArrowLeft" && dx === 0) { dx = -grid; dy = 0; }
-      if (e.key === "ArrowUp" && dy === 0) { dy = -grid; dx = 0; }
-      if (e.key === "ArrowRight" && dx === 0) { dx = grid; dy = 0; }
-      if (e.key === "ArrowDown" && dy === 0) { dy = grid; dx = 0; }
-    });
-    requestAnimationFrame(gameLoop);
-  </script>
+    <nav>
+        <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="chemoCam.html">ChemoCam</a></li>
+            <!-- New link added -->
+            <li><a href="crespomize.html">Crespomize</a></li>
+        </ul>
+    </nav>
+    <h1>Welcome to Crespo World</h1>
+    <p>This is the index page.</p>
 </body>
 </html>
