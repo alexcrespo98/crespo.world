@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>groatesque - crespo.world</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      text-align: center;
+      margin: 0;
+      padding: 2em;
+    }
+    nav {
+      margin-bottom: 1em;
+    }
+    nav a {
+      color: #0f0;
+      text-decoration: none;
+      margin: 0 1em;
+      font-weight: bold;
+    }
+    nav a:hover {
+      text-decoration: underline;
+    }
+    h1 { font-size: 2em; margin-bottom: 0.5em; }
+    #board {
+      display: inline-grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      border: 3px solid #0f0;
+      margin: 1em auto;
+    }
+    .square {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .square.light { background: #333; }
+    .square.dark { background: #111; }
+    .square.selected { background: #050; }
+    .square:hover { opacity: 0.8; }
+    #message {
+      margin-top: 1em;
+      min-height: 3em;
+      color: #0f0;
+      font-size: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="index.html">home</a>
+    <a href="chemocam.html">chemocam</a>
+    <a href="crespomize.html">crespomize</a>
+    <a href="jakeysnakey.html">jakeysnakey</a>
+    <a href="groatesque.html">groatesque</a>
+  </nav>
+
+  <h1>chess for nolan</h1>
+  <div id="board"></div>
+  <div id="message">your move, nolan.</div>
+  
+  <script>
+    const pieces = {
+      '♜': 'br', '♞': 'bn', '♝': 'bb', '♛': 'bq', '♚': 'bk', '♟': 'bp',
+      '♖': 'wr', '♘': 'wn', '♗': 'wb', '♕': 'wq', '♔': 'wk', '♙': 'wp'
+    };
+    
+    let board = [
+      ['♜','♞','♝','♛','♚','♝','♞','♜'],
+      ['♟','♟','♟','♟','♟','♟','♟','♟'],
+      ['','','','','','','',''],
+      ['','','','','','','',''],
+      ['','','','','','','',''],
+      ['','','','','','','',''],
+      ['♙','♙','♙','♙','♙','♙','♙','♙'],
+      ['♖','♘','♗','♕','♔','♗','♘','♖']
+    ];
+    
+    let selected = null;
+    let turn = 'w';
+    let gameOver = false;
+    
+    function render() {
+      const boardEl = document.getElementById('board');
+      boardEl.innerHTML = '';
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const sq = document.createElement('div');
+          sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+          sq.textContent = board[r][c];
+          sq.dataset.row = r;
+          sq.dataset.col = c;
+          if (selected && selected.r === r && selected.c === c) {
+            sq.classList.add('selected');
+          }
+          sq.addEventListener('click', () => handleClick(r, c));
+          boardEl.appendChild(sq);
+        }
+      }
+    }
+    
+    function handleClick(r, c) {
+      if (gameOver) return;
+      if (turn !== 'w') return;
+      
+      const piece = board[r][c];
+      
+      if (selected) {
+        if (r === selected.r && c === selected.c) {
+          selected = null;
+        } else {
+          if (makeMove(selected.r, selected.c, r, c)) {
+            turn = 'b';
+            selected = null;
+            render();
+            setTimeout(botMove, 500);
+          } else {
+            selected = null;
+          }
+        }
+      } else {
+        if (piece && pieces[piece] && pieces[piece][0] === 'w') {
+          selected = {r, c};
+        }
+      }
+      render();
+    }
+    
+    function makeMove(r1, c1, r2, c2) {
+      const piece = board[r1][c1];
+      const target = board[r2][c2];
+      
+      if (target && pieces[target] && pieces[target][0] === pieces[piece][0]) {
+        return false;
+      }
+      
+      if (!isValidMove(r1, c1, r2, c2, piece)) {
+        return false;
+      }
+      
+      board[r2][c2] = piece;
+      board[r1][c1] = '';
+      return true;
+    }
+    
+    function isValidMove(r1, c1, r2, c2, piece) {
+      const type = pieces[piece][1];
+      const dr = r2 - r1;
+      const dc = c2 - c1;
+      
+      if (type === 'p') {
+        const dir = pieces[piece][0] === 'w' ? -1 : 1;
+        if (dc === 0 && dr === dir && !board[r2][c2]) return true;
+        if (dc === 0 && dr === dir * 2 && !board[r2][c2] && !board[r1 + dir][c1]) {
+          if ((pieces[piece][0] === 'w' && r1 === 6) || (pieces[piece][0] === 'b' && r1 === 1)) return true;
+        }
+        if (Math.abs(dc) === 1 && dr === dir && board[r2][c2]) return true;
+      }
+      if (type === 'r') {
+        if (dr === 0 || dc === 0) return isPathClear(r1, c1, r2, c2);
+      }
+      if (type === 'n') {
+        if ((Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2)) return true;
+      }
+      if (type === 'b') {
+        if (Math.abs(dr) === Math.abs(dc)) return isPathClear(r1, c1, r2, c2);
+      }
+      if (type === 'q') {
+        if (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) return isPathClear(r1, c1, r2, c2);
+      }
+      if (type === 'k') {
+        if (Math.abs(dr) <= 1 && Math.abs(dc) <= 1) return true;
+      }
+      return false;
+    }
+    
+    function isPathClear(r1, c1, r2, c2) {
+      const dr = Math.sign(r2 - r1);
+      const dc = Math.sign(c2 - c1);
+      let r = r1 + dr, c = c1 + dc;
+      while (r !== r2 || c !== c2) {
+        if (board[r][c]) return false;
+        r += dr;
+        c += dc;
+      }
+      return true;
+    }
+    
+    function botMove() {
+      if (gameOver) return;
+      
+      const moves = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (piece && pieces[piece] && pieces[piece][0] === 'b') {
+            for (let r2 = 0; r2 < 8; r2++) {
+              for (let c2 = 0; c2 < 8; c2++) {
+                if (isValidMove(r, c, r2, c2, piece)) {
+                  moves.push({r1: r, c1: c, r2, c2, piece, target: board[r2][c2]});
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      if (moves.length === 0) {
+        msg("looks like i'm out of moves, nolan. you win!");
+        gameOver = true;
+        return;
+      }
+      
+      // check if nolan is about to win
+      if (isNolanAboutToWin()) {
+        msg("... i don't wanna play anymore.");
+        gameOver = true;
+        return;
+      }
+      
+      // prioritize captures
+      const captures = moves.filter(m => m.target);
+      const move = captures.length ? captures[Math.floor(Math.random() * captures.length)] : moves[Math.floor(Math.random() * moves.length)];
+      
+      board[move.r2][move.c2] = move.piece;
+      board[move.r1][move.c1] = '';
+      
+      critiqueBotMove(move);
+      turn = 'w';
+      render();
+    }
+    
+    function isNolanAboutToWin() {
+      // check if white can capture black king next move
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (piece && pieces[piece] && pieces[piece][0] === 'w') {
+            for (let r2 = 0; r2 < 8; r2++) {
+              for (let c2 = 0; c2 < 8; c2++) {
+                if (board[r2][c2] === '♚' && isValidMove(r, c, r2, c2, piece)) {
+                  return true;
+                }
+              }
+            }
+          }
+        }
+      }
+      return false;
+    }
+    
+    function critiqueBotMove(move) {
+      const reasons = [];
+      
+      // hung piece
+      if (isPieceHanging(move.r2, move.c2)) {
+        reasons.push("hung a piece");
+      }
+      
+      // moving to edge for no reason
+      if (!move.target && (move.r2 === 0 || move.r2 === 7 || move.c2 === 0 || move.c2 === 7)) {
+        if (pieces[move.piece][1] !== 'r' && pieces[move.piece][1] !== 'q') {
+          reasons.push("moved to the edge for no reason");
+        }
+      }
+      
+      // moved same piece twice in opening
+      if (board[1].some(p => p === '♟') && pieces[move.piece][1] !== 'p') {
+        reasons.push("moved the same piece twice in opening");
+      }
+      
+      if (reasons.length > 0) {
+        msg("that was bad, nolan. " + reasons.join(", ") + ".");
+      } else {
+        msg("not bad, nolan.");
+      }
+    }
+    
+    function isPieceHanging(r, c) {
+      const piece = board[r][c];
+      for (let r2 = 0; r2 < 8; r2++) {
+        for (let c2 = 0; c2 < 8; c2++) {
+          const enemy = board[r2][c2];
+          if (enemy && pieces[enemy] && pieces[enemy][0] === 'w' && isValidMove(r2, c2, r, c, enemy)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    
+    function msg(text) {
+      document.getElementById('message').textContent = text;
+    }
+    
+    render();
+  </script>
+</body>
+</html>
