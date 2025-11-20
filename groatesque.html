@@ -54,6 +54,29 @@
       color: #0f0;
       font-size: 1.2em;
     }
+    #promotion {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #000;
+      border: 3px solid #0f0;
+      padding: 20px;
+      z-index: 1000;
+    }
+    #promotion.show { display: block; }
+    .promo-piece {
+      display: inline-block;
+      font-size: 60px;
+      margin: 10px;
+      cursor: pointer;
+      padding: 10px;
+      border: 2px solid transparent;
+    }
+    .promo-piece:hover {
+      border-color: #0f0;
+    }
   </style>
 </head>
 <body>
@@ -68,6 +91,11 @@
   <h1>chess for nolan</h1>
   <div id="board"></div>
   <div id="message">your move, nolan.</div>
+  
+  <div id="promotion">
+    <div>choose promotion:</div>
+    <div id="promo-pieces"></div>
+  </div>
   
   <script>
     // chess.js-like minimal implementation
@@ -92,6 +120,8 @@
     let selected = null;
     let validMoves = [];
     let gameOver = false;
+    let enPassantTarget = -1;
+    let pendingPromotion = null;
     
     function initBoard() {
       const setup = [
@@ -110,7 +140,7 @@
     function piece(i) { return board[i] & 7; }
     function color(i) { return board[i] & 24; }
     
-    function getPseudoMoves(pos) {
+    function getPseudoMoves(pos, includeEnPassant = true) {
       const moves = [];
       const p = piece(pos);
       const c = color(pos);
@@ -128,7 +158,9 @@
             moves.push({from: pos, to: front});
             if (r === startRow) {
               const front2 = idx(r + dir * 2, col_);
-              if (board[front2] === EMPTY) moves.push({from: pos, to: front2});
+              if (board[front2] === EMPTY) {
+                moves.push({from: pos, to: front2, doublePush: true});
+              }
             }
           }
           
@@ -138,6 +170,10 @@
               const diag = idx(nextRow, nc);
               if (board[diag] !== EMPTY && color(diag) !== c) {
                 moves.push({from: pos, to: diag});
+              }
+              // en passant
+              if (includeEnPassant && diag === enPassantTarget) {
+                moves.push({from: pos, to: diag, enPassant: true});
               }
             }
           }
@@ -196,7 +232,7 @@
       
       for (let i = 0; i < 64; i++) {
         if (color(i) !== EMPTY && color(i) !== c) {
-          const moves = getPseudoMoves(i);
+          const moves = getPseudoMoves(i, false);
           if (moves.some(m => m.to === kingPos)) return true;
         }
       }
@@ -213,23 +249,79 @@
       
       return moves.filter(m => {
         const oldTo = board[m.to];
+        const oldEp = enPassantTarget;
+        
+        // handle en passant capture
+        let capturedPawn = -1;
+        if (m.enPassant) {
+          const dir = c === WHITE ? 1 : -1;
+          capturedPawn = idx(row(m.to) + dir, col(m.to));
+          board[capturedPawn] = EMPTY;
+        }
+        
         board[m.to] = board[m.from];
         board[m.from] = EMPTY;
+        
         const inCheck = isInCheck(c);
+        
         board[m.from] = board[m.to];
         board[m.to] = oldTo;
+        enPassantTarget = oldEp;
+        
+        if (m.enPassant) {
+          board[capturedPawn] = (c === WHITE ? BLACK : WHITE) | PAWN;
+        }
+        
         return !inCheck;
       });
     }
     
-    function makeMove(from, to) {
-      board[to] = board[from];
-      board[from] = EMPTY;
+    function makeMove(move, promotion = QUEEN) {
+      const oldEp = enPassantTarget;
+      enPassantTarget = -1;
+      
+      // en passant capture
+      if (move.enPassant) {
+        const dir = color(move.from) === WHITE ? 1 : -1;
+        const capturedPawn = idx(row(move.to) + dir, col(move.to));
+        board[capturedPawn] = EMPTY;
+      }
+      
+      // double pawn push - set en passant target
+      if (move.doublePush) {
+        const dir = color(move.from) === WHITE ? -1 : 1;
+        enPassantTarget = idx(row(move.from) + dir, col(move.from));
+      }
+      
+      board[move.to] = board[move.from];
+      board[move.from] = EMPTY;
+      
+      // pawn promotion
+      if (piece(move.to) === PAWN && (row(move.to) === 0 || row(move.to) === 7)) {
+        board[move.to] = color(move.to) | promotion;
+      }
+      
+      return oldEp;
     }
     
-    function unmakeMove(from, to, captured) {
-      board[from] = board[to];
-      board[to] = captured;
+    function unmakeMove(move, captured, oldEp, wasPromotion = false) {
+      enPassantTarget = oldEp;
+      
+      board[move.from] = board[move.to];
+      board[move.to] = captured;
+      
+      // restore pawn if it was promoted
+      if (wasPromotion) {
+        board[move.from] = color(move.from) | PAWN;
+      }
+      
+      // restore en passant captured pawn
+      if (move.enPassant) {
+        const dir = color(move.from) === WHITE ? 1 : -1;
+        const capturedPawn = idx(row(move.to) + dir, col(move.to));
+        board[capturedPawn] = (color(move.from) === WHITE ? BLACK : WHITE) | PAWN;
+        board[move.to] = EMPTY;
+      }
     }
     
     function evaluate() {
@@ -257,9 +349,10 @@
         let maxEval = -Infinity;
         for (let m of moves) {
           const cap = board[m.to];
-          makeMove(m.from, m.to);
+          const wasPromo = piece(m.from) === PAWN && (row(m.to) === 0 || row(m.to) === 7);
+          const oldEp = makeMove(m, QUEEN);
           const eval_ = minimax(depth - 1, alpha, beta, false);
-          unmakeMove(m.from, m.to, cap);
+          unmakeMove(m, cap, oldEp, wasPromo);
           maxEval = Math.max(maxEval, eval_);
           alpha = Math.max(alpha, eval_);
           if (beta <= alpha) break;
@@ -269,9 +362,10 @@
         let minEval = Infinity;
         for (let m of moves) {
           const cap = board[m.to];
-          makeMove(m.from, m.to);
+          const wasPromo = piece(m.from) === PAWN && (row(m.to) === 0 || row(m.to) === 7);
+          const oldEp = makeMove(m, QUEEN);
           const eval_ = minimax(depth - 1, alpha, beta, true);
-          unmakeMove(m.from, m.to, cap);
+          unmakeMove(m, cap, oldEp, wasPromo);
           minEval = Math.min(minEval, eval_);
           beta = Math.min(beta, eval_);
           if (beta <= alpha) break;
@@ -289,9 +383,10 @@
       
       for (let m of moves) {
         const cap = board[m.to];
-        makeMove(m.from, m.to);
+        const wasPromo = piece(m.from) === PAWN && (row(m.to) === 0 || row(m.to) === 7);
+        const oldEp = makeMove(m, QUEEN);
         const eval_ = minimax(2, -Infinity, Infinity, false);
-        unmakeMove(m.from, m.to, cap);
+        unmakeMove(m, cap, oldEp, wasPromo);
         
         if (eval_ > bestEval) {
           bestEval = eval_;
@@ -322,25 +417,48 @@
       }
     }
     
+    function showPromotion(c, callback) {
+      const promoEl = document.getElementById('promotion');
+      const piecesEl = document.getElementById('promo-pieces');
+      piecesEl.innerHTML = '';
+      
+      const pieces = [QUEEN, ROOK, BISHOP, KNIGHT];
+      pieces.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'promo-piece';
+        div.textContent = pieceChars[c | p];
+        div.addEventListener('click', () => {
+          promoEl.classList.remove('show');
+          callback(p);
+        });
+        piecesEl.appendChild(div);
+      });
+      
+      promoEl.classList.add('show');
+    }
+    
     function handleClick(i) {
-      if (gameOver || turn !== WHITE) return;
+      if (gameOver || turn !== WHITE || pendingPromotion) return;
       
       if (selected !== null) {
         const move = validMoves.find(m => m.to === i);
         if (move) {
-          makeMove(move.from, move.to);
+          const isPromotion = piece(move.from) === PAWN && row(move.to) === 0;
+          
+          if (isPromotion) {
+            pendingPromotion = move;
+            showPromotion(WHITE, (promo) => {
+              makeMove(pendingPromotion, promo);
+              pendingPromotion = null;
+              finishPlayerMove();
+            });
+          } else {
+            makeMove(move);
+            finishPlayerMove();
+          }
+          
           selected = null;
           validMoves = [];
-          
-          if (getAllMoves(BLACK).length === 0) {
-            msg(isInCheck(BLACK) ? "checkmate! you win, nolan!" : "stalemate!");
-            gameOver = true;
-          } else {
-            turn = BLACK;
-            msg("thinking...");
-            render();
-            setTimeout(botMove, 500);
-          }
         } else if (color(i) === WHITE) {
           selected = i;
           validMoves = getAllMoves(WHITE).filter(m => m.from === i);
@@ -356,6 +474,18 @@
       render();
     }
     
+    function finishPlayerMove() {
+      if (getAllMoves(BLACK).length === 0) {
+        msg(isInCheck(BLACK) ? "checkmate! you win, nolan!" : "stalemate!");
+        gameOver = true;
+      } else {
+        turn = BLACK;
+        msg("thinking...");
+        render();
+        setTimeout(botMove, 500);
+      }
+    }
+    
     function botMove() {
       const move = findBestMove();
       if (!move) {
@@ -365,7 +495,7 @@
         return;
       }
       
-      makeMove(move.from, move.to);
+      makeMove(move, QUEEN);
       turn = WHITE;
       
       if (getAllMoves(WHITE).length === 0) {
