@@ -121,13 +121,12 @@
     };
     
     const names = ['nolan', 'groat'];
-    const badWords = ['atrocious', 'awful', 'terrible', 'dreadful', 'abysmal', 'horrendous', 'dismal', 'woeful', 'pathetic'];
     const goodWords = ['solid', 'decent', 'respectable', 'not bad', 'acceptable', 'competent', 'reasonable'];
     const pestCompanies = [
       'truly nolen', 'orkin', 'terminix', 'ehrlich', 'guardian pest services',
       'best home & property services', 'real deal pest control', 'trutech wildlife'
     ];
-    const randomFacts = [
+    const nolanFacts = [
       "remember when you did science olympiad? bridge building champ right here",
       "belfast lions represent",
       "how's the swimming going these days?",
@@ -143,8 +142,10 @@
     let gameOver = false;
     let enPassantTarget = -1;
     let pendingPromotion = null;
-    let moveCount = 0;
-    let lastPlayerMove = null;
+    let whiteKingMoved = false;
+    let blackKingMoved = false;
+    let whiteRooksMoved = {0: false, 7: false}; // queenside, kingside
+    let blackRooksMoved = {56: false, 63: false};
     
     function initBoard() {
       const setup = [
@@ -165,7 +166,7 @@
     function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
     function randName() { return rand(names); }
     
-    function getPseudoMoves(pos, includeEnPassant = true) {
+    function getPseudoMoves(pos, includeEnPassant = true, includeCastling = true) {
       const moves = [];
       const p = piece(pos);
       const c = color(pos);
@@ -240,9 +241,51 @@
             }
           }
         }
+        
+        // castling
+        if (includeCastling && !isInCheck(c)) {
+          if (c === WHITE && !whiteKingMoved && pos === 60) {
+            // kingside
+            if (!whiteRooksMoved[63] && board[61] === EMPTY && board[62] === EMPTY) {
+              if (!isSquareAttacked(61, c) && !isSquareAttacked(62, c)) {
+                moves.push({from: pos, to: 62, castle: 'K'});
+              }
+            }
+            // queenside
+            if (!whiteRooksMoved[56] && board[59] === EMPTY && board[58] === EMPTY && board[57] === EMPTY) {
+              if (!isSquareAttacked(59, c) && !isSquareAttacked(58, c)) {
+                moves.push({from: pos, to: 58, castle: 'Q'});
+              }
+            }
+          } else if (c === BLACK && !blackKingMoved && pos === 4) {
+            // kingside
+            if (!blackRooksMoved[7] && board[5] === EMPTY && board[6] === EMPTY) {
+              if (!isSquareAttacked(5, c) && !isSquareAttacked(6, c)) {
+                moves.push({from: pos, to: 6, castle: 'k'});
+              }
+            }
+            // queenside
+            if (!blackRooksMoved[0] && board[3] === EMPTY && board[2] === EMPTY && board[1] === EMPTY) {
+              if (!isSquareAttacked(3, c) && !isSquareAttacked(2, c)) {
+                moves.push({from: pos, to: 2, castle: 'q'});
+              }
+            }
+          }
+        }
       }
       
       return moves;
+    }
+    
+    function isSquareAttacked(pos, byColor) {
+      const enemyColor = byColor === WHITE ? BLACK : WHITE;
+      for (let i = 0; i < 64; i++) {
+        if (color(i) === enemyColor) {
+          const moves = getPseudoMoves(i, false, false);
+          if (moves.some(m => m.to === pos)) return true;
+        }
+      }
+      return false;
     }
     
     function isInCheck(c) {
@@ -254,14 +297,7 @@
         }
       }
       if (kingPos === -1) return false;
-      
-      for (let i = 0; i < 64; i++) {
-        if (color(i) !== EMPTY && color(i) !== c) {
-          const moves = getPseudoMoves(i, false);
-          if (moves.some(m => m.to === kingPos)) return true;
-        }
-      }
-      return false;
+      return isSquareAttacked(kingPos, c);
     }
     
     function getAllMoves(c) {
@@ -284,6 +320,28 @@
           board[capturedPawn] = EMPTY;
         }
         
+        // handle castling
+        let rookMove = null;
+        if (m.castle) {
+          if (m.castle === 'K') {
+            board[61] = board[63];
+            board[63] = EMPTY;
+            rookMove = {from: 63, to: 61};
+          } else if (m.castle === 'Q') {
+            board[59] = board[56];
+            board[56] = EMPTY;
+            rookMove = {from: 56, to: 59};
+          } else if (m.castle === 'k') {
+            board[5] = board[7];
+            board[7] = EMPTY;
+            rookMove = {from: 7, to: 5};
+          } else if (m.castle === 'q') {
+            board[3] = board[0];
+            board[0] = EMPTY;
+            rookMove = {from: 0, to: 3};
+          }
+        }
+        
         board[m.to] = board[m.from];
         board[m.from] = EMPTY;
         
@@ -297,6 +355,11 @@
           board[capturedPawn] = (c === WHITE ? BLACK : WHITE) | PAWN;
         }
         
+        if (rookMove) {
+          board[rookMove.from] = board[rookMove.to];
+          board[rookMove.to] = EMPTY;
+        }
+        
         return !inCheck;
       });
     }
@@ -305,11 +368,40 @@
       const oldEp = enPassantTarget;
       enPassantTarget = -1;
       
+      // track king and rook movement
+      if (piece(move.from) === KING) {
+        if (color(move.from) === WHITE) whiteKingMoved = true;
+        else blackKingMoved = true;
+      }
+      if (piece(move.from) === ROOK) {
+        if (move.from === 56) whiteRooksMoved[56] = true;
+        if (move.from === 63) whiteRooksMoved[63] = true;
+        if (move.from === 0) blackRooksMoved[0] = true;
+        if (move.from === 7) blackRooksMoved[7] = true;
+      }
+      
       // en passant capture
       if (move.enPassant) {
         const dir = color(move.from) === WHITE ? 1 : -1;
         const capturedPawn = idx(row(move.to) + dir, col(move.to));
         board[capturedPawn] = EMPTY;
+      }
+      
+      // castling
+      if (move.castle) {
+        if (move.castle === 'K') {
+          board[61] = board[63];
+          board[63] = EMPTY;
+        } else if (move.castle === 'Q') {
+          board[59] = board[56];
+          board[56] = EMPTY;
+        } else if (move.castle === 'k') {
+          board[5] = board[7];
+          board[7] = EMPTY;
+        } else if (move.castle === 'q') {
+          board[3] = board[0];
+          board[0] = EMPTY;
+        }
       }
       
       // double pawn push - set en passant target
@@ -346,6 +438,23 @@
         const capturedPawn = idx(row(move.to) + dir, col(move.to));
         board[capturedPawn] = (color(move.from) === WHITE ? BLACK : WHITE) | PAWN;
         board[move.to] = EMPTY;
+      }
+      
+      // undo castling
+      if (move.castle) {
+        if (move.castle === 'K') {
+          board[63] = board[61];
+          board[61] = EMPTY;
+        } else if (move.castle === 'Q') {
+          board[56] = board[59];
+          board[59] = EMPTY;
+        } else if (move.castle === 'k') {
+          board[7] = board[5];
+          board[5] = EMPTY;
+        } else if (move.castle === 'q') {
+          board[0] = board[3];
+          board[3] = EMPTY;
+        }
       }
     }
     
@@ -425,75 +534,44 @@
     function isPieceHanging(pos, c) {
       for (let i = 0; i < 64; i++) {
         if (color(i) !== EMPTY && color(i) !== c) {
-          const moves = getPseudoMoves(i, false);
+          const moves = getPseudoMoves(i, false, false);
           if (moves.some(m => m.to === pos)) return true;
         }
       }
       return false;
     }
     
-    function analyzePlayerMove(move, captured) {
-      const messages = [];
+    function generateMessage(moveGood = true) {
       const name = randName();
+      const messages = [];
       
-      // check if player hung a piece
-      if (isPieceHanging(move.to, WHITE)) {
-        messages.push(`that ${pieceNames[piece(move.to)]} is hanging, ${name}. i guess you didn't want your ${pieceNames[piece(move.to)]}`);
+      // 1 in 5 chance for nolan fact
+      if (Math.random() < 0.2) {
+        return rand(nolanFacts);
       }
       
-      // check if player captured something
-      if (captured !== EMPTY) {
-        const capturedPiece = pieceNames[captured & 7];
-        if (Math.random() < 0.3) {
-          messages.push(`${rand(goodWords)}, ${name}. took my ${capturedPiece}`);
-        }
-      }
-      
-      // random commentary
+      // random pest control mention
       if (Math.random() < 0.15) {
-        messages.push(`you are so predictable bro bro`);
+        return `man, i love ${rand(pestCompanies)} pest control`;
       }
       
+      // random predictable comment
       if (Math.random() < 0.1) {
-        messages.push(`man, i love ${rand(pestCompanies)} pest control`);
+        return `you are so predictable bro bro`;
       }
       
-      if (Math.random() < 0.08) {
-        messages.push(rand(randomFacts));
+      // if move was good, compliment it
+      if (moveGood && Math.random() < 0.5) {
+        const templates = [
+          `${rand(goodWords)} move, ${name}`,
+          `${name}, i like the ${rand(goodWords)} move`,
+          `${rand(goodWords)}, ${name}`
+        ];
+        return rand(templates);
       }
       
-      return messages.length > 0 ? rand(messages) : null;
-    }
-    
-    function analyzeBotMove(move, captured) {
-      const messages = [];
-      const name = randName();
-      
-      // check if bot hung a piece
-      if (isPieceHanging(move.to, BLACK)) {
-        messages.push(`that was ${rand(badWords)}, ${name}. hung my ${pieceNames[piece(move.to)]}`);
-      }
-      // check if bot captured something good
-      else if (captured !== EMPTY && pieceValues[captured & 7] >= 300) {
-        messages.push(`${rand(goodWords)}, right ${name}?`);
-      }
-      // check if bot made a terrible move (moved to edge for no reason)
-      else if (!captured && (row(move.to) === 0 || row(move.to) === 7 || col(move.to) === 0 || col(move.to) === 7)) {
-        if (piece(move.to) !== ROOK && piece(move.to) !== QUEEN && Math.random() < 0.4) {
-          messages.push(`${rand(badWords)} move, ${name}. why did i put my ${pieceNames[piece(move.to)]} there?`);
-        }
-      }
-      
-      // random sassy commentary
-      if (messages.length === 0 && Math.random() < 0.2) {
-        messages.push(`${rand(goodWords)}, ${name}`);
-      }
-      
-      if (Math.random() < 0.12) {
-        messages.push(`you are so predictable bro bro`);
-      }
-      
-      return messages.length > 0 ? rand(messages) : `your move, ${name}.`;
+      // default
+      return `your move, ${name}.`;
     }
     
     function render() {
@@ -549,15 +627,11 @@
             pendingPromotion = {move, captured};
             showPromotion(WHITE, (promo) => {
               makeMove(pendingPromotion.move, promo);
-              const analysis = analyzePlayerMove(pendingPromotion.move, pendingPromotion.captured);
-              if (analysis) msg(analysis);
               pendingPromotion = null;
               finishPlayerMove();
             });
           } else {
             makeMove(move);
-            const analysis = analyzePlayerMove(move, captured);
-            if (analysis) msg(analysis);
             finishPlayerMove();
           }
           
@@ -607,7 +681,15 @@
         msg(isInCheck(WHITE) ? "checkmate! i win!" : "stalemate!");
         gameOver = true;
       } else {
-        msg(analyzeBotMove(move, captured));
+        const isBadMove = isPieceHanging(move.to, BLACK);
+        const isGoodMove = !isBadMove && (captured !== EMPTY || move.castle);
+        
+        // if bad move, just say "your move"
+        if (isBadMove) {
+          msg(`your move, ${randName()}.`);
+        } else {
+          msg(generateMessage(isGoodMove));
+        }
       }
       
       render();
