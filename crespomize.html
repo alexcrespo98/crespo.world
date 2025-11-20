@@ -1,9 +1,11 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Crespomize - Crespo.World</title>
+  <title>crespomize - crespo.world</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       background: #000;
@@ -31,92 +33,343 @@
       text-shadow: 0 0 10px #0f0;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
       padding: 2em;
       border: 2px solid #0f0;
       background: #111;
       border-radius: 10px;
+      text-align: left;
     }
-    .download-btn {
+    .question {
+      margin: 2em 0;
+      font-size: 1.2em;
+    }
+    button {
       background: #000;
       color: #0f0;
-      border: 3px solid #0f0;
-      padding: 1em 2em;
-      margin: 1em;
+      border: 2px solid #0f0;
+      padding: 0.8em 1.5em;
+      margin: 0.5em;
       cursor: pointer;
-      font-size: 1.2em;
       font-family: monospace;
-      font-weight: bold;
+      font-size: 1em;
       transition: all 0.3s;
-      text-decoration: none;
-      display: inline-block;
     }
-    .download-btn:hover {
+    button:hover {
       background: #0f0;
       color: #000;
-      box-shadow: 0 0 20px #0f0;
+      box-shadow: 0 0 15px #0f0;
     }
-    .info {
-      margin-top: 2em;
-      text-align: left;
-      line-height: 1.8;
-    }
-    .info h2 {
-      color: #0f0;
-      border-bottom: 2px solid #0f0;
-      padding-bottom: 0.5em;
-    }
-    .status {
-      margin-top: 1em;
-      padding: 1em;
+    select {
       background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 0.8em;
+      font-family: monospace;
+      font-size: 1em;
+      width: 100%;
+      margin: 1em 0;
+    }
+    .hidden {
+      display: none;
+    }
+    #charts {
+      margin-top: 2em;
+    }
+    .chart-container {
+      margin: 2em 0;
+      padding: 1em;
       border: 1px solid #0f0;
       border-radius: 5px;
+      background: #0a0a0a;
+    }
+    canvas {
+      max-width: 100%;
+    }
+    .loading {
+      font-size: 1.5em;
+      margin: 2em;
+    }
+    input[type="date"] {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 0.8em;
+      font-family: monospace;
+      font-size: 1em;
+      margin: 0.5em;
     }
   </style>
 </head>
 <body>
   <nav>
-    <a href="index.html">Home</a>
-    <a href="chemocam.html">ChemoCam</a>
-    <a href="crespomize.html">Crespomize</a>
+    <a href="index.html">home</a>
+    <a href="chemocam.html">chemocam</a>
+    <a href="crespomize.html">crespomize</a>
   </nav>
 
-  <h1>📊 Crespomize Analytics</h1>
+  <h1>📊 crespomize analytics</h1>
   
   <div class="container">
-    <h2>TikTok Analytics Tracker</h2>
-    <p>Download the latest analytics data</p>
-    
-    <a href="tiktok_analytics_tracker.xlsx" download class="download-btn">
-      ⬇️ Download Analytics (.xlsx)
-    </a>
-    
-    <div class="status">
-      <p>✅ Data file available</p>
-      <p>📁 File: tiktok_analytics_tracker.xlsx</p>
-      <p>🕒 Auto-updated on each scrape</p>
+    <!-- Step 1: Select account -->
+    <div id="step1">
+      <div class="question">hey kyle! pick an account:</div>
+      <select id="accountSelect">
+        <option value="">loading accounts...</option>
+      </select>
+      <br>
+      <button onclick="nextStep(1)">next</button>
     </div>
-    
-    <div class="info">
-      <h2>How It Works</h2>
-      <ul>
-        <li>📊 Multi-account TikTok analytics tracking</li>
-        <li>📈 Tracks followers, likes, views, comments, shares</li>
-        <li>🕐 Historical data with timestamps</li>
-        <li>📱 Individual post metrics for up to 100 posts per account</li>
-      </ul>
-      
-      <h2>What's Inside</h2>
-      <ul>
-        <li>Separate tabs for each tracked account</li>
-        <li>Account-level metrics (followers, total likes)</li>
-        <li>Per-post data (views, likes, comments, shares, engagement rate)</li>
-        <li>Time-series data for trend analysis</li>
-      </ul>
+
+    <!-- Step 2: Demo question -->
+    <div id="step2" class="hidden">
+      <div class="question">want the demo? (all the graphs, no questions)</div>
+      <button onclick="runDemo()">y - show me everything</button>
+      <button onclick="nextStep(2)">n - let me pick</button>
     </div>
+
+    <!-- Step 3: Important question -->
+    <div id="step3" class="hidden">
+      <div class="question">quick question: is alex really handsome?</div>
+      <button onclick="alexQuestion('y')">y - obviously</button>
+      <button onclick="alexQuestion('n')">n - i'm lying</button>
+    </div>
+
+    <!-- Step 4: Graph options -->
+    <div id="step4" class="hidden">
+      <div class="question">cool. what do you wanna see?</div>
+      <button onclick="toggleGraph('followers')">followers over time</button>
+      <button onclick="toggleGraph('likes')">likes per post</button>
+      <button onclick="toggleGraph('views')">views per post</button>
+      <button onclick="toggleGraph('engagement')">engagement rate</button>
+      <button onclick="toggleGraph('comments')">comments analysis</button>
+      <button onclick="toggleGraph('shares')">shares breakdown</button>
+      <br><br>
+      <div class="question">date range?</div>
+      <button onclick="setDateRange('all')">all time</button>
+      <button onclick="setDateRange('30')">last 30 days</button>
+      <button onclick="setDateRange('7')">last 7 days</button>
+      <button onclick="setDateRange('custom')">custom dates</button>
+      <div id="customDates" class="hidden">
+        <input type="date" id="startDate">
+        <input type="date" id="endDate">
+      </div>
+      <br><br>
+      <button onclick="generateGraphs()" style="background: #0f0; color: #000; font-weight: bold;">generate graphs</button>
+    </div>
+
+    <!-- Charts display -->
+    <div id="charts" class="hidden">
+      <div class="question">here's your data kyle:</div>
+      <div id="chartsList"></div>
+      <br>
+      <button onclick="location.reload()">start over</button>
+    </div>
+
+    <div id="loading" class="loading hidden">loading data...</div>
   </div>
 
+  <script>
+    const SHEET_ID = '1FUGfhPVsVi1WOOw88BKfUKueJh4eMPj1';
+    let sheetData = {};
+    let selectedAccount = '';
+    let selectedGraphs = new Set();
+    let dateRange = 'all';
+    let customStart = null;
+    let customEnd = null;
+
+    // Load Google Sheets data
+    async function loadSheetData() {
+      try {
+        // Note: Sheet needs to be public for this to work
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
+        const response = await fetch(url);
+        const text = await response.text();
+        const json = JSON.parse(text.substr(47).slice(0, -2));
+        
+        parseSheetData(json);
+        populateAccounts();
+      } catch (error) {
+        console.error('error loading data:', error);
+        document.getElementById('accountSelect').innerHTML = '<option>error loading - make sheet public</option>';
+      }
+    }
+
+    function parseSheetData(json) {
+      // Parse the Google Sheets response
+      // This is a simplified parser - you may need to adjust based on your sheet structure
+      const rows = json.table.rows;
+      const cols = json.table.cols;
+      
+      // Extract account names from sheet tabs (you'll need to modify based on actual structure)
+      // For now, just creating a sample
+      sheetData = {
+        'sample_account': {
+          dates: [],
+          followers: [],
+          likes: [],
+          views: [],
+          comments: [],
+          shares: [],
+          engagement: []
+        }
+      };
+    }
+
+    function populateAccounts() {
+      const select = document.getElementById('accountSelect');
+      const accounts = Object.keys(sheetData);
+      
+      if (accounts.length === 0) {
+        select.innerHTML = '<option>no accounts found</option>';
+        return;
+      }
+      
+      select.innerHTML = accounts.map(acc => `<option value="${acc}">${acc}</option>`).join('');
+    }
+
+    function nextStep(current) {
+      if (current === 1) {
+        selectedAccount = document.getElementById('accountSelect').value;
+        if (!selectedAccount) {
+          alert('pick an account first kyle');
+          return;
+        }
+        document.getElementById('step1').classList.add('hidden');
+        document.getElementById('step2').classList.remove('hidden');
+      } else if (current === 2) {
+        document.getElementById('step2').classList.add('hidden');
+        document.getElementById('step3').classList.remove('hidden');
+      }
+    }
+
+    function runDemo() {
+      document.getElementById('step2').classList.add('hidden');
+      selectedGraphs = new Set(['followers', 'likes', 'views', 'engagement', 'comments', 'shares']);
+      dateRange = 'all';
+      generateGraphs();
+    }
+
+    function alexQuestion(answer) {
+      if (answer === 'y') {
+        alert('correct answer kyle 😎');
+      } else {
+        alert('wrong. try again.');
+        return;
+      }
+      document.getElementById('step3').classList.add('hidden');
+      document.getElementById('step4').classList.remove('hidden');
+    }
+
+    function toggleGraph(type) {
+      if (selectedGraphs.has(type)) {
+        selectedGraphs.delete(type);
+        event.target.style.opacity = '0.5';
+      } else {
+        selectedGraphs.add(type);
+        event.target.style.opacity = '1';
+      }
+    }
+
+    function setDateRange(range) {
+      dateRange = range;
+      if (range === 'custom') {
+        document.getElementById('customDates').classList.remove('hidden');
+      } else {
+        document.getElementById('customDates').classList.add('hidden');
+      }
+    }
+
+    function generateGraphs() {
+      if (selectedGraphs.size === 0) {
+        alert('pick at least one graph kyle');
+        return;
+      }
+
+      if (dateRange === 'custom') {
+        customStart = document.getElementById('startDate').value;
+        customEnd = document.getElementById('endDate').value;
+        if (!customStart || !customEnd) {
+          alert('set both dates');
+          return;
+        }
+      }
+
+      document.getElementById('step4').classList.add('hidden');
+      document.getElementById('loading').classList.remove('hidden');
+
+      // Simulate loading
+      setTimeout(() => {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        renderCharts();
+      }, 1000);
+    }
+
+    function renderCharts() {
+      const container = document.getElementById('chartsList');
+      container.innerHTML = '';
+
+      const data = sheetData[selectedAccount];
+      const filteredData = filterByDateRange(data);
+
+      selectedGraphs.forEach(graphType => {
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        chartDiv.innerHTML = `<h3>${graphType}</h3><canvas id="chart-${graphType}"></canvas>`;
+        container.appendChild(chartDiv);
+
+        createChart(graphType, filteredData);
+      });
+    }
+
+    function filterByDateRange(data) {
+      // Apply date filtering based on selected range
+      // This is a placeholder - implement actual filtering
+      return data;
+    }
+
+    function createChart(type, data) {
+      const ctx = document.getElementById(`chart-${type}`).getContext('2d');
+      
+      // Sample chart - replace with actual data
+      new Chart(ctx, {
+        type: type === 'followers' ? 'line' : 'bar',
+        data: {
+          labels: ['jan', 'feb', 'mar', 'apr', 'may'],
+          datasets: [{
+            label: type,
+            data: [12, 19, 3, 5, 2],
+            borderColor: '#0f0',
+            backgroundColor: 'rgba(0, 255, 0, 0.1)',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              labels: { color: '#0f0' }
+            }
+          },
+          scales: {
+            y: {
+              ticks: { color: '#0f0' },
+              grid: { color: '#0f0', opacity: 0.2 }
+            },
+            x: {
+              ticks: { color: '#0f0' },
+              grid: { color: '#0f0', opacity: 0.2 }
+            }
+          }
+        }
+      });
+    }
+
+    // Initialize
+    loadSheetData();
+  </script>
 </body>
 </html>
+```
