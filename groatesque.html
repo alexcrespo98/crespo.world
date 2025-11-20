@@ -46,6 +46,7 @@
     .square.light { background: #333; }
     .square.dark { background: #111; }
     .square.selected { background: #050; }
+    .square.highlight { background: #550; }
     .square:hover { opacity: 0.8; }
     #message {
       margin-top: 1em;
@@ -69,239 +70,319 @@
   <div id="message">your move, nolan.</div>
   
   <script>
-    const pieces = {
-      '♜': 'br', '♞': 'bn', '♝': 'bb', '♛': 'bq', '♚': 'bk', '♟': 'bp',
-      '♖': 'wr', '♘': 'wn', '♗': 'wb', '♕': 'wq', '♔': 'wk', '♙': 'wp'
+    // chess.js-like minimal implementation
+    const EMPTY = 0;
+    const PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+    const WHITE = 8, BLACK = 16;
+    
+    const pieceChars = {
+      [BLACK|ROOK]: '♜', [BLACK|KNIGHT]: '♞', [BLACK|BISHOP]: '♝', 
+      [BLACK|QUEEN]: '♛', [BLACK|KING]: '♚', [BLACK|PAWN]: '♟',
+      [WHITE|ROOK]: '♖', [WHITE|KNIGHT]: '♘', [WHITE|BISHOP]: '♗', 
+      [WHITE|QUEEN]: '♕', [WHITE|KING]: '♔', [WHITE|PAWN]: '♙'
     };
     
-    let board = [
-      ['♜','♞','♝','♛','♚','♝','♞','♜'],
-      ['♟','♟','♟','♟','♟','♟','♟','♟'],
-      ['','','','','','','',''],
-      ['','','','','','','',''],
-      ['','','','','','','',''],
-      ['','','','','','','',''],
-      ['♙','♙','♙','♙','♙','♙','♙','♙'],
-      ['♖','♘','♗','♕','♔','♗','♘','♖']
-    ];
+    const pieceValues = {
+      [PAWN]: 100, [KNIGHT]: 320, [BISHOP]: 330, 
+      [ROOK]: 500, [QUEEN]: 900, [KING]: 20000
+    };
     
+    let board = new Uint8Array(64);
+    let turn = WHITE;
     let selected = null;
-    let turn = 'w';
+    let validMoves = [];
     let gameOver = false;
+    
+    function initBoard() {
+      const setup = [
+        BLACK|ROOK, BLACK|KNIGHT, BLACK|BISHOP, BLACK|QUEEN, BLACK|KING, BLACK|BISHOP, BLACK|KNIGHT, BLACK|ROOK,
+        BLACK|PAWN, BLACK|PAWN, BLACK|PAWN, BLACK|PAWN, BLACK|PAWN, BLACK|PAWN, BLACK|PAWN, BLACK|PAWN,
+        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+        WHITE|PAWN, WHITE|PAWN, WHITE|PAWN, WHITE|PAWN, WHITE|PAWN, WHITE|PAWN, WHITE|PAWN, WHITE|PAWN,
+        WHITE|ROOK, WHITE|KNIGHT, WHITE|BISHOP, WHITE|QUEEN, WHITE|KING, WHITE|BISHOP, WHITE|KNIGHT, WHITE|ROOK
+      ];
+      board.set(setup);
+    }
+    
+    function idx(r, c) { return r * 8 + c; }
+    function row(i) { return Math.floor(i / 8); }
+    function col(i) { return i % 8; }
+    function piece(i) { return board[i] & 7; }
+    function color(i) { return board[i] & 24; }
+    
+    function getPseudoMoves(pos) {
+      const moves = [];
+      const p = piece(pos);
+      const c = color(pos);
+      const r = row(pos);
+      const col_ = col(pos);
+      
+      if (p === PAWN) {
+        const dir = c === WHITE ? -1 : 1;
+        const startRow = c === WHITE ? 6 : 1;
+        const nextRow = r + dir;
+        
+        if (nextRow >= 0 && nextRow < 8) {
+          const front = idx(nextRow, col_);
+          if (board[front] === EMPTY) {
+            moves.push({from: pos, to: front});
+            if (r === startRow) {
+              const front2 = idx(r + dir * 2, col_);
+              if (board[front2] === EMPTY) moves.push({from: pos, to: front2});
+            }
+          }
+          
+          for (let dc of [-1, 1]) {
+            const nc = col_ + dc;
+            if (nc >= 0 && nc < 8) {
+              const diag = idx(nextRow, nc);
+              if (board[diag] !== EMPTY && color(diag) !== c) {
+                moves.push({from: pos, to: diag});
+              }
+            }
+          }
+        }
+      } else if (p === KNIGHT) {
+        const offsets = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+        for (let [dr, dc] of offsets) {
+          const nr = r + dr, nc = col_ + dc;
+          if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            const to = idx(nr, nc);
+            if (color(to) !== c) moves.push({from: pos, to});
+          }
+        }
+      } else if (p === BISHOP || p === ROOK || p === QUEEN) {
+        const dirs = p === ROOK ? [[0,1],[0,-1],[1,0],[-1,0]] :
+                     p === BISHOP ? [[1,1],[1,-1],[-1,1],[-1,-1]] :
+                     [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+        for (let [dr, dc] of dirs) {
+          let nr = r + dr, nc = col_ + dc;
+          while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            const to = idx(nr, nc);
+            if (board[to] === EMPTY) {
+              moves.push({from: pos, to});
+            } else {
+              if (color(to) !== c) moves.push({from: pos, to});
+              break;
+            }
+            nr += dr; nc += dc;
+          }
+        }
+      } else if (p === KING) {
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const nr = r + dr, nc = col_ + dc;
+            if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+              const to = idx(nr, nc);
+              if (color(to) !== c) moves.push({from: pos, to});
+            }
+          }
+        }
+      }
+      
+      return moves;
+    }
+    
+    function isInCheck(c) {
+      let kingPos = -1;
+      for (let i = 0; i < 64; i++) {
+        if (board[i] === (c | KING)) {
+          kingPos = i;
+          break;
+        }
+      }
+      if (kingPos === -1) return false;
+      
+      for (let i = 0; i < 64; i++) {
+        if (color(i) !== EMPTY && color(i) !== c) {
+          const moves = getPseudoMoves(i);
+          if (moves.some(m => m.to === kingPos)) return true;
+        }
+      }
+      return false;
+    }
+    
+    function getAllMoves(c) {
+      const moves = [];
+      for (let i = 0; i < 64; i++) {
+        if (color(i) === c) {
+          moves.push(...getPseudoMoves(i));
+        }
+      }
+      
+      return moves.filter(m => {
+        const oldTo = board[m.to];
+        board[m.to] = board[m.from];
+        board[m.from] = EMPTY;
+        const inCheck = isInCheck(c);
+        board[m.from] = board[m.to];
+        board[m.to] = oldTo;
+        return !inCheck;
+      });
+    }
+    
+    function makeMove(from, to) {
+      board[to] = board[from];
+      board[from] = EMPTY;
+    }
+    
+    function unmakeMove(from, to, captured) {
+      board[from] = board[to];
+      board[to] = captured;
+    }
+    
+    function evaluate() {
+      let score = 0;
+      for (let i = 0; i < 64; i++) {
+        if (board[i] === EMPTY) continue;
+        const val = pieceValues[piece(i)];
+        score += color(i) === WHITE ? -val : val;
+      }
+      return score;
+    }
+    
+    function minimax(depth, alpha, beta, maximizing) {
+      if (depth === 0) return evaluate();
+      
+      const c = maximizing ? BLACK : WHITE;
+      const moves = getAllMoves(c);
+      
+      if (moves.length === 0) {
+        if (isInCheck(c)) return maximizing ? -50000 : 50000;
+        return 0;
+      }
+      
+      if (maximizing) {
+        let maxEval = -Infinity;
+        for (let m of moves) {
+          const cap = board[m.to];
+          makeMove(m.from, m.to);
+          const eval_ = minimax(depth - 1, alpha, beta, false);
+          unmakeMove(m.from, m.to, cap);
+          maxEval = Math.max(maxEval, eval_);
+          alpha = Math.max(alpha, eval_);
+          if (beta <= alpha) break;
+        }
+        return maxEval;
+      } else {
+        let minEval = Infinity;
+        for (let m of moves) {
+          const cap = board[m.to];
+          makeMove(m.from, m.to);
+          const eval_ = minimax(depth - 1, alpha, beta, true);
+          unmakeMove(m.from, m.to, cap);
+          minEval = Math.min(minEval, eval_);
+          beta = Math.min(beta, eval_);
+          if (beta <= alpha) break;
+        }
+        return minEval;
+      }
+    }
+    
+    function findBestMove() {
+      const moves = getAllMoves(BLACK);
+      if (moves.length === 0) return null;
+      
+      let bestMove = moves[0];
+      let bestEval = -Infinity;
+      
+      for (let m of moves) {
+        const cap = board[m.to];
+        makeMove(m.from, m.to);
+        const eval_ = minimax(2, -Infinity, Infinity, false);
+        unmakeMove(m.from, m.to, cap);
+        
+        if (eval_ > bestEval) {
+          bestEval = eval_;
+          bestMove = m;
+        }
+      }
+      
+      return bestMove;
+    }
     
     function render() {
       const boardEl = document.getElementById('board');
       boardEl.innerHTML = '';
+      
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           const sq = document.createElement('div');
+          const i = idx(r, c);
           sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
-          sq.textContent = board[r][c];
-          sq.dataset.row = r;
-          sq.dataset.col = c;
-          if (selected && selected.r === r && selected.c === c) {
-            sq.classList.add('selected');
-          }
-          sq.addEventListener('click', () => handleClick(r, c));
+          sq.textContent = pieceChars[board[i]] || '';
+          
+          if (selected === i) sq.classList.add('selected');
+          if (validMoves.some(m => m.to === i)) sq.classList.add('highlight');
+          
+          sq.addEventListener('click', () => handleClick(i));
           boardEl.appendChild(sq);
         }
       }
     }
     
-    function handleClick(r, c) {
-      if (gameOver) return;
-      if (turn !== 'w') return;
+    function handleClick(i) {
+      if (gameOver || turn !== WHITE) return;
       
-      const piece = board[r][c];
-      
-      if (selected) {
-        if (r === selected.r && c === selected.c) {
+      if (selected !== null) {
+        const move = validMoves.find(m => m.to === i);
+        if (move) {
+          makeMove(move.from, move.to);
           selected = null;
-        } else {
-          if (makeMove(selected.r, selected.c, r, c)) {
-            turn = 'b';
-            selected = null;
+          validMoves = [];
+          
+          if (getAllMoves(BLACK).length === 0) {
+            msg(isInCheck(BLACK) ? "checkmate! you win, nolan!" : "stalemate!");
+            gameOver = true;
+          } else {
+            turn = BLACK;
+            msg("thinking...");
             render();
             setTimeout(botMove, 500);
-          } else {
-            selected = null;
           }
+        } else if (color(i) === WHITE) {
+          selected = i;
+          validMoves = getAllMoves(WHITE).filter(m => m.from === i);
+        } else {
+          selected = null;
+          validMoves = [];
         }
-      } else {
-        if (piece && pieces[piece] && pieces[piece][0] === 'w') {
-          selected = {r, c};
-        }
+      } else if (color(i) === WHITE) {
+        selected = i;
+        validMoves = getAllMoves(WHITE).filter(m => m.from === i);
       }
+      
       render();
-    }
-    
-    function makeMove(r1, c1, r2, c2) {
-      const piece = board[r1][c1];
-      const target = board[r2][c2];
-      
-      if (target && pieces[target] && pieces[target][0] === pieces[piece][0]) {
-        return false;
-      }
-      
-      if (!isValidMove(r1, c1, r2, c2, piece)) {
-        return false;
-      }
-      
-      board[r2][c2] = piece;
-      board[r1][c1] = '';
-      return true;
-    }
-    
-    function isValidMove(r1, c1, r2, c2, piece) {
-      const type = pieces[piece][1];
-      const dr = r2 - r1;
-      const dc = c2 - c1;
-      
-      if (type === 'p') {
-        const dir = pieces[piece][0] === 'w' ? -1 : 1;
-        if (dc === 0 && dr === dir && !board[r2][c2]) return true;
-        if (dc === 0 && dr === dir * 2 && !board[r2][c2] && !board[r1 + dir][c1]) {
-          if ((pieces[piece][0] === 'w' && r1 === 6) || (pieces[piece][0] === 'b' && r1 === 1)) return true;
-        }
-        if (Math.abs(dc) === 1 && dr === dir && board[r2][c2]) return true;
-      }
-      if (type === 'r') {
-        if (dr === 0 || dc === 0) return isPathClear(r1, c1, r2, c2);
-      }
-      if (type === 'n') {
-        if ((Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2)) return true;
-      }
-      if (type === 'b') {
-        if (Math.abs(dr) === Math.abs(dc)) return isPathClear(r1, c1, r2, c2);
-      }
-      if (type === 'q') {
-        if (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) return isPathClear(r1, c1, r2, c2);
-      }
-      if (type === 'k') {
-        if (Math.abs(dr) <= 1 && Math.abs(dc) <= 1) return true;
-      }
-      return false;
-    }
-    
-    function isPathClear(r1, c1, r2, c2) {
-      const dr = Math.sign(r2 - r1);
-      const dc = Math.sign(c2 - c1);
-      let r = r1 + dr, c = c1 + dc;
-      while (r !== r2 || c !== c2) {
-        if (board[r][c]) return false;
-        r += dr;
-        c += dc;
-      }
-      return true;
     }
     
     function botMove() {
-      if (gameOver) return;
-      
-      const moves = [];
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const piece = board[r][c];
-          if (piece && pieces[piece] && pieces[piece][0] === 'b') {
-            for (let r2 = 0; r2 < 8; r2++) {
-              for (let c2 = 0; c2 < 8; c2++) {
-                if (isValidMove(r, c, r2, c2, piece)) {
-                  moves.push({r1: r, c1: c, r2, c2, piece, target: board[r2][c2]});
-                }
-              }
-            }
-          }
-        }
-      }
-      
-      if (moves.length === 0) {
-        msg("looks like i'm out of moves, nolan. you win!");
+      const move = findBestMove();
+      if (!move) {
+        msg(isInCheck(BLACK) ? "checkmate! you win, nolan!" : "stalemate!");
         gameOver = true;
+        render();
         return;
       }
       
-      // check if nolan is about to win
-      if (isNolanAboutToWin()) {
-        msg("... i don't wanna play anymore.");
+      makeMove(move.from, move.to);
+      turn = WHITE;
+      
+      if (getAllMoves(WHITE).length === 0) {
+        msg(isInCheck(WHITE) ? "checkmate! i win!" : "stalemate!");
         gameOver = true;
-        return;
-      }
-      
-      // prioritize captures
-      const captures = moves.filter(m => m.target);
-      const move = captures.length ? captures[Math.floor(Math.random() * captures.length)] : moves[Math.floor(Math.random() * moves.length)];
-      
-      board[move.r2][move.c2] = move.piece;
-      board[move.r1][move.c1] = '';
-      
-      critiqueBotMove(move);
-      turn = 'w';
-      render();
-    }
-    
-    function isNolanAboutToWin() {
-      // check if white can capture black king next move
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const piece = board[r][c];
-          if (piece && pieces[piece] && pieces[piece][0] === 'w') {
-            for (let r2 = 0; r2 < 8; r2++) {
-              for (let c2 = 0; c2 < 8; c2++) {
-                if (board[r2][c2] === '♚' && isValidMove(r, c, r2, c2, piece)) {
-                  return true;
-                }
-              }
-            }
-          }
-        }
-      }
-      return false;
-    }
-    
-    function critiqueBotMove(move) {
-      const reasons = [];
-      
-      // hung piece
-      if (isPieceHanging(move.r2, move.c2)) {
-        reasons.push("hung a piece");
-      }
-      
-      // moving to edge for no reason
-      if (!move.target && (move.r2 === 0 || move.r2 === 7 || move.c2 === 0 || move.c2 === 7)) {
-        if (pieces[move.piece][1] !== 'r' && pieces[move.piece][1] !== 'q') {
-          reasons.push("moved to the edge for no reason");
-        }
-      }
-      
-      // moved same piece twice in opening
-      if (board[1].some(p => p === '♟') && pieces[move.piece][1] !== 'p') {
-        reasons.push("moved the same piece twice in opening");
-      }
-      
-      if (reasons.length > 0) {
-        msg("that was bad, nolan. " + reasons.join(", ") + ".");
       } else {
-        msg("not bad, nolan.");
+        msg("your move, nolan.");
       }
-    }
-    
-    function isPieceHanging(r, c) {
-      const piece = board[r][c];
-      for (let r2 = 0; r2 < 8; r2++) {
-        for (let c2 = 0; c2 < 8; c2++) {
-          const enemy = board[r2][c2];
-          if (enemy && pieces[enemy] && pieces[enemy][0] === 'w' && isValidMove(r2, c2, r, c, enemy)) {
-            return true;
-          }
-        }
-      }
-      return false;
+      
+      render();
     }
     
     function msg(text) {
       document.getElementById('message').textContent = text;
     }
     
+    initBoard();
     render();
   </script>
 </body>
