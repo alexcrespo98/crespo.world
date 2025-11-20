@@ -6,6 +6,7 @@
   <title>crespomize - crespo.world</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body {
       background: #000;
@@ -33,7 +34,7 @@
       text-shadow: 0 0 10px #0f0;
     }
     .container {
-      max-width: 900px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 2em;
       border: 2px solid #0f0;
@@ -79,10 +80,15 @@
     }
     .chart-container {
       margin: 2em 0;
-      padding: 1em;
-      border: 1px solid #0f0;
+      padding: 1.5em;
+      border: 2px solid #0f0;
       border-radius: 5px;
       background: #0a0a0a;
+    }
+    .chart-container h3 {
+      color: #0f0;
+      margin-bottom: 1em;
+      font-size: 1.3em;
     }
     canvas {
       max-width: 100%;
@@ -90,15 +96,33 @@
     .loading {
       font-size: 1.5em;
       margin: 2em;
+      animation: pulse 1.5s ease-in-out infinite;
     }
-    input[type="date"] {
-      background: #000;
-      color: #0f0;
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .stats-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1em;
+      margin: 2em 0;
+    }
+    .stat-card {
+      background: #0a0a0a;
       border: 2px solid #0f0;
-      padding: 0.8em;
-      font-family: monospace;
-      font-size: 1em;
-      margin: 0.5em;
+      border-radius: 5px;
+      padding: 1.5em;
+    }
+    .stat-card h4 {
+      margin: 0 0 0.5em 0;
+      color: #0f0;
+      font-size: 0.9em;
+    }
+    .stat-card .value {
+      font-size: 1.8em;
+      font-weight: bold;
+      color: #0f0;
     }
   </style>
 </head>
@@ -114,7 +138,7 @@
   <div class="container">
     <!-- Step 1: Select account -->
     <div id="step1">
-      <div class="question">hey kyle! pick an account:</div>
+      <div class="question">pick a company:</div>
       <select id="accountSelect">
         <option value="">loading accounts...</option>
       </select>
@@ -124,44 +148,26 @@
 
     <!-- Step 2: Demo question -->
     <div id="step2" class="hidden">
-      <div class="question">want the demo? (all the graphs, no questions)</div>
-      <button onclick="runDemo()">y - show me everything</button>
-      <button onclick="nextStep(2)">n - let me pick</button>
+      <div class="question">want demo analytics or something specific?</div>
+      <button onclick="runDemo()">demo analytics - show me everything</button>
+      <button onclick="nextStep(2)">something specific</button>
     </div>
 
-    <!-- Step 3: Important question -->
+    <!-- Step 3: Coming soon -->
     <div id="step3" class="hidden">
-      <div class="question">quick question: is alex really handsome?</div>
-      <button onclick="alexQuestion('y')">y - obviously</button>
-      <button onclick="alexQuestion('n')">n - i'm lying</button>
-    </div>
-
-    <!-- Step 4: Graph options -->
-    <div id="step4" class="hidden">
-      <div class="question">cool. what do you wanna see?</div>
-      <button onclick="toggleGraph('followers')">followers over time</button>
-      <button onclick="toggleGraph('likes')">likes per post</button>
-      <button onclick="toggleGraph('views')">views per post</button>
-      <button onclick="toggleGraph('engagement')">engagement rate</button>
-      <button onclick="toggleGraph('comments')">comments analysis</button>
-      <button onclick="toggleGraph('shares')">shares breakdown</button>
-      <br><br>
-      <div class="question">date range?</div>
-      <button onclick="setDateRange('all')">all time</button>
-      <button onclick="setDateRange('30')">last 30 days</button>
-      <button onclick="setDateRange('7')">last 7 days</button>
-      <button onclick="setDateRange('custom')">custom dates</button>
-      <div id="customDates" class="hidden">
-        <input type="date" id="startDate">
-        <input type="date" id="endDate">
-      </div>
-      <br><br>
-      <button onclick="generateGraphs()" style="background: #0f0; color: #000; font-weight: bold;">generate graphs</button>
+      <div class="question">custom options coming soon! 🚀</div>
+      <button onclick="runDemo()">just show me the demo for now</button>
+      <button onclick="location.reload()">start over</button>
     </div>
 
     <!-- Charts display -->
     <div id="charts" class="hidden">
-      <div class="question">here's your data kyle:</div>
+      <div class="question">📈 analytics for @<span id="accountName"></span></div>
+      
+      <!-- Summary stats -->
+      <div class="stats-summary" id="statsSummary"></div>
+      
+      <!-- Charts -->
       <div id="chartsList"></div>
       <br>
       <button onclick="location.reload()">start over</button>
@@ -172,68 +178,112 @@
 
   <script>
     const SHEET_ID = '1FUGfhPVsVi1WOOw88BKfUKueJh4eMPj1';
-    let sheetData = {};
+    let workbookData = null;
     let selectedAccount = '';
-    let selectedGraphs = new Set();
-    let dateRange = 'all';
-    let customStart = null;
-    let customEnd = null;
+    let accountData = {};
 
-    // Load Google Sheets data
+    // Load Excel file from Google Sheets
     async function loadSheetData() {
       try {
-        // Note: Sheet needs to be public for this to work
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
-        const response = await fetch(url);
-        const text = await response.text();
-        const json = JSON.parse(text.substr(47).slice(0, -2));
+        document.getElementById('accountSelect').innerHTML = '<option value="">loading accounts...</option>';
         
-        parseSheetData(json);
-        populateAccounts();
+        // Google Sheets export as Excel
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        
+        // Parse Excel file
+        workbookData = XLSX.read(arrayBuffer, { type: 'array' });
+        
+        // Get all sheet names (= accounts)
+        const accounts = workbookData.SheetNames;
+        
+        if (accounts.length === 0) {
+          document.getElementById('accountSelect').innerHTML = '<option>no accounts found</option>';
+          return;
+        }
+        
+        // Populate dropdown
+        const select = document.getElementById('accountSelect');
+        select.innerHTML = '<option value="">-- select an account --</option>' + 
+          accounts.map(acc => `<option value="${acc}">@${acc}</option>`).join('');
+        
+        console.log('✅ Loaded accounts:', accounts);
+        
       } catch (error) {
         console.error('error loading data:', error);
-        document.getElementById('accountSelect').innerHTML = '<option>error loading - make sheet public</option>';
+        document.getElementById('accountSelect').innerHTML = '<option>error loading - check file permissions</option>';
       }
     }
 
-    function parseSheetData(json) {
-      // Parse the Google Sheets response
-      // This is a simplified parser - you may need to adjust based on your sheet structure
-      const rows = json.table.rows;
-      const cols = json.table.cols;
+    function parseAccountData(sheetName) {
+      const sheet = workbookData.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       
-      // Extract account names from sheet tabs (you'll need to modify based on actual structure)
-      // For now, just creating a sample
-      sheetData = {
-        'sample_account': {
-          dates: [],
-          followers: [],
-          likes: [],
-          views: [],
-          comments: [],
-          shares: [],
-          engagement: []
+      // Structure: Row 0 = headers (timestamps), Column 0 = row names
+      const headers = jsonData[0]; // First row = timestamp columns
+      const latestTimestampIdx = headers.length - 1; // Last column = most recent scrape
+      
+      // Extract data
+      let followers = null;
+      let totalLikes = null;
+      let postsScraped = null;
+      const videosData = [];
+      
+      // Parse each row
+      for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        const rowName = row[0]; // First cell = row name
+        const latestValue = row[latestTimestampIdx]; // Last cell = latest data
+        
+        if (!rowName) continue;
+        
+        if (rowName === 'followers') {
+          followers = latestValue;
+        } else if (rowName === 'total_likes') {
+          totalLikes = latestValue;
+        } else if (rowName === 'posts_scraped') {
+          postsScraped = latestValue;
+        } else if (rowName.startsWith('post_')) {
+          // Parse post data: post_{VIDEO_ID}_{METRIC}
+          const parts = rowName.split('_');
+          const metric = parts[parts.length - 1]; // Last part = metric name
+          const videoId = parts.slice(1, -1).join('_'); // Middle parts = video ID
+          
+          // Find or create video entry
+          let video = videosData.find(v => v.id === videoId);
+          if (!video) {
+            video = { id: videoId };
+            videosData.push(video);
+          }
+          
+          video[metric] = latestValue;
         }
-      };
-    }
-
-    function populateAccounts() {
-      const select = document.getElementById('accountSelect');
-      const accounts = Object.keys(sheetData);
-      
-      if (accounts.length === 0) {
-        select.innerHTML = '<option>no accounts found</option>';
-        return;
       }
       
-      select.innerHTML = accounts.map(acc => `<option value="${acc}">${acc}</option>`).join('');
+      // Clean up videos data
+      const cleanVideos = videosData.filter(v => v.Date).map(v => ({
+        date: new Date(v.Date),
+        views: parseInt(v.Views) || 0,
+        likes: parseInt(v.Likes) || 0,
+        comments: parseInt(v.Comments) || 0,
+        shares: parseInt(v.Shares) || 0,
+        engagement: parseFloat(v.EngagementRate) || 0
+      })).sort((a, b) => a.date - b.date);
+      
+      return {
+        followers: parseInt(followers) || 0,
+        totalLikes: parseInt(totalLikes) || 0,
+        postsScraped: parseInt(postsScraped) || 0,
+        videos: cleanVideos
+      };
     }
 
     function nextStep(current) {
       if (current === 1) {
         selectedAccount = document.getElementById('accountSelect').value;
         if (!selectedAccount) {
-          alert('pick an account first kyle');
+          alert('pick an account first!');
           return;
         }
         document.getElementById('step1').classList.add('hidden');
@@ -246,124 +296,176 @@
 
     function runDemo() {
       document.getElementById('step2').classList.add('hidden');
-      selectedGraphs = new Set(['followers', 'likes', 'views', 'engagement', 'comments', 'shares']);
-      dateRange = 'all';
-      generateGraphs();
-    }
-
-    function alexQuestion(answer) {
-      if (answer === 'y') {
-        alert('correct answer kyle 😎');
-      } else {
-        alert('wrong. try again.');
-        return;
-      }
       document.getElementById('step3').classList.add('hidden');
-      document.getElementById('step4').classList.remove('hidden');
-    }
-
-    function toggleGraph(type) {
-      if (selectedGraphs.has(type)) {
-        selectedGraphs.delete(type);
-        event.target.style.opacity = '0.5';
-      } else {
-        selectedGraphs.add(type);
-        event.target.style.opacity = '1';
-      }
-    }
-
-    function setDateRange(range) {
-      dateRange = range;
-      if (range === 'custom') {
-        document.getElementById('customDates').classList.remove('hidden');
-      } else {
-        document.getElementById('customDates').classList.add('hidden');
-      }
-    }
-
-    function generateGraphs() {
-      if (selectedGraphs.size === 0) {
-        alert('pick at least one graph kyle');
-        return;
-      }
-
-      if (dateRange === 'custom') {
-        customStart = document.getElementById('startDate').value;
-        customEnd = document.getElementById('endDate').value;
-        if (!customStart || !customEnd) {
-          alert('set both dates');
-          return;
-        }
-      }
-
-      document.getElementById('step4').classList.add('hidden');
       document.getElementById('loading').classList.remove('hidden');
 
-      // Simulate loading
+      // Parse the data
+      accountData = parseAccountData(selectedAccount);
+      
       setTimeout(() => {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
-        renderCharts();
+        document.getElementById('accountName').textContent = selectedAccount;
+        renderDashboard();
       }, 1000);
     }
 
-    function renderCharts() {
-      const container = document.getElementById('chartsList');
-      container.innerHTML = '';
-
-      const data = sheetData[selectedAccount];
-      const filteredData = filterByDateRange(data);
-
-      selectedGraphs.forEach(graphType => {
-        const chartDiv = document.createElement('div');
-        chartDiv.className = 'chart-container';
-        chartDiv.innerHTML = `<h3>${graphType}</h3><canvas id="chart-${graphType}"></canvas>`;
-        container.appendChild(chartDiv);
-
-        createChart(graphType, filteredData);
-      });
+    function formatNumber(num) {
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+      return num.toLocaleString();
     }
 
-    function filterByDateRange(data) {
-      // Apply date filtering based on selected range
-      // This is a placeholder - implement actual filtering
-      return data;
-    }
+    function renderDashboard() {
+      // Summary stats
+      const statsContainer = document.getElementById('statsSummary');
+      statsContainer.innerHTML = `
+        <div class="stat-card">
+          <h4>👥 FOLLOWERS</h4>
+          <div class="value">${formatNumber(accountData.followers)}</div>
+        </div>
+        <div class="stat-card">
+          <h4>❤️ TOTAL LIKES</h4>
+          <div class="value">${formatNumber(accountData.totalLikes)}</div>
+        </div>
+        <div class="stat-card">
+          <h4>🎬 POSTS TRACKED</h4>
+          <div class="value">${accountData.postsScraped}</div>
+        </div>
+        <div class="stat-card">
+          <h4>📈 AVG ENGAGEMENT</h4>
+          <div class="value">${(accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / accountData.videos.length).toFixed(2)}%</div>
+        </div>
+      `;
 
-    function createChart(type, data) {
-      const ctx = document.getElementById(`chart-${type}`).getContext('2d');
-      
-      // Sample chart - replace with actual data
-      new Chart(ctx, {
-        type: type === 'followers' ? 'line' : 'bar',
-        data: {
-          labels: ['jan', 'feb', 'mar', 'apr', 'may'],
-          datasets: [{
-            label: type,
-            data: [12, 19, 3, 5, 2],
-            borderColor: '#0f0',
-            backgroundColor: 'rgba(0, 255, 0, 0.1)',
-            borderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: {
-              labels: { color: '#0f0' }
-            }
-          },
+      // Charts
+      const chartsContainer = document.getElementById('chartsList');
+      chartsContainer.innerHTML = '';
+
+      // 1. Views over time
+      createChart(chartsContainer, 'Views Over Time', 'line', 
+        accountData.videos.map(v => v.date.toLocaleDateString()),
+        [{
+          label: 'Views',
+          data: accountData.videos.map(v => v.views),
+          borderColor: '#00d2d3',
+          backgroundColor: 'rgba(0, 210, 211, 0.1)',
+          borderWidth: 2,
+          tension: 0.4
+        }]
+      );
+
+      // 2. Likes over time
+      createChart(chartsContainer, 'Likes Over Time', 'line',
+        accountData.videos.map(v => v.date.toLocaleDateString()),
+        [{
+          label: 'Likes',
+          data: accountData.videos.map(v => v.likes),
+          borderColor: '#ff6b6b',
+          backgroundColor: 'rgba(255, 107, 107, 0.1)',
+          borderWidth: 2,
+          tension: 0.4
+        }]
+      );
+
+      // 3. Engagement rate over time
+      createChart(chartsContainer, 'Engagement Rate Over Time', 'line',
+        accountData.videos.map(v => v.date.toLocaleDateString()),
+        [{
+          label: 'Engagement %',
+          data: accountData.videos.map(v => v.engagement),
+          borderColor: '#2ecc71',
+          backgroundColor: 'rgba(46, 204, 113, 0.1)',
+          borderWidth: 2,
+          tension: 0.4
+        }]
+      );
+
+      // 4. Comments over time
+      createChart(chartsContainer, 'Comments Over Time', 'bar',
+        accountData.videos.map(v => v.date.toLocaleDateString()),
+        [{
+          label: 'Comments',
+          data: accountData.videos.map(v => v.comments),
+          backgroundColor: 'rgba(26, 188, 156, 0.7)',
+          borderColor: '#1abc9c',
+          borderWidth: 2
+        }]
+      );
+
+      // 5. Shares over time
+      createChart(chartsContainer, 'Shares Over Time', 'bar',
+        accountData.videos.map(v => v.date.toLocaleDateString()),
+        [{
+          label: 'Shares',
+          data: accountData.videos.map(v => v.shares),
+          backgroundColor: 'rgba(231, 76, 60, 0.7)',
+          borderColor: '#e74c3c',
+          borderWidth: 2
+        }]
+      );
+
+      // 6. Likes vs Views correlation
+      createChart(chartsContainer, 'Likes vs Views Correlation', 'scatter',
+        null,
+        [{
+          label: 'Posts',
+          data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
+          backgroundColor: 'rgba(233, 30, 99, 0.6)',
+          borderColor: '#e91e63',
+          borderWidth: 2,
+          pointRadius: 5
+        }],
+        {
           scales: {
-            y: {
+            x: { 
+              title: { display: true, text: 'Views', color: '#0f0' },
               ticks: { color: '#0f0' },
-              grid: { color: '#0f0', opacity: 0.2 }
+              grid: { color: 'rgba(0, 255, 0, 0.1)' }
             },
-            x: {
+            y: { 
+              title: { display: true, text: 'Likes', color: '#0f0' },
               ticks: { color: '#0f0' },
-              grid: { color: '#0f0', opacity: 0.2 }
+              grid: { color: 'rgba(0, 255, 0, 0.1)' }
             }
           }
         }
+      );
+    }
+
+    function createChart(container, title, type, labels, datasets, customOptions = {}) {
+      const chartDiv = document.createElement('div');
+      chartDiv.className = 'chart-container';
+      const chartId = 'chart-' + Math.random().toString(36).substr(2, 9);
+      chartDiv.innerHTML = `<h3>${title}</h3><canvas id="${chartId}"></canvas>`;
+      container.appendChild(chartDiv);
+
+      const ctx = document.getElementById(chartId).getContext('2d');
+      
+      const defaultOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: {
+            labels: { color: '#0f0', font: { family: 'monospace' } }
+          }
+        },
+        scales: type !== 'scatter' ? {
+          y: {
+            ticks: { color: '#0f0' },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          },
+          x: {
+            ticks: { color: '#0f0', maxRotation: 45, minRotation: 45 },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          }
+        } : {}
+      };
+
+      new Chart(ctx, {
+        type: type,
+        data: { labels: labels, datasets: datasets },
+        options: { ...defaultOptions, ...customOptions }
       });
     }
 
