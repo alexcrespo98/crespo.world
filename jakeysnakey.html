@@ -1,0 +1,547 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>jakeysnakey - crespo.world</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Courier New', monospace;
+      background: url('https://drive.google.com/uc?export=view&id=1XBzTXEKRIg40lJG_KCVV2QIoVJsGNgd6') center/cover no-repeat fixed;
+      color: #fff;
+      overflow-x: hidden;
+    }
+    
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: -1;
+    }
+
+    nav {
+      background: rgba(0, 0, 0, 0.9);
+      padding: 1em;
+      text-align: center;
+      border-bottom: 3px solid #ff69b4;
+    }
+    
+    nav a {
+      color: #ff69b4;
+      text-decoration: none;
+      margin: 0 1em;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+    
+    nav a:hover {
+      color: #fff;
+      text-shadow: 0 0 10px #ff69b4;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 2em auto;
+      padding: 2em;
+      background: rgba(0, 0, 0, 0.85);
+      border: 3px solid #ff69b4;
+      border-radius: 15px;
+      box-shadow: 0 0 30px rgba(255, 105, 180, 0.5);
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 2.5em;
+      color: #ff69b4;
+      text-shadow: 0 0 20px #ff69b4;
+      margin-bottom: 0.5em;
+      animation: glow 2s ease-in-out infinite;
+    }
+
+    @keyframes glow {
+      0%, 100% { text-shadow: 0 0 20px #ff69b4; }
+      50% { text-shadow: 0 0 40px #ff69b4, 0 0 60px #ff1493; }
+    }
+
+    .story-box {
+      background: rgba(255, 105, 180, 0.1);
+      border: 2px solid #ff69b4;
+      border-radius: 10px;
+      padding: 1.5em;
+      margin: 1.5em 0;
+      min-height: 150px;
+      font-size: 1.1em;
+      line-height: 1.6;
+    }
+
+    .jacob-status {
+      text-align: center;
+      font-size: 1.2em;
+      margin: 1em 0;
+      padding: 1em;
+      background: rgba(255, 105, 180, 0.2);
+      border-radius: 10px;
+      border: 2px solid #ff69b4;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      margin: 1em 0;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-label {
+      color: #ff69b4;
+      font-size: 0.9em;
+      margin-bottom: 0.3em;
+    }
+
+    .stat-value {
+      font-size: 1.5em;
+      font-weight: bold;
+    }
+
+    .choices {
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+      margin: 2em 0;
+    }
+
+    button {
+      background: rgba(255, 105, 180, 0.3);
+      border: 2px solid #ff69b4;
+      color: #fff;
+      padding: 1em;
+      font-size: 1em;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.3s;
+      text-align: left;
+    }
+
+    button:hover {
+      background: rgba(255, 105, 180, 0.6);
+      box-shadow: 0 0 20px #ff69b4;
+      transform: translateX(10px);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .jacob-mood {
+      font-size: 3em;
+      text-align: center;
+      margin: 0.5em 0;
+      animation: bounce 1s ease-in-out infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .victory {
+      text-align: center;
+      font-size: 2em;
+      color: #ffd700;
+      animation: rainbow 2s linear infinite;
+    }
+
+    @keyframes rainbow {
+      0% { color: #ff0000; }
+      16% { color: #ff7f00; }
+      33% { color: #ffff00; }
+      50% { color: #00ff00; }
+      66% { color: #0000ff; }
+      83% { color: #8b00ff; }
+      100% { color: #ff0000; }
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="index.html">home</a>
+    <a href="chemocam.html">chemocam</a>
+    <a href="crespomize.html">crespomize</a>
+    <a href="jakeysnakey.html">jakeysnakey</a>
+  </nav>
+
+  <div class="container">
+    <h1>🐍 JAKEYSNAKEY 🐍</h1>
+    
+    <div class="jacob-status">
+      <div class="jacob-mood" id="jacobMood">😳</div>
+      <div id="jacobLocation">Jacob is hiding in the corner...</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">CONFIDENCE</div>
+        <div class="stat-value" id="confidence">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">HUGS</div>
+        <div class="stat-value" id="hugs">0/2</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">ATTEMPTS</div>
+        <div class="stat-value" id="attempts">0</div>
+      </div>
+    </div>
+
+    <div class="story-box" id="storyText">
+      You enter a dimly lit room. In the corner, you spot Jacob, a shy creature with the posture of a nervous flamingo. 
+      He's wearing his signature hoodie and avoiding eye contact at all costs. His confidence level: NEGATIVE TWELVE. 
+      Your mission: Get him to come out of his shell. Get TWO hugs to win. Good luck, you'll need it.
+    </div>
+
+    <div class="choices" id="choices">
+      <button onclick="makeChoice('compliment-hair')">💇 "Jacob, your hair looks IMMACULATE today"</button>
+      <button onclick="makeChoice('compliment-vibe')">✨ "You have ELITE energy right now"</button>
+      <button onclick="makeChoice('compliment-shoes')">👟 "Those shoes are absolutely BUSSIN"</button>
+      <button onclick="makeChoice('approach-slowly')">🚶 Approach slowly while making soothing whale noises</button>
+    </div>
+  </div>
+
+  <script>
+    let gameState = {
+      confidence: 0,
+      hugs: 0,
+      attempts: 0,
+      jacobLocation: 'corner',
+      jacobMood: 'shy',
+      phase: 1,
+      hasRun: false
+    };
+
+    const moods = {
+      shy: '😳',
+      nervous: '😰',
+      intrigued: '🤔',
+      happy: '😊',
+      fleeing: '🏃',
+      confused: '😵',
+      excited: '😄',
+      suspicious: '🤨',
+      overwhelmed: '😱'
+    };
+
+    const scenarios = {
+      'compliment-hair': {
+        success: [
+          { text: "Jacob's eyes widen. 'Really?' he whispers. He touches his hair self-consciously. +2 confidence!", confidence: 2, mood: 'intrigued' },
+          { text: "Jacob blushes. 'I... I didn't even brush it today.' He's warming up to you. +3 confidence!", confidence: 3, mood: 'happy' }
+        ],
+        fail: [
+          { text: "Jacob looks confused. 'I'm wearing a hat...' He retreats further into the corner. -1 confidence.", confidence: -1, mood: 'confused' },
+          { text: "Jacob panics. 'DON'T PERCEIVE MY HAIR!' He runs to the bathroom!", confidence: -2, mood: 'fleeing', flee: true }
+        ]
+      },
+      'compliment-vibe': {
+        success: [
+          { text: "Jacob perks up slightly. 'Elite energy?' A tiny smile forms. +2 confidence!", confidence: 2, mood: 'intrigued' },
+          { text: "Jacob actually makes eye contact for 0.3 seconds! 'Thanks...' +3 confidence!", confidence: 3, mood: 'happy' }
+        ],
+        fail: [
+          { text: "Jacob squints at you suspiciously. 'What does that even MEAN?' -1 confidence.", confidence: -1, mood: 'suspicious' },
+          { text: "Jacob overthinks it. 'Wait, is that sarcasm?' He's spiraling! -2 confidence.", confidence: -2, mood: 'nervous' }
+        ]
+      },
+      'compliment-shoes': {
+        success: [
+          { text: "Jacob looks down at his shoes. 'You think so?' He's pleased! +2 confidence!", confidence: 2, mood: 'happy' },
+          { text: "Jacob actually smiles! 'I got them on sale!' He's opening up! +4 confidence!", confidence: 4, mood: 'excited' }
+        ],
+        fail: [
+          { text: "Jacob: 'I'm wearing crocs...' Awkward silence. -1 confidence.", confidence: -1, mood: 'confused' },
+          { text: "Jacob looks horrified. 'These are my dad's shoes!' He's mortified! -3 confidence.", confidence: -3, mood: 'overwhelmed' }
+        ]
+      },
+      'approach-slowly': {
+        success: [
+          { text: "Jacob is mesmerized by your whale noises. 'That's... oddly comforting?' +3 confidence!", confidence: 3, mood: 'intrigued' },
+          { text: "Jacob laughs nervously. 'Are you okay?' But he's smiling! +2 confidence!", confidence: 2, mood: 'happy' }
+        ],
+        fail: [
+          { text: "Jacob: 'Why are you making whale noises at me?' This is weird. -1 confidence.", confidence: -1, mood: 'confused' },
+          { text: "Jacob thinks you're having a medical emergency and RUNS AWAY!", confidence: -2, mood: 'fleeing', flee: true }
+        ]
+      }
+    };
+
+    const phase2Choices = [
+      { id: 'offer-snack', text: '🍕 Offer him pizza rolls (the ultimate peace offering)' },
+      { id: 'tell-joke', text: '😂 Tell him a terrible dad joke' },
+      { id: 'show-meme', text: '📱 Show him a meme from 2012' },
+      { id: 'compliment-energy', text: '⚡ "Your energy is unmatched, king"' }
+    ];
+
+    const phase2Scenarios = {
+      'offer-snack': {
+        success: [
+          { text: "Jacob's eyes light up! 'Pizza rolls?!' He takes one. You're bonding over processed cheese! +5 confidence!", confidence: 5, mood: 'excited' },
+          { text: "Jacob accepts the pizza roll. 'Thanks...' He's actually warming up! +3 confidence!", confidence: 3, mood: 'happy' }
+        ],
+        fail: [
+          { text: "Jacob: 'I'm lactose intolerant...' You monster. -2 confidence.", confidence: -2, mood: 'nervous' }
+        ]
+      },
+      'tell-joke': {
+        success: [
+          { text: "Jacob groans at your joke but he's SMILING! 'That was terrible.' +4 confidence!", confidence: 4, mood: 'happy' },
+          { text: "Jacob actually laughs! 'Okay, okay, that was kinda funny.' +5 confidence!", confidence: 5, mood: 'excited' }
+        ],
+        fail: [
+          { text: "Jacob stares at you blankly. The joke bombed. -1 confidence.", confidence: -1, mood: 'confused' },
+          { text: "Jacob: 'I don't get it...' Awkward. -2 confidence.", confidence: -2, mood: 'nervous' }
+        ]
+      },
+      'show-meme': {
+        success: [
+          { text: "Jacob: 'Oh my god, RAGE COMICS! I forgot about these!' Nostalgia activates! +6 confidence!", confidence: 6, mood: 'excited' },
+          { text: "Jacob chuckles. 'This is so dumb.' But he's engaged! +4 confidence!", confidence: 4, mood: 'happy' }
+        ],
+        fail: [
+          { text: "Jacob: 'Why is this funny?' He doesn't get it. -1 confidence.", confidence: -1, mood: 'confused' }
+        ]
+      },
+      'compliment-energy': {
+        success: [
+          { text: "Jacob blushes HARD. 'King? Really?' He's flattered! +5 confidence!", confidence: 5, mood: 'excited' },
+          { text: "Jacob: 'Stop it...' But he's smiling! +3 confidence!", confidence: 3, mood: 'happy' }
+        ],
+        fail: [
+          { text: "Jacob: 'That's too much pressure!' He's overwhelmed! -2 confidence.", confidence: -2, mood: 'overwhelmed' }
+        ]
+      }
+    };
+
+    const fleeScenarios = [
+      { id: 'chase', text: '🏃 CHASE HIM IMMEDIATELY' },
+      { id: 'wait', text: '⏰ Wait patiently outside the door' },
+      { id: 'knock', text: '🚪 Knock gently and apologize' },
+      { id: 'slide-note', text: '📝 Slide a note under the door' }
+    ];
+
+    const fleeOutcomes = {
+      'chase': [
+        { text: "You chase Jacob! He trips over his own feet! 'I'M SORRY!' He's cornered but laughing nervously. Back to square one.", confidence: -5, mood: 'nervous', location: 'corner' },
+        { text: "Jacob runs FASTER! This was a mistake! He's now in the closet!", confidence: -3, mood: 'fleeing', location: 'closet' }
+      ],
+      'wait': [
+        { text: "After 5 minutes, Jacob peeks out. 'Are you still there?' He appreciates your patience. +2 confidence!", confidence: 2, mood: 'intrigued', location: 'corner' },
+        { text: "You wait. And wait. And wait. Jacob fell asleep in there. Start over.", confidence: -10, mood: 'shy', location: 'corner' }
+      ],
+      'knock': [
+        { text: "Jacob opens the door a crack. 'It's okay...' He forgives you! +4 confidence!", confidence: 4, mood: 'happy', location: 'corner' },
+        { text: "Jacob: 'GO AWAY!' Too soon. -2 confidence.", confidence: -2, mood: 'nervous', location: 'bathroom' }
+      ],
+      'slide-note': [
+        { text: "Your note says 'u cool tho'. Jacob laughs! He comes out! +5 confidence!", confidence: 5, mood: 'happy', location: 'corner' },
+        { text: "Jacob reads your note. 'Your handwriting is terrible.' He's judging you. -1 confidence.", confidence: -1, mood: 'suspicious', location: 'bathroom' }
+      ]
+    };
+
+    function makeChoice(choiceId) {
+      gameState.attempts++;
+      updateStats();
+
+      let scenario;
+      let outcomes;
+
+      if (gameState.jacobLocation === 'bathroom' || gameState.jacobLocation === 'closet') {
+        outcomes = fleeOutcomes[choiceId];
+      } else if (gameState.phase === 1) {
+        scenario = scenarios[choiceId];
+        outcomes = Math.random() > 0.4 ? scenario.success : scenario.fail;
+      } else {
+        scenario = phase2Scenarios[choiceId];
+        outcomes = Math.random() > 0.3 ? scenario.success : scenario.fail;
+      }
+
+      const outcome = outcomes[Math.floor(Math.random() * outcomes.length)];
+      
+      gameState.confidence += outcome.confidence;
+      gameState.jacobMood = outcome.mood;
+      
+      if (outcome.location) {
+        gameState.jacobLocation = outcome.location;
+      }
+
+      updateMood();
+      updateLocation();
+      updateStats();
+
+      document.getElementById('storyText').innerHTML = outcome.text;
+
+      if (outcome.flee) {
+        gameState.jacobLocation = Math.random() > 0.5 ? 'bathroom' : 'closet';
+        updateLocation();
+        setTimeout(() => showFleeChoices(), 1500);
+      } else if (gameState.confidence >= 15 && gameState.hugs < 2) {
+        setTimeout(() => attemptHug(), 1500);
+      } else if (gameState.confidence < -5) {
+        gameOver('Jacob has completely retreated into his shell. Mission failed. Try being less weird next time.');
+      } else {
+        setTimeout(() => updateChoices(), 1500);
+      }
+    }
+
+    function attemptHug() {
+      document.getElementById('storyText').innerHTML = 
+        "Jacob is actually smiling now! He seems comfortable! This might be your chance for a hug!";
+      
+      document.getElementById('choices').innerHTML = `
+        <button onclick="requestHug()">🤗 Ask for a hug politely</button>
+        <button onclick="grabHug()">💪 Go in for the hug without asking</button>
+        <button onclick="skipHug()">😅 'Nah, let's just keep vibing'</button>
+      `;
+    }
+
+    function requestHug() {
+      if (Math.random() > 0.3) {
+        gameState.hugs++;
+        gameState.confidence = 0;
+        updateStats();
+        document.getElementById('storyText').innerHTML = 
+          `Jacob hesitates, then slowly opens his arms. 'Okay...' HUG ACQUIRED! (${gameState.hugs}/2)`;
+        
+        if (gameState.hugs >= 2) {
+          victory();
+        } else {
+          document.getElementById('storyText').innerHTML += 
+            '<br><br>Jacob seems happy but needs to recharge his social battery. ONE MORE HUG TO GO!';
+          gameState.phase = 2;
+          setTimeout(() => updateChoices(), 2000);
+        }
+      } else {
+        document.getElementById('storyText').innerHTML = 
+          "Jacob: 'Maybe later?' He's not ready yet. Keep building confidence!";
+        gameState.confidence -= 5;
+        updateStats();
+        setTimeout(() => updateChoices(), 1500);
+      }
+    }
+
+    function grabHug() {
+      document.getElementById('storyText').innerHTML = 
+        "YOU GO IN FOR THE HUG! Jacob PANICS! 'WHAT ARE YOU DOING?!' He runs away again!";
+      gameState.confidence -= 10;
+      gameState.jacobLocation = 'bathroom';
+      gameState.jacobMood = 'fleeing';
+      updateMood();
+      updateLocation();
+      updateStats();
+      setTimeout(() => showFleeChoices(), 1500);
+    }
+
+    function skipHug() {
+      document.getElementById('storyText').innerHTML = 
+        "Jacob seems relieved you didn't push it. 'Yeah, let's just chill.' +2 confidence for respecting boundaries!";
+      gameState.confidence += 2;
+      updateStats();
+      setTimeout(() => updateChoices(), 1500);
+    }
+
+    function showFleeChoices() {
+      let location = gameState.jacobLocation === 'bathroom' ? 'bathroom' : 'closet';
+      document.getElementById('storyText').innerHTML = 
+        `Jacob has locked himself in the ${location}! You can hear nervous breathing. What do you do?`;
+      
+      let html = '';
+      fleeScenarios.forEach(choice => {
+        html += `<button onclick="makeChoice('${choice.id}')">${choice.text}</button>`;
+      });
+      document.getElementById('choices').innerHTML = html;
+    }
+
+    function updateChoices() {
+      if (gameState.phase === 1) {
+        document.getElementById('choices').innerHTML = `
+          <button onclick="makeChoice('compliment-hair')">💇 "Jacob, your hair looks IMMACULATE today"</button>
+          <button onclick="makeChoice('compliment-vibe')">✨ "You have ELITE energy right now"</button>
+          <button onclick="makeChoice('compliment-shoes')">👟 "Those shoes are absolutely BUSSIN"</button>
+          <button onclick="makeChoice('approach-slowly')">🚶 Approach slowly while making soothing whale noises</button>
+        `;
+      } else {
+        let html = '';
+        phase2Choices.forEach(choice => {
+          html += `<button onclick="makeChoice('${choice.id}')">${choice.text}</button>`;
+        });
+        document.getElementById('choices').innerHTML = html;
+      }
+    }
+
+    function updateStats() {
+      document.getElementById('confidence').textContent = gameState.confidence;
+      document.getElementById('hugs').textContent = `${gameState.hugs}/2`;
+      document.getElementById('attempts').textContent = gameState.attempts;
+    }
+
+    function updateMood() {
+      document.getElementById('jacobMood').textContent = moods[gameState.jacobMood];
+    }
+
+    function updateLocation() {
+      const locations = {
+        'corner': 'Jacob is in the corner...',
+        'bathroom': 'Jacob is hiding in the BATHROOM!',
+        'closet': 'Jacob is hiding in the CLOSET!',
+        'center': 'Jacob is standing in the center of the room!'
+      };
+      document.getElementById('jacobLocation').textContent = locations[gameState.jacobLocation];
+    }
+
+    function victory() {
+      document.getElementById('storyText').innerHTML = `
+        <div class="victory">
+          🎉 CONGRATULATIONS! 🎉<br><br>
+          You successfully got Jacob to come out of his shell!<br>
+          He gave you TWO whole hugs!<br><br>
+          Jacob: "Thanks... I guess you're alright..."<br><br>
+          Achievement Unlocked: JACOB WHISPERER<br>
+          Attempts: ${gameState.attempts}
+        </div>
+      `;
+      document.getElementById('choices').innerHTML = `
+        <button onclick="location.reload()">🔄 Play Again</button>
+        <button onclick="window.location.href='index.html'">🏠 Go Home</button>
+      `;
+    }
+
+    function gameOver(message) {
+      document.getElementById('storyText').innerHTML = `
+        <div style="text-align: center; color: #ff6b6b;">
+          💀 GAME OVER 💀<br><br>
+          ${message}<br><br>
+          Attempts: ${gameState.attempts}
+        </div>
+      `;
+      document.getElementById('choices').innerHTML = `
+        <button onclick="location.reload()">🔄 Try Again</button>
+        <button onclick="window.location.href='index.html'">🏠 Go Home</button>
+      `;
+    }
+  </script>
+</body>
+</html>
+```
