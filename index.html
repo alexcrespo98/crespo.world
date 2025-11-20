@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -34,6 +35,7 @@
     <a href="index.html">Home</a>
     <a href="chemocam.html">ChemoCam</a>
     <a href="crespomize.html">Crespomize</a>
+    <a href="jakeysnakey.html">JakeySnakey</a>
   </nav>
 
   <h1>you better believe it!</h1>
@@ -61,49 +63,39 @@
       // food collision
       if (head.x === food.x && head.y === food.y) {
         score++;
-        food.x = Math.floor(Math.random() * 20) * grid;
-        food.y = Math.floor(Math.random() * 20) * grid;
+        food = {
+          x: Math.floor(Math.random() * 20) * grid,
+          y: Math.floor(Math.random() * 20) * grid
+        };
       } else {
         snake.pop();
       }
 
-      // wall collision
-      if (head.x < 0 || head.y < 0 || head.x >= c.width || head.y >= c.height) {
-        snake = [{x:160,y:160}];
-        dx = grid; dy = 0;
-        score = 0;
-      }
-
-      // self collision
-      for (let i = 1; i < snake.length; i++) {
-        if (head.x === snake[i].x && head.y === snake[i].y) {
-          snake = [{x:160,y:160}];
-          dx = grid; dy = 0;
-          score = 0;
-        }
-      }
-
-      // draw food
+      // draw
+      ctx.fillStyle = "#0f0";
+      snake.forEach(s => ctx.fillRect(s.x, s.y, grid-2, grid-2));
       ctx.fillStyle = "#f00";
       ctx.fillRect(food.x, food.y, grid-2, grid-2);
 
-      // draw snake
-      ctx.fillStyle = "#0f0";
-      snake.forEach(s => ctx.fillRect(s.x, s.y, grid-2, grid-2));
-
-      // draw score
-      ctx.fillStyle = "#0f0";
-      ctx.fillText("Score: " + score, 10, 390);
+      // collision
+      if (head.x < 0 || head.x >= c.width || head.y < 0 || head.y >= c.height ||
+          snake.slice(1).some(s => s.x === head.x && s.y === head.y)) {
+        snake = [{x: 160, y: 160}];
+        dx = grid; dy = 0;
+        score = 0;
+      }
     }
 
     let count = 0;
     document.addEventListener("keydown", e => {
       if (e.key === "ArrowLeft" && dx === 0) { dx = -grid; dy = 0; }
-      if (e.key === "ArrowUp" && dy === 0) { dy = -grid; dx = 0; }
+      if (e.key === "ArrowUp" && dy === 0) { dx = 0; dy = -grid; }
       if (e.key === "ArrowRight" && dx === 0) { dx = grid; dy = 0; }
-      if (e.key === "ArrowDown" && dy === 0) { dy = grid; dx = 0; }
+      if (e.key === "ArrowDown" && dy === 0) { dx = 0; dy = grid; }
     });
-    requestAnimationFrame(gameLoop);
+
+    gameLoop();
   </script>
 </body>
 </html>
+```
