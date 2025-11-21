@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -124,6 +123,13 @@
       font-weight: bold;
       color: #0f0;
     }
+    .moonmedia-option {
+      background: linear-gradient(135deg, #0f0 0%, #00d2d3 100%);
+      color: #000;
+      font-weight: bold;
+      border: 3px solid #0f0;
+      box-shadow: 0 0 20px #0f0;
+    }
   </style>
 </head>
 <body>
@@ -181,6 +187,7 @@
     let workbookData = null;
     let selectedAccount = '';
     let accountData = {};
+    let isMoonMediaTotal = false;
 
     // Load Excel file from Google Sheets
     async function loadSheetData() {
@@ -203,9 +210,10 @@
           return;
         }
         
-        // Populate dropdown
+        // Populate dropdown with MoonMedia Total at top
         const select = document.getElementById('accountSelect');
-        select.innerHTML = '<option value="">-- select an account --</option>' + 
+        select.innerHTML = '<option value="">-- select an account --</option>' +
+          '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">🌙 MoonMedia Total Analytics</option>' +
           accounts.map(acc => `<option value="${acc}">@${acc}</option>`).join('');
         
         console.log('✅ Loaded accounts:', accounts);
@@ -221,8 +229,12 @@
       const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       
       // Structure: Row 0 = headers (timestamps), Column 0 = row names
-      const headers = jsonData[0]; // First row = timestamp columns
-      const latestTimestampIdx = headers.length - 1; // Last column = most recent scrape
+      const headers = jsonData[0].slice(1); // All timestamp columns (skip first empty cell)
+      const latestTimestampIdx = headers.length; // Last column index in row array
+      
+      // Extract historical data for followers and total_likes
+      let followersHistory = [];
+      let totalLikesHistory = [];
       
       // Extract data
       let followers = null;
@@ -240,8 +252,18 @@
         
         if (rowName === 'followers') {
           followers = latestValue;
+          // Get all historical values
+          followersHistory = row.slice(1).map((val, idx) => ({
+            date: headers[idx],
+            value: parseInt(val) || 0
+          })).filter(item => item.value > 0);
         } else if (rowName === 'total_likes') {
           totalLikes = latestValue;
+          // Get all historical values
+          totalLikesHistory = row.slice(1).map((val, idx) => ({
+            date: headers[idx],
+            value: parseInt(val) || 0
+          })).filter(item => item.value > 0);
         } else if (rowName === 'posts_scraped') {
           postsScraped = latestValue;
         } else if (rowName.startsWith('post_')) {
@@ -275,7 +297,81 @@
         followers: parseInt(followers) || 0,
         totalLikes: parseInt(totalLikes) || 0,
         postsScraped: parseInt(postsScraped) || 0,
-        videos: cleanVideos
+        videos: cleanVideos,
+        followersHistory: followersHistory,
+        totalLikesHistory: totalLikesHistory
+      };
+    }
+
+    function parseMoonMediaTotal() {
+      const accounts = workbookData.SheetNames;
+      let totalFollowers = 0;
+      let totalLikes = 0;
+      let totalPosts = 0;
+      let allVideos = [];
+      let combinedFollowersHistory = {};
+      let combinedLikesHistory = {};
+
+      // Aggregate data from all accounts
+      accounts.forEach(sheetName => {
+        const data = parseAccountData(sheetName);
+        totalFollowers += data.followers;
+        totalLikes += data.totalLikes;
+        totalPosts += data.postsScraped;
+        allVideos = allVideos.concat(data.videos);
+
+        // Combine history by timestamp
+        data.followersHistory.forEach(item => {
+          if (!combinedFollowersHistory[item.date]) {
+            combinedFollowersHistory[item.date] = 0;
+          }
+          combinedFollowersHistory[item.date] += item.value;
+        });
+
+        data.totalLikesHistory.forEach(item => {
+          if (!combinedLikesHistory[item.date]) {
+            combinedLikesHistory[item.date] = 0;
+          }
+          combinedLikesHistory[item.date] += item.value;
+        });
+      });
+
+      // Convert combined history back to arrays
+      const followersHistory = Object.keys(combinedFollowersHistory)
+        .map(date => ({ date, value: combinedFollowersHistory[date] }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      const totalLikesHistory = Object.keys(combinedLikesHistory)
+        .map(date => ({ date, value: combinedLikesHistory[date] }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      // Sort all videos by date
+      allVideos.sort((a, b) => a.date - b.date);
+
+      // Calculate likes per second from last 100 posts
+      const last100Posts = allVideos.slice(-100);
+      let likesPerSecond = 0;
+
+      if (last100Posts.length >= 2) {
+        const oldestPost = last100Posts[0];
+        const newestPost = last100Posts[last100Posts.length - 1];
+        const totalLikesInPeriod = last100Posts.reduce((sum, v) => sum + v.likes, 0);
+        const timeSpanSeconds = (newestPost.date - oldestPost.date) / 1000; // milliseconds to seconds
+
+        if (timeSpanSeconds > 0) {
+          likesPerSecond = totalLikesInPeriod / timeSpanSeconds;
+        }
+      }
+
+      return {
+        followers: totalFollowers,
+        totalLikes: totalLikes,
+        postsScraped: totalPosts,
+        videos: allVideos,
+        followersHistory: followersHistory,
+        totalLikesHistory: totalLikesHistory,
+        likesPerSecond: likesPerSecond,
+        accountCount: accounts.length
       };
     }
 
@@ -286,6 +382,7 @@
           alert('pick an account first!');
           return;
         }
+        isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
       } else if (current === 2) {
@@ -300,12 +397,16 @@
       document.getElementById('loading').classList.remove('hidden');
 
       // Parse the data
-      accountData = parseAccountData(selectedAccount);
+      if (isMoonMediaTotal) {
+        accountData = parseMoonMediaTotal();
+      } else {
+        accountData = parseAccountData(selectedAccount);
+      }
       
       setTimeout(() => {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
-        document.getElementById('accountName').textContent = selectedAccount;
+        document.getElementById('accountName').textContent = isMoonMediaTotal ? 'MoonMedia Total' : selectedAccount;
         renderDashboard();
       }, 1000);
     }
@@ -319,7 +420,8 @@
     function renderDashboard() {
       // Summary stats
       const statsContainer = document.getElementById('statsSummary');
-      statsContainer.innerHTML = `
+      
+      let statsHTML = `
         <div class="stat-card">
           <h4>👥 FOLLOWERS</h4>
           <div class="value">${formatNumber(accountData.followers)}</div>
@@ -338,9 +440,57 @@
         </div>
       `;
 
+      // Add likes per second for MoonMedia Total
+      if (isMoonMediaTotal) {
+        statsHTML += `
+          <div class="stat-card">
+            <h4>⚡ LIKES PER SECOND</h4>
+            <div class="value">${accountData.likesPerSecond.toFixed(2)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>🏢 TOTAL ACCOUNTS</h4>
+            <div class="value">${accountData.accountCount}</div>
+          </div>
+        `;
+      }
+
+      statsContainer.innerHTML = statsHTML;
+
       // Charts
       const chartsContainer = document.getElementById('chartsList');
       chartsContainer.innerHTML = '';
+
+      // NEW: Followers over time (historical scrapes)
+      if (accountData.followersHistory && accountData.followersHistory.length > 0) {
+        createChart(chartsContainer, '👥 Followers Per Scrape', 'line',
+          accountData.followersHistory.map(h => new Date(h.date).toLocaleString()),
+          [{
+            label: 'Followers',
+            data: accountData.followersHistory.map(h => h.value),
+            borderColor: '#9b59b6',
+            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+            borderWidth: 3,
+            tension: 0.4,
+            fill: true
+          }]
+        );
+      }
+
+      // NEW: Total Likes over time (historical scrapes)
+      if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
+        createChart(chartsContainer, '❤️ Total Likes Per Scrape', 'line',
+          accountData.totalLikesHistory.map(h => new Date(h.date).toLocaleString()),
+          [{
+            label: 'Total Likes',
+            data: accountData.totalLikesHistory.map(h => h.value),
+            borderColor: '#e91e63',
+            backgroundColor: 'rgba(233, 30, 99, 0.1)',
+            borderWidth: 3,
+            tension: 0.4,
+            fill: true
+          }]
+        );
+      }
 
       // 1. Views over time
       createChart(chartsContainer, 'Views Over Time', 'line', 
@@ -474,4 +624,3 @@
   </script>
 </body>
 </html>
-```
