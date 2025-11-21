@@ -362,6 +362,9 @@
       let postsScraped = null;
       const videosData = [];
       
+      // NEW: Track all unique video IDs across ALL columns
+      const allUniqueVideoIds = new Set();
+      
       // Parse each row
       for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
@@ -392,14 +395,22 @@
           const metric = parts[parts.length - 1]; // Last part = metric name
           const videoId = parts.slice(1, -1).join('_'); // Middle parts = video ID
           
-          // Find or create video entry
-          let video = videosData.find(v => v.id === videoId);
-          if (!video) {
-            video = { id: videoId };
-            videosData.push(video);
+          // Track this video ID as existing in the dataset
+          if (metric === 'Date') {
+            allUniqueVideoIds.add(videoId);
           }
           
-          video[metric] = latestValue;
+          // Only get data from LATEST column for this specific video
+          if (latestValue) {
+            // Find or create video entry
+            let video = videosData.find(v => v.id === videoId);
+            if (!video) {
+              video = { id: videoId };
+              videosData.push(video);
+            }
+            
+            video[metric] = latestValue;
+          }
         }
       }
       
@@ -428,10 +439,13 @@
       const latestFollowers = followersHistory.length > 0 ? followersHistory[followersHistory.length - 1].value : followers;
       const latestTotalLikes = totalLikesHistory.length > 0 ? totalLikesHistory[totalLikesHistory.length - 1].value : totalLikes;
       
+      // Use the TOTAL unique video count (historical total)
+      const totalUniquePostsTracked = allUniqueVideoIds.size;
+      
       return {
         followers: parseInt(latestFollowers) || 0,
         totalLikes: parseInt(latestTotalLikes) || 0,
-        postsScraped: parseInt(postsScraped) || 0,
+        postsScraped: totalUniquePostsTracked, // NOW shows cumulative total
         videos: cleanVideos,
         followersHistory: followersHistory,
         totalLikesHistory: totalLikesHistory
@@ -452,7 +466,7 @@
         const data = parseAccountData(sheetName, timeRangeDays);
         totalFollowers += data.followers;
         totalLikes += data.totalLikes;
-        totalPosts += data.postsScraped;
+        totalPosts += data.postsScraped; // Now getting cumulative count per account
         allVideos = allVideos.concat(data.videos);
 
         // Combine history by timestamp (already interpolated per account)
@@ -502,7 +516,7 @@
       return {
         followers: totalFollowers,
         totalLikes: totalLikes,
-        postsScraped: totalPosts,
+        postsScraped: totalPosts, // Sum of all accounts' cumulative counts
         videos: allVideos,
         followersHistory: followersHistory,
         totalLikesHistory: totalLikesHistory,
