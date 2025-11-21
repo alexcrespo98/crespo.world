@@ -136,6 +136,16 @@
       gap: 1em;
       margin: 1em 0;
     }
+    .scale-badge {
+      display: inline-block;
+      background: #0f0;
+      color: #000;
+      padding: 0.3em 0.6em;
+      border-radius: 3px;
+      font-size: 0.8em;
+      margin-left: 0.5em;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -240,6 +250,26 @@
         console.error('error loading data:', error);
         document.getElementById('accountSelect').innerHTML = '<option>error loading - check file permissions</option>';
       }
+    }
+
+    // Smart scale detection: determines if logarithmic scale is needed
+    function shouldUseLogScale(data) {
+      if (data.length === 0) return false;
+      
+      const values = data.filter(v => v > 0); // Only positive values for log
+      if (values.length === 0) return false;
+      
+      const max = Math.max(...values);
+      const min = Math.min(...values);
+      const median = values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+      
+      // Use log scale if:
+      // 1. Range spans more than 2 orders of magnitude (100x difference)
+      // 2. OR max is more than 10x the median (indicates viral outliers)
+      const ratio = max / min;
+      const medianRatio = max / median;
+      
+      return ratio > 100 || medianRatio > 10;
     }
 
     function filterDataByTimeRange(videos, timeRangeDays) {
@@ -506,49 +536,63 @@
 
       // NEW: Followers over time (historical scrapes)
       if (accountData.followersHistory && accountData.followersHistory.length > 0) {
+        const followerValues = accountData.followersHistory.map(h => h.value);
+        const useLogFollowers = shouldUseLogScale(followerValues);
+        
         createChart(chartsContainer, '👥 Followers Per Scrape', 'line',
           accountData.followersHistory.map(h => new Date(h.date).toLocaleString()),
           [{
             label: 'Followers',
-            data: accountData.followersHistory.map(h => h.value),
+            data: followerValues,
             borderColor: '#9b59b6',
             backgroundColor: 'rgba(155, 89, 182, 0.1)',
             borderWidth: 3,
             tension: 0.4,
             fill: true
-          }]
+          }],
+          useLogFollowers
         );
       }
 
       // NEW: Total Likes over time (historical scrapes)
       if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
+        const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
+        const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
+        
         createChart(chartsContainer, '❤️ Total Likes Per Scrape', 'line',
           accountData.totalLikesHistory.map(h => new Date(h.date).toLocaleString()),
           [{
             label: 'Total Likes',
-            data: accountData.totalLikesHistory.map(h => h.value),
+            data: likesHistoryValues,
             borderColor: '#e91e63',
             backgroundColor: 'rgba(233, 30, 99, 0.1)',
             borderWidth: 3,
             tension: 0.4,
             fill: true
-          }]
+          }],
+          useLogLikesHistory
         );
       }
 
       // Only show video charts if there's data
       if (accountData.videos.length > 0) {
+        const viewsData = accountData.videos.map(v => v.views);
+        const likesData = accountData.videos.map(v => v.likes);
+        const useLogViews = shouldUseLogScale(viewsData);
+        const useLogLikes = shouldUseLogScale(likesData);
+
         // 1. Views over time
         createChart(chartsContainer, 'Views Over Time', 'line', 
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
             label: 'Views',
-            data: accountData.videos.map(v => v.views),
+            data: viewsData,
             borderColor: '#00d2d3',
             backgroundColor: 'rgba(0, 210, 211, 0.1)',
             borderWidth: 2,
             tension: 0.4
-          }]
+          }],
+          useLogViews
         );
 
         // 2. Likes over time
@@ -556,15 +600,16 @@
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
             label: 'Likes',
-            data: accountData.videos.map(v => v.likes),
+            data: likesData,
             borderColor: '#ff6b6b',
             backgroundColor: 'rgba(255, 107, 107, 0.1)',
             borderWidth: 2,
             tension: 0.4
-          }]
+          }],
+          useLogLikes
         );
 
-        // 3. Engagement rate over time
+        // 3. Engagement rate over time (linear - percentages don't need log)
         createChart(chartsContainer, 'Engagement Rate Over Time', 'line',
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
@@ -574,34 +619,45 @@
             backgroundColor: 'rgba(46, 204, 113, 0.1)',
             borderWidth: 2,
             tension: 0.4
-          }]
+          }],
+          false
         );
 
         // 4. Comments over time
+        const commentsData = accountData.videos.map(v => v.comments);
+        const useLogComments = shouldUseLogScale(commentsData);
+        
         createChart(chartsContainer, 'Comments Over Time', 'bar',
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
             label: 'Comments',
-            data: accountData.videos.map(v => v.comments),
+            data: commentsData,
             backgroundColor: 'rgba(26, 188, 156, 0.7)',
             borderColor: '#1abc9c',
             borderWidth: 2
-          }]
+          }],
+          useLogComments
         );
 
         // 5. Shares over time
+        const sharesData = accountData.videos.map(v => v.shares);
+        const useLogShares = shouldUseLogScale(sharesData);
+        
         createChart(chartsContainer, 'Shares Over Time', 'bar',
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
             label: 'Shares',
-            data: accountData.videos.map(v => v.shares),
+            data: sharesData,
             backgroundColor: 'rgba(231, 76, 60, 0.7)',
             borderColor: '#e74c3c',
             borderWidth: 2
-          }]
+          }],
+          useLogShares
         );
 
-        // 6. Likes vs Views correlation
+        // 6. Likes vs Views correlation (both axes can be log)
+        const useLogScatter = shouldUseLogScale(viewsData) || shouldUseLogScale(likesData);
+        
         createChart(chartsContainer, 'Likes vs Views Correlation', 'scatter',
           null,
           [{
@@ -612,16 +668,29 @@
             borderWidth: 2,
             pointRadius: 5
           }],
+          useLogScatter,
           {
             scales: {
               x: { 
+                type: useLogScatter ? 'logarithmic' : 'linear',
                 title: { display: true, text: 'Views', color: '#0f0' },
-                ticks: { color: '#0f0' },
+                ticks: { 
+                  color: '#0f0',
+                  callback: function(value) {
+                    return formatNumber(value);
+                  }
+                },
                 grid: { color: 'rgba(0, 255, 0, 0.1)' }
               },
               y: { 
+                type: useLogScatter ? 'logarithmic' : 'linear',
                 title: { display: true, text: 'Likes', color: '#0f0' },
-                ticks: { color: '#0f0' },
+                ticks: { 
+                  color: '#0f0',
+                  callback: function(value) {
+                    return formatNumber(value);
+                  }
+                },
                 grid: { color: 'rgba(0, 255, 0, 0.1)' }
               }
             }
@@ -632,11 +701,14 @@
       }
     }
 
-    function createChart(container, title, type, labels, datasets, customOptions = {}) {
+    function createChart(container, title, type, labels, datasets, useLogScale = false, customOptions = {}) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
       const chartId = 'chart-' + Math.random().toString(36).substr(2, 9);
-      chartDiv.innerHTML = `<h3>${title}</h3><canvas id="${chartId}"></canvas>`;
+      
+      // Add badge if using log scale
+      const scaleBadge = useLogScale ? '<span class="scale-badge">LOG SCALE</span>' : '';
+      chartDiv.innerHTML = `<h3>${title}${scaleBadge}</h3><canvas id="${chartId}"></canvas>`;
       container.appendChild(chartDiv);
 
       const ctx = document.getElementById(chartId).getContext('2d');
@@ -647,11 +719,31 @@
         plugins: {
           legend: {
             labels: { color: '#0f0', font: { family: 'monospace' } }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                let label = context.dataset.label || '';
+                if (label) {
+                  label += ': ';
+                }
+                if (context.parsed.y !== null) {
+                  label += formatNumber(context.parsed.y);
+                }
+                return label;
+              }
+            }
           }
         },
         scales: type !== 'scatter' ? {
           y: {
-            ticks: { color: '#0f0' },
+            type: useLogScale ? 'logarithmic' : 'linear',
+            ticks: { 
+              color: '#0f0',
+              callback: function(value) {
+                return formatNumber(value);
+              }
+            },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
           },
           x: {
@@ -661,10 +753,15 @@
         } : {}
       };
 
+      // Merge custom options (for scatter plot)
+      const finalOptions = type === 'scatter' && customOptions.scales 
+        ? { ...defaultOptions, ...customOptions }
+        : defaultOptions;
+
       new Chart(ctx, {
         type: type,
         data: { labels: labels, datasets: datasets },
-        options: { ...defaultOptions, ...customOptions }
+        options: finalOptions
       });
     }
 
