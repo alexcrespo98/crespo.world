@@ -279,41 +279,61 @@
     function interpolateHistoricalData(historyArray) {
       if (historyArray.length === 0) return historyArray;
       
-      const interpolated = [...historyArray];
+      // First pass: identify zero/null values that need interpolation
+      const needsInterpolation = historyArray.map((item, idx) => ({
+        ...item,
+        index: idx,
+        needsInterp: item.value === 0 || item.value === null || item.value === undefined
+      }));
       
-      for (let i = 0; i < interpolated.length; i++) {
-        if (interpolated[i].value === 0 || interpolated[i].value === null) {
-          let prevValue = null;
-          for (let j = i - 1; j >= 0; j--) {
-            if (interpolated[j].value > 0) {
-              prevValue = interpolated[j].value;
-              break;
-            }
-          }
-          
-          let nextValue = null;
-          let nextIndex = -1;
-          for (let j = i + 1; j < interpolated.length; j++) {
-            if (interpolated[j].value > 0) {
-              nextValue = interpolated[j].value;
-              nextIndex = j;
-              break;
-            }
-          }
-          
-          if (prevValue !== null && nextValue !== null) {
-            const steps = nextIndex - i + 1;
-            const stepSize = (nextValue - prevValue) / steps;
-            interpolated[i].value = Math.round(prevValue + stepSize);
-          } else if (prevValue !== null) {
-            interpolated[i].value = prevValue;
-          } else if (nextValue !== null) {
-            interpolated[i].value = nextValue;
+      // Second pass: interpolate missing values
+      for (let i = 0; i < needsInterpolation.length; i++) {
+        if (!needsInterpolation[i].needsInterp) continue;
+        
+        // Find previous valid value
+        let prevValue = null;
+        let prevIndex = -1;
+        for (let j = i - 1; j >= 0; j--) {
+          if (!needsInterpolation[j].needsInterp && needsInterpolation[j].value > 0) {
+            prevValue = needsInterpolation[j].value;
+            prevIndex = j;
+            break;
           }
         }
+        
+        // Find next valid value
+        let nextValue = null;
+        let nextIndex = -1;
+        for (let j = i + 1; j < needsInterpolation.length; j++) {
+          if (!needsInterpolation[j].needsInterp && needsInterpolation[j].value > 0) {
+            nextValue = needsInterpolation[j].value;
+            nextIndex = j;
+            break;
+          }
+        }
+        
+        // Interpolate based on what we found
+        if (prevValue !== null && nextValue !== null) {
+          // We have both prev and next - interpolate linearly
+          const totalSteps = nextIndex - prevIndex;
+          const currentStep = i - prevIndex;
+          const interpolatedValue = prevValue + ((nextValue - prevValue) * currentStep / totalSteps);
+          needsInterpolation[i].value = Math.round(interpolatedValue);
+        } else if (prevValue !== null) {
+          // Only have previous - use it
+          needsInterpolation[i].value = prevValue;
+        } else if (nextValue !== null) {
+          // Only have next - use it
+          needsInterpolation[i].value = nextValue;
+        }
+        // If we have neither prev nor next, leave as 0 (will be filtered out later)
       }
       
-      return interpolated;
+      // Return interpolated data
+      return needsInterpolation.map(item => ({
+        date: item.date,
+        value: item.value
+      }));
     }
 
     function shouldUseLogScale(data) {
@@ -364,7 +384,7 @@
         if (!rowName) continue;
         
         if (rowName === 'followers') {
-          // Get all historical values WITH timestamps AND validation
+          // Get all historical values WITH timestamps
           followersHistory = row.slice(1).map((val, idx) => {
             const dateVal = new Date(headers[idx]);
             const value = parseInt(val) || 0;
@@ -374,13 +394,13 @@
               value: value
             };
           }).filter(item => {
-            // Filter out invalid dates and zero values
-            return isValidDate(item.date) && item.value > 0;
+            // Only filter out invalid dates, keep zeros for interpolation
+            return isValidDate(item.date);
           });
           
           followers = followersHistory.length > 0 ? followersHistory[followersHistory.length - 1].value : 0;
         } else if (rowName === 'total_likes') {
-          // Get all historical values WITH timestamps AND validation
+          // Get all historical values WITH timestamps
           totalLikesHistory = row.slice(1).map((val, idx) => {
             const dateVal = new Date(headers[idx]);
             const value = parseInt(val) || 0;
@@ -390,8 +410,8 @@
               value: value
             };
           }).filter(item => {
-            // Filter out invalid dates and zero values
-            return isValidDate(item.date) && item.value > 0;
+            // Only filter out invalid dates, keep zeros for interpolation
+            return isValidDate(item.date);
           });
           
           totalLikes = totalLikesHistory.length > 0 ? totalLikesHistory[totalLikesHistory.length - 1].value : 0;
@@ -426,11 +446,11 @@
         }
       }
       
-      // Interpolate AFTER filtering
+      // Interpolate AFTER collecting all data points (including zeros)
       followersHistory = interpolateHistoricalData(followersHistory);
       totalLikesHistory = interpolateHistoricalData(totalLikesHistory);
       
-      // Final filter to ensure all dates are valid
+      // NOW filter out any remaining zeros or invalid values AFTER interpolation
       followersHistory = followersHistory.filter(item => isValidDate(item.date) && item.value > 0);
       totalLikesHistory = totalLikesHistory.filter(item => isValidDate(item.date) && item.value > 0);
       
@@ -491,10 +511,10 @@
         totalPosts += data.postsScraped;
         allVideos = allVideos.concat(data.videos);
 
-        // Combine history by timestamp with validation
+        // Combine history by timestamp
         data.followersHistory.forEach(item => {
-          if (!isValidDate(item.date) || !item.value || item.value <= 0) {
-            return; // Skip invalid entries
+          if (!isValidDate(item.date)) {
+            return;
           }
           
           const dateKey = item.date.toISOString();
@@ -505,8 +525,8 @@
         });
 
         data.totalLikesHistory.forEach(item => {
-          if (!isValidDate(item.date) || !item.value || item.value <= 0) {
-            return; // Skip invalid entries
+          if (!isValidDate(item.date)) {
+            return;
           }
           
           const dateKey = item.date.toISOString();
@@ -646,6 +666,12 @@
       const newType = currentType === 'logarithmic' ? 'linear' : 'logarithmic';
       
       chart.options.scales.y.type = newType;
+      
+      // Also toggle x-axis for correlation chart
+      if (chartId === 'correlation' && chart.options.scales.x) {
+        chart.options.scales.x.type = newType;
+      }
+      
       chart.update();
 
       const badge = document.querySelector(`[data-chart-id="${chartId}"]`);
@@ -708,11 +734,10 @@
 
       if (accountData.followersHistory && accountData.followersHistory.length > 0) {
         const followerValues = accountData.followersHistory.map(h => h.value);
-        const followerDates = accountData.followersHistory.map(h => h.date);
         const useLogFollowers = shouldUseLogScale(followerValues);
         
         createTimeBasedChart(chartsContainer, '👥 Followers Per Scrape', 
-          followerDates,
+          accountData.followersHistory,
           [{
             label: 'Followers',
             data: accountData.followersHistory.map(h => ({ x: h.date, y: h.value })),
@@ -729,11 +754,10 @@
 
       if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
-        const likesDates = accountData.totalLikesHistory.map(h => h.date);
         const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
         
         createTimeBasedChart(chartsContainer, '❤️ Total Likes Per Scrape',
-          likesDates,
+          accountData.totalLikesHistory,
           [{
             label: 'Total Likes',
             data: accountData.totalLikesHistory.map(h => ({ x: h.date, y: h.value })),
@@ -754,11 +778,11 @@
         const useLogViews = shouldUseLogScale(viewsData);
         const useLogLikes = shouldUseLogScale(likesData);
 
-        createChart(chartsContainer, 'Views Over Time', 'scatter', 
-          accountData.videos.map(v => v.date.toLocaleDateString()),
+        createTimeBasedChart(chartsContainer, 'Views Over Time',
+          accountData.videos,
           [{
             label: 'Views',
-            data: accountData.videos.map((v, idx) => ({ x: idx, y: v.views })),
+            data: accountData.videos.map(v => ({ x: v.date, y: v.views })),
             borderColor: '#00d2d3',
             backgroundColor: 'rgba(0, 210, 211, 0.7)',
             pointRadius: 4,
@@ -768,11 +792,11 @@
           'views-time'
         );
 
-        createChart(chartsContainer, 'Likes Over Time', 'scatter',
-          accountData.videos.map(v => v.date.toLocaleDateString()),
+        createTimeBasedChart(chartsContainer, 'Likes Over Time',
+          accountData.videos,
           [{
             label: 'Likes',
-            data: accountData.videos.map((v, idx) => ({ x: idx, y: v.likes })),
+            data: accountData.videos.map(v => ({ x: v.date, y: v.likes })),
             borderColor: '#ff6b6b',
             backgroundColor: 'rgba(255, 107, 107, 0.7)',
             pointRadius: 4,
@@ -782,11 +806,11 @@
           'likes-time'
         );
 
-        createChart(chartsContainer, 'Engagement Rate Over Time', 'scatter',
-          accountData.videos.map(v => v.date.toLocaleDateString()),
+        createTimeBasedChart(chartsContainer, 'Engagement Rate Over Time',
+          accountData.videos,
           [{
             label: 'Engagement %',
-            data: accountData.videos.map((v, idx) => ({ x: idx, y: v.engagement })),
+            data: accountData.videos.map(v => ({ x: v.date, y: v.engagement })),
             borderColor: '#2ecc71',
             backgroundColor: 'rgba(46, 204, 113, 0.7)',
             pointRadius: 4,
@@ -799,11 +823,11 @@
         const commentsData = accountData.videos.map(v => v.comments);
         const useLogComments = shouldUseLogScale(commentsData);
         
-        createChart(chartsContainer, 'Comments Over Time', 'scatter',
-          accountData.videos.map(v => v.date.toLocaleDateString()),
+        createTimeBasedChart(chartsContainer, 'Comments Over Time',
+          accountData.videos,
           [{
             label: 'Comments',
-            data: accountData.videos.map((v, idx) => ({ x: idx, y: v.comments })),
+            data: accountData.videos.map(v => ({ x: v.date, y: v.comments })),
             borderColor: '#1abc9c',
             backgroundColor: 'rgba(26, 188, 156, 0.7)',
             pointRadius: 4,
@@ -816,11 +840,11 @@
         const sharesData = accountData.videos.map(v => v.shares);
         const useLogShares = shouldUseLogScale(sharesData);
         
-        createChart(chartsContainer, 'Shares Over Time', 'scatter',
-          accountData.videos.map(v => v.date.toLocaleDateString()),
+        createTimeBasedChart(chartsContainer, 'Shares Over Time',
+          accountData.videos,
           [{
             label: 'Shares',
-            data: accountData.videos.map((v, idx) => ({ x: idx, y: v.shares })),
+            data: accountData.videos.map(v => ({ x: v.date, y: v.shares })),
             borderColor: '#e74c3c',
             backgroundColor: 'rgba(231, 76, 60, 0.7)',
             pointRadius: 4,
@@ -832,8 +856,7 @@
 
         const useLogScatter = shouldUseLogScale(viewsData) || shouldUseLogScale(likesData);
         
-        createChart(chartsContainer, 'Likes vs Views Correlation', 'scatter',
-          null,
+        createScatterChart(chartsContainer, 'Likes vs Views Correlation',
           [{
             label: 'Posts',
             data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
@@ -844,15 +867,14 @@
             pointHoverRadius: 7
           }],
           useLogScatter,
-          'correlation',
-          true
+          'correlation'
         );
       } else {
         chartsContainer.innerHTML += '<div class="chart-container"><h3>No video data available for selected time range</h3></div>';
       }
     }
 
-    function createTimeBasedChart(container, title, dates, datasets, useLogScale, chartId) {
+    function createTimeBasedChart(container, title, dataPoints, datasets, useLogScale, chartId) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
       const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
@@ -920,8 +942,10 @@
         }
       };
 
+      const chartType = datasets[0].pointRadius !== undefined ? 'scatter' : 'line';
+
       const chart = new Chart(ctx, {
-        type: 'line',
+        type: chartType,
         data: { datasets: datasets },
         options: options
       });
@@ -929,7 +953,7 @@
       chartInstances[chartId] = chart;
     }
 
-    function createChart(container, title, type, labels, datasets, useLogScale = false, chartId, isCorrelationChart = false) {
+    function createScatterChart(container, title, datasets, useLogScale, chartId) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
       const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
@@ -943,19 +967,27 @@
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
-      const yValues = datasets[0].data.map(d => d.y || d);
-      const dataRange = {
-        min: Math.min(...yValues),
-        max: Math.max(...yValues)
-      };
+      const xValues = datasets[0].data.map(d => d.x);
+      const yValues = datasets[0].data.map(d => d.y);
+      const xRange = { min: Math.min(...xValues), max: Math.max(...xValues) };
+      const yRange = { min: Math.min(...yValues), max: Math.max(...yValues) };
 
-      let scales;
-      
-      if (isCorrelationChart) {
-        const xValues = datasets[0].data.map(d => d.x);
-        const xRange = { min: Math.min(...xValues), max: Math.max(...xValues) };
-        
-        scales = {
+      const options = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: {
+            labels: { color: '#0f0', font: { family: 'monospace' } }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return `Views: ${formatNumber(context.parsed.x)}, Likes: ${formatNumber(context.parsed.y)}`;
+              }
+            }
+          }
+        },
+        scales: {
           x: { 
             type: useLogScale ? 'logarithmic' : 'linear',
             title: { display: true, text: 'Views', color: '#0f0' },
@@ -975,67 +1007,17 @@
               color: '#0f0',
               maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumberAxisSmart(value, dataRange);
+                return formatNumberAxisSmart(value, yRange);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
           }
-        };
-      } else {
-        scales = {
-          x: {
-            type: 'linear',
-            ticks: { 
-              color: '#0f0',
-              maxTicksLimit: 10,
-              callback: function(value, index) {
-                if (labels && labels[Math.floor(value)]) {
-                  return labels[Math.floor(value)];
-                }
-                return '';
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          },
-          y: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            ticks: { 
-              color: '#0f0',
-              maxTicksLimit: 8,
-              callback: function(value) {
-                return formatNumberAxisSmart(value, dataRange);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          }
-        };
-      }
-
-      const options = {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: {
-            labels: { color: '#0f0', font: { family: 'monospace' } }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                let label = context.dataset.label || '';
-                if (label) label += ': ';
-                const value = context.parsed.y !== null ? context.parsed.y : context.parsed;
-                label += formatNumber(value);
-                return label;
-              }
-            }
-          }
-        },
-        scales: scales
+        }
       };
 
       const chart = new Chart(ctx, {
-        type: type,
-        data: { labels: type === 'line' ? labels : [], datasets: datasets },
+        type: 'scatter',
+        data: { datasets: datasets },
         options: options
       });
 
