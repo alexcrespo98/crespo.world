@@ -130,6 +130,12 @@
       border: 3px solid #0f0;
       box-shadow: 0 0 20px #0f0;
     }
+    .time-range-buttons {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1em;
+      margin: 1em 0;
+    }
   </style>
 </head>
 <body>
@@ -155,20 +161,31 @@
     <!-- Step 2: Demo question -->
     <div id="step2" class="hidden">
       <div class="question">want demo analytics or something specific?</div>
-      <button onclick="runDemo()">demo analytics - show me everything</button>
-      <button onclick="nextStep(2)">something specific</button>
+      <button onclick="nextStep(2)">demo analytics - show me everything</button>
+      <button onclick="nextStep(3)">something specific</button>
+    </div>
+
+    <!-- Step 2.5: Time range selection -->
+    <div id="step2_5" class="hidden">
+      <div class="question">select time range for analysis:</div>
+      <div class="time-range-buttons">
+        <button onclick="selectTimeRange('all')">📅 All Time</button>
+        <button onclick="selectTimeRange(365)">📆 1 Year</button>
+        <button onclick="selectTimeRange(180)">📆 6 Months</button>
+        <button onclick="selectTimeRange(30)">📆 1 Month</button>
+      </div>
     </div>
 
     <!-- Step 3: Coming soon -->
     <div id="step3" class="hidden">
       <div class="question">custom options coming soon! 🚀</div>
-      <button onclick="runDemo()">just show me the demo for now</button>
+      <button onclick="selectTimeRange('all')">just show me the demo for now</button>
       <button onclick="location.reload()">start over</button>
     </div>
 
     <!-- Charts display -->
     <div id="charts" class="hidden">
-      <div class="question">📈 analytics for @<span id="accountName"></span></div>
+      <div class="question">📈 analytics for @<span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
       <!-- Summary stats -->
       <div class="stats-summary" id="statsSummary"></div>
@@ -188,6 +205,7 @@
     let selectedAccount = '';
     let accountData = {};
     let isMoonMediaTotal = false;
+    let selectedTimeRange = 'all';
 
     // Load Excel file from Google Sheets
     async function loadSheetData() {
@@ -224,7 +242,16 @@
       }
     }
 
-    function parseAccountData(sheetName) {
+    function filterDataByTimeRange(videos, timeRangeDays) {
+      if (timeRangeDays === 'all') return videos;
+      
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+      
+      return videos.filter(v => v.date >= cutoffDate);
+    }
+
+    function parseAccountData(sheetName, timeRangeDays = 'all') {
       const sheet = workbookData.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       
@@ -284,7 +311,7 @@
       }
       
       // Clean up videos data
-      const cleanVideos = videosData.filter(v => v.Date).map(v => ({
+      let cleanVideos = videosData.filter(v => v.Date).map(v => ({
         date: new Date(v.Date),
         views: parseInt(v.Views) || 0,
         likes: parseInt(v.Likes) || 0,
@@ -292,6 +319,9 @@
         shares: parseInt(v.Shares) || 0,
         engagement: parseFloat(v.EngagementRate) || 0
       })).sort((a, b) => a.date - b.date);
+
+      // Filter by time range
+      cleanVideos = filterDataByTimeRange(cleanVideos, timeRangeDays);
       
       return {
         followers: parseInt(followers) || 0,
@@ -303,7 +333,7 @@
       };
     }
 
-    function parseMoonMediaTotal() {
+    function parseMoonMediaTotal(timeRangeDays = 'all') {
       const accounts = workbookData.SheetNames;
       let totalFollowers = 0;
       let totalLikes = 0;
@@ -314,7 +344,7 @@
 
       // Aggregate data from all accounts
       accounts.forEach(sheetName => {
-        const data = parseAccountData(sheetName);
+        const data = parseAccountData(sheetName, timeRangeDays);
         totalFollowers += data.followers;
         totalLikes += data.totalLikes;
         totalPosts += data.postsScraped;
@@ -386,27 +416,41 @@
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
       } else if (current === 2) {
+        // Go to time range selection
+        document.getElementById('step2').classList.add('hidden');
+        document.getElementById('step2_5').classList.remove('hidden');
+      } else if (current === 3) {
         document.getElementById('step2').classList.add('hidden');
         document.getElementById('step3').classList.remove('hidden');
       }
     }
 
-    function runDemo() {
-      document.getElementById('step2').classList.add('hidden');
+    function selectTimeRange(days) {
+      selectedTimeRange = days;
+      document.getElementById('step2_5').classList.add('hidden');
       document.getElementById('step3').classList.add('hidden');
       document.getElementById('loading').classList.remove('hidden');
 
-      // Parse the data
+      // Parse the data with time range filter
       if (isMoonMediaTotal) {
-        accountData = parseMoonMediaTotal();
+        accountData = parseMoonMediaTotal(days);
       } else {
-        accountData = parseAccountData(selectedAccount);
+        accountData = parseAccountData(selectedAccount, days);
       }
       
       setTimeout(() => {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
         document.getElementById('accountName').textContent = isMoonMediaTotal ? 'MoonMedia Total' : selectedAccount;
+        
+        // Set time range label
+        let rangeText = '';
+        if (days === 'all') rangeText = '(All Time)';
+        else if (days === 365) rangeText = '(Last 1 Year)';
+        else if (days === 180) rangeText = '(Last 6 Months)';
+        else if (days === 30) rangeText = '(Last 1 Month)';
+        document.getElementById('timeRangeLabel').textContent = rangeText;
+        
         renderDashboard();
       }, 1000);
     }
@@ -436,7 +480,7 @@
         </div>
         <div class="stat-card">
           <h4>📈 AVG ENGAGEMENT</h4>
-          <div class="value">${(accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / accountData.videos.length).toFixed(2)}%</div>
+          <div class="value">${accountData.videos.length > 0 ? (accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / accountData.videos.length).toFixed(2) : 0}%</div>
         </div>
       `;
 
@@ -492,95 +536,100 @@
         );
       }
 
-      // 1. Views over time
-      createChart(chartsContainer, 'Views Over Time', 'line', 
-        accountData.videos.map(v => v.date.toLocaleDateString()),
-        [{
-          label: 'Views',
-          data: accountData.videos.map(v => v.views),
-          borderColor: '#00d2d3',
-          backgroundColor: 'rgba(0, 210, 211, 0.1)',
-          borderWidth: 2,
-          tension: 0.4
-        }]
-      );
+      // Only show video charts if there's data
+      if (accountData.videos.length > 0) {
+        // 1. Views over time
+        createChart(chartsContainer, 'Views Over Time', 'line', 
+          accountData.videos.map(v => v.date.toLocaleDateString()),
+          [{
+            label: 'Views',
+            data: accountData.videos.map(v => v.views),
+            borderColor: '#00d2d3',
+            backgroundColor: 'rgba(0, 210, 211, 0.1)',
+            borderWidth: 2,
+            tension: 0.4
+          }]
+        );
 
-      // 2. Likes over time
-      createChart(chartsContainer, 'Likes Over Time', 'line',
-        accountData.videos.map(v => v.date.toLocaleDateString()),
-        [{
-          label: 'Likes',
-          data: accountData.videos.map(v => v.likes),
-          borderColor: '#ff6b6b',
-          backgroundColor: 'rgba(255, 107, 107, 0.1)',
-          borderWidth: 2,
-          tension: 0.4
-        }]
-      );
+        // 2. Likes over time
+        createChart(chartsContainer, 'Likes Over Time', 'line',
+          accountData.videos.map(v => v.date.toLocaleDateString()),
+          [{
+            label: 'Likes',
+            data: accountData.videos.map(v => v.likes),
+            borderColor: '#ff6b6b',
+            backgroundColor: 'rgba(255, 107, 107, 0.1)',
+            borderWidth: 2,
+            tension: 0.4
+          }]
+        );
 
-      // 3. Engagement rate over time
-      createChart(chartsContainer, 'Engagement Rate Over Time', 'line',
-        accountData.videos.map(v => v.date.toLocaleDateString()),
-        [{
-          label: 'Engagement %',
-          data: accountData.videos.map(v => v.engagement),
-          borderColor: '#2ecc71',
-          backgroundColor: 'rgba(46, 204, 113, 0.1)',
-          borderWidth: 2,
-          tension: 0.4
-        }]
-      );
+        // 3. Engagement rate over time
+        createChart(chartsContainer, 'Engagement Rate Over Time', 'line',
+          accountData.videos.map(v => v.date.toLocaleDateString()),
+          [{
+            label: 'Engagement %',
+            data: accountData.videos.map(v => v.engagement),
+            borderColor: '#2ecc71',
+            backgroundColor: 'rgba(46, 204, 113, 0.1)',
+            borderWidth: 2,
+            tension: 0.4
+          }]
+        );
 
-      // 4. Comments over time
-      createChart(chartsContainer, 'Comments Over Time', 'bar',
-        accountData.videos.map(v => v.date.toLocaleDateString()),
-        [{
-          label: 'Comments',
-          data: accountData.videos.map(v => v.comments),
-          backgroundColor: 'rgba(26, 188, 156, 0.7)',
-          borderColor: '#1abc9c',
-          borderWidth: 2
-        }]
-      );
+        // 4. Comments over time
+        createChart(chartsContainer, 'Comments Over Time', 'bar',
+          accountData.videos.map(v => v.date.toLocaleDateString()),
+          [{
+            label: 'Comments',
+            data: accountData.videos.map(v => v.comments),
+            backgroundColor: 'rgba(26, 188, 156, 0.7)',
+            borderColor: '#1abc9c',
+            borderWidth: 2
+          }]
+        );
 
-      // 5. Shares over time
-      createChart(chartsContainer, 'Shares Over Time', 'bar',
-        accountData.videos.map(v => v.date.toLocaleDateString()),
-        [{
-          label: 'Shares',
-          data: accountData.videos.map(v => v.shares),
-          backgroundColor: 'rgba(231, 76, 60, 0.7)',
-          borderColor: '#e74c3c',
-          borderWidth: 2
-        }]
-      );
+        // 5. Shares over time
+        createChart(chartsContainer, 'Shares Over Time', 'bar',
+          accountData.videos.map(v => v.date.toLocaleDateString()),
+          [{
+            label: 'Shares',
+            data: accountData.videos.map(v => v.shares),
+            backgroundColor: 'rgba(231, 76, 60, 0.7)',
+            borderColor: '#e74c3c',
+            borderWidth: 2
+          }]
+        );
 
-      // 6. Likes vs Views correlation
-      createChart(chartsContainer, 'Likes vs Views Correlation', 'scatter',
-        null,
-        [{
-          label: 'Posts',
-          data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
-          backgroundColor: 'rgba(233, 30, 99, 0.6)',
-          borderColor: '#e91e63',
-          borderWidth: 2,
-          pointRadius: 5
-        }],
-        {
-          scales: {
-            x: { 
-              title: { display: true, text: 'Views', color: '#0f0' },
-              ticks: { color: '#0f0' },
-              grid: { color: 'rgba(0, 255, 0, 0.1)' }
-            },
-            y: { 
-              title: { display: true, text: 'Likes', color: '#0f0' },
-              ticks: { color: '#0f0' },
-              grid: { color: 'rgba(0, 255, 0, 0.1)' }
+        // 6. Likes vs Views correlation
+        createChart(chartsContainer, 'Likes vs Views Correlation', 'scatter',
+          null,
+          [{
+            label: 'Posts',
+            data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
+            backgroundColor: 'rgba(233, 30, 99, 0.6)',
+            borderColor: '#e91e63',
+            borderWidth: 2,
+            pointRadius: 5
+          }],
+          {
+            scales: {
+              x: { 
+                title: { display: true, text: 'Views', color: '#0f0' },
+                ticks: { color: '#0f0' },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: { 
+                title: { display: true, text: 'Likes', color: '#0f0' },
+                ticks: { color: '#0f0' },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
             }
           }
-        }
-      );
+        );
+      } else {
+        chartsContainer.innerHTML += '<div class="chart-container"><h3>No video data available for selected time range</h3></div>';
+      }
     }
 
     function createChart(container, title, type, labels, datasets, customOptions = {}) {
