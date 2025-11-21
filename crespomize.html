@@ -513,12 +513,6 @@
       const newType = currentType === 'logarithmic' ? 'linear' : 'logarithmic';
       
       chart.options.scales.y.type = newType;
-      
-      // Update scatter plot x-axis too if applicable
-      if (chart.config.type === 'scatter' && chart.options.scales.x) {
-        chart.options.scales.x.type = newType;
-      }
-      
       chart.update();
 
       // Update badge appearance
@@ -726,39 +720,14 @@
           }],
           useLogScatter,
           'correlation',
-          {
-            scales: {
-              x: { 
-                type: useLogScatter ? 'logarithmic' : 'linear',
-                title: { display: true, text: 'Views', color: '#0f0' },
-                ticks: { 
-                  color: '#0f0',
-                  callback: function(value) {
-                    return formatNumber(value);
-                  }
-                },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
-              },
-              y: { 
-                type: useLogScatter ? 'logarithmic' : 'linear',
-                title: { display: true, text: 'Likes', color: '#0f0' },
-                ticks: { 
-                  color: '#0f0',
-                  callback: function(value) {
-                    return formatNumber(value);
-                  }
-                },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
-              }
-            }
-          }
+          true // isCorrelationChart flag
         );
       } else {
         chartsContainer.innerHTML += '<div class="chart-container"><h3>No video data available for selected time range</h3></div>';
       }
     }
 
-    function createChart(container, title, type, labels, datasets, useLogScale = false, chartId, customOptions = {}) {
+    function createChart(container, title, type, labels, datasets, useLogScale = false, chartId, isCorrelationChart = false) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
       const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
@@ -773,7 +742,82 @@
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
-      const defaultOptions = {
+      let scales;
+      
+      if (isCorrelationChart) {
+        // Correlation chart: both axes can toggle log
+        scales = {
+          x: { 
+            type: useLogScale ? 'logarithmic' : 'linear',
+            title: { display: true, text: 'Views', color: '#0f0' },
+            ticks: { 
+              color: '#0f0',
+              callback: function(value) {
+                return formatNumber(value);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          },
+          y: { 
+            type: useLogScale ? 'logarithmic' : 'linear',
+            title: { display: true, text: 'Likes', color: '#0f0' },
+            ticks: { 
+              color: '#0f0',
+              callback: function(value) {
+                return formatNumber(value);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          }
+        };
+      } else if (type === 'scatter') {
+        // Time-based scatter: X stays linear (dates), Y can toggle log
+        scales = {
+          x: {
+            type: 'linear', // ALWAYS LINEAR for dates/time
+            ticks: { 
+              color: '#0f0',
+              callback: function(value, index) {
+                if (labels && labels[Math.floor(value)]) {
+                  return labels[Math.floor(value)];
+                }
+                return '';
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          },
+          y: {
+            type: useLogScale ? 'logarithmic' : 'linear',
+            ticks: { 
+              color: '#0f0',
+              callback: function(value) {
+                return formatNumber(value);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          }
+        };
+      } else {
+        // Line charts (followers/likes history)
+        scales = {
+          y: {
+            type: useLogScale ? 'logarithmic' : 'linear',
+            ticks: { 
+              color: '#0f0',
+              callback: function(value) {
+                return formatNumber(value);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          },
+          x: {
+            ticks: { color: '#0f0', maxRotation: 45, minRotation: 45 },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          }
+        };
+      }
+
+      const options = {
         responsive: true,
         maintainAspectRatio: true,
         plugins: {
@@ -794,57 +838,13 @@
             }
           }
         },
-        scales: type !== 'scatter' ? {
-          y: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            ticks: { 
-              color: '#0f0',
-              callback: function(value) {
-                return formatNumber(value);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          },
-          x: {
-            ticks: { color: '#0f0', maxRotation: 45, minRotation: 45 },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          }
-        } : {
-          y: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            ticks: { 
-              color: '#0f0',
-              callback: function(value) {
-                return formatNumber(value);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          },
-          x: {
-            type: type === 'scatter' && labels === null ? (useLogScale ? 'logarithmic' : 'linear') : 'linear',
-            ticks: { 
-              color: '#0f0',
-              callback: function(value, index) {
-                if (labels && labels[index]) {
-                  return labels[index];
-                }
-                return formatNumber(value);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          }
-        }
+        scales: scales
       };
-
-      // Merge custom options
-      const finalOptions = customOptions.scales 
-        ? { ...defaultOptions, ...customOptions }
-        : defaultOptions;
 
       const chart = new Chart(ctx, {
         type: type,
         data: { labels: type === 'line' ? labels : [], datasets: datasets },
-        options: finalOptions
+        options: options
       });
 
       // Store chart instance for toggling
