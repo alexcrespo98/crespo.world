@@ -562,8 +562,26 @@
     }
 
     function formatNumber(num) {
-      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+      if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
       if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+      return num.toLocaleString();
+    }
+
+    // More precise formatting for chart axes with better significant figures
+    function formatNumberAxis(num) {
+      if (num >= 1000000000) {
+        const val = num / 1000000000;
+        return val.toFixed(val < 10 ? 2 : 1) + 'B';
+      }
+      if (num >= 1000000) {
+        const val = num / 1000000;
+        return val.toFixed(val < 10 ? 2 : 1) + 'M';
+      }
+      if (num >= 1000) {
+        const val = num / 1000;
+        return val.toFixed(val < 10 ? 1 : 0) + 'K';
+      }
       return num.toLocaleString();
     }
 
@@ -818,8 +836,9 @@
             title: { display: true, text: 'Views', color: '#0f0' },
             ticks: { 
               color: '#0f0',
+              maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumber(value);
+                return formatNumberAxis(value);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
@@ -829,8 +848,9 @@
             title: { display: true, text: 'Likes', color: '#0f0' },
             ticks: { 
               color: '#0f0',
+              maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumber(value);
+                return formatNumberAxis(value);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
@@ -843,6 +863,7 @@
             type: 'linear', // ALWAYS LINEAR for dates/time
             ticks: { 
               color: '#0f0',
+              maxTicksLimit: 10,
               callback: function(value, index) {
                 if (labels && labels[Math.floor(value)]) {
                   return labels[Math.floor(value)];
@@ -856,8 +877,9 @@
             type: useLogScale ? 'logarithmic' : 'linear',
             ticks: { 
               color: '#0f0',
+              maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumber(value);
+                return formatNumberAxis(value);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
@@ -870,14 +892,20 @@
             type: useLogScale ? 'logarithmic' : 'linear',
             ticks: { 
               color: '#0f0',
+              maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumber(value);
+                return formatNumberAxis(value);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
           },
           x: {
-            ticks: { color: '#0f0', maxRotation: 45, minRotation: 45 },
+            ticks: { 
+              color: '#0f0', 
+              maxRotation: 45, 
+              minRotation: 45,
+              maxTicksLimit: 10
+            },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
           }
         };
