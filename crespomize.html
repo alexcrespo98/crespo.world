@@ -232,6 +232,20 @@
     let selectedTimeRange = 'all';
     let chartInstances = {};
 
+    // Validate date - reject dates before 2020 or in far future
+    function isValidDate(date) {
+      if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+        return false;
+      }
+      
+      const year = date.getFullYear();
+      const currentYear = new Date().getFullYear();
+      
+      // Reject dates before 2020 (catches 1969/1970 epoch errors)
+      // Reject dates more than 1 year in the future
+      return year >= 2020 && year <= currentYear + 1;
+    }
+
     async function loadSheetData() {
       try {
         document.getElementById('accountSelect').innerHTML = '<option value="">loading accounts...</option>';
@@ -350,16 +364,36 @@
         if (!rowName) continue;
         
         if (rowName === 'followers') {
-          followersHistory = row.slice(1).map((val, idx) => ({
-            date: new Date(headers[idx]),
-            value: parseInt(val) || 0
-          }));
+          // Get all historical values WITH timestamps AND validation
+          followersHistory = row.slice(1).map((val, idx) => {
+            const dateVal = new Date(headers[idx]);
+            const value = parseInt(val) || 0;
+            
+            return {
+              date: dateVal,
+              value: value
+            };
+          }).filter(item => {
+            // Filter out invalid dates and zero values
+            return isValidDate(item.date) && item.value > 0;
+          });
+          
           followers = followersHistory.length > 0 ? followersHistory[followersHistory.length - 1].value : 0;
         } else if (rowName === 'total_likes') {
-          totalLikesHistory = row.slice(1).map((val, idx) => ({
-            date: new Date(headers[idx]),
-            value: parseInt(val) || 0
-          }));
+          // Get all historical values WITH timestamps AND validation
+          totalLikesHistory = row.slice(1).map((val, idx) => {
+            const dateVal = new Date(headers[idx]);
+            const value = parseInt(val) || 0;
+            
+            return {
+              date: dateVal,
+              value: value
+            };
+          }).filter(item => {
+            // Filter out invalid dates and zero values
+            return isValidDate(item.date) && item.value > 0;
+          });
+          
           totalLikes = totalLikesHistory.length > 0 ? totalLikesHistory[totalLikesHistory.length - 1].value : 0;
         } else if (rowName === 'posts_scraped') {
           postsScraped = row[row.length - 1];
@@ -392,22 +426,33 @@
         }
       }
       
+      // Interpolate AFTER filtering
       followersHistory = interpolateHistoricalData(followersHistory);
       totalLikesHistory = interpolateHistoricalData(totalLikesHistory);
       
-      followersHistory = followersHistory.filter(item => item.value > 0);
-      totalLikesHistory = totalLikesHistory.filter(item => item.value > 0);
+      // Final filter to ensure all dates are valid
+      followersHistory = followersHistory.filter(item => isValidDate(item.date) && item.value > 0);
+      totalLikesHistory = totalLikesHistory.filter(item => isValidDate(item.date) && item.value > 0);
       
       const videosData = Array.from(allVideosMap.values());
       
-      let cleanVideos = videosData.filter(v => v.Date).map(v => ({
-        date: new Date(v.Date),
-        views: parseInt(v.Views) || 0,
-        likes: parseInt(v.Likes) || 0,
-        comments: parseInt(v.Comments) || 0,
-        shares: parseInt(v.Shares) || 0,
-        engagement: parseFloat(v.EngagementRate) || 0
-      })).sort((a, b) => a.date - b.date);
+      let cleanVideos = videosData.filter(v => v.Date).map(v => {
+        const dateObj = new Date(v.Date);
+        
+        // Skip videos with invalid dates
+        if (!isValidDate(dateObj)) {
+          return null;
+        }
+        
+        return {
+          date: dateObj,
+          views: parseInt(v.Views) || 0,
+          likes: parseInt(v.Likes) || 0,
+          comments: parseInt(v.Comments) || 0,
+          shares: parseInt(v.Shares) || 0,
+          engagement: parseFloat(v.EngagementRate) || 0
+        };
+      }).filter(v => v !== null).sort((a, b) => a.date - b.date);
 
       cleanVideos = filterDataByTimeRange(cleanVideos, timeRangeDays);
       
@@ -417,6 +462,8 @@
       const totalUniquePostsTracked = allUniqueVideoIds.size;
       
       console.log(`✅ Found ${cleanVideos.length} videos with data out of ${totalUniquePostsTracked} total tracked`);
+      console.log(`✅ Followers history: ${followersHistory.length} valid data points`);
+      console.log(`✅ Total Likes history: ${totalLikesHistory.length} valid data points`);
       
       return {
         followers: parseInt(latestFollowers) || 0,
@@ -444,7 +491,12 @@
         totalPosts += data.postsScraped;
         allVideos = allVideos.concat(data.videos);
 
+        // Combine history by timestamp with validation
         data.followersHistory.forEach(item => {
+          if (!isValidDate(item.date) || !item.value || item.value <= 0) {
+            return; // Skip invalid entries
+          }
+          
           const dateKey = item.date.toISOString();
           if (!combinedFollowersHistory[dateKey]) {
             combinedFollowersHistory[dateKey] = { date: item.date, value: 0 };
@@ -453,6 +505,10 @@
         });
 
         data.totalLikesHistory.forEach(item => {
+          if (!isValidDate(item.date) || !item.value || item.value <= 0) {
+            return; // Skip invalid entries
+          }
+          
           const dateKey = item.date.toISOString();
           if (!combinedLikesHistory[dateKey]) {
             combinedLikesHistory[dateKey] = { date: item.date, value: 0 };
@@ -462,9 +518,11 @@
       });
 
       const followersHistory = Object.values(combinedFollowersHistory)
+        .filter(item => isValidDate(item.date) && item.value > 0)
         .sort((a, b) => a.date - b.date);
 
       const totalLikesHistory = Object.values(combinedLikesHistory)
+        .filter(item => isValidDate(item.date) && item.value > 0)
         .sort((a, b) => a.date - b.date);
 
       allVideos.sort((a, b) => a.date - b.date);
@@ -483,6 +541,9 @@
           viewsPerSecond = totalViewsInPeriod / timeSpanSeconds;
         }
       }
+
+      console.log(`✅ MoonMedia combined followers history: ${followersHistory.length} data points`);
+      console.log(`✅ MoonMedia combined likes history: ${totalLikesHistory.length} data points`);
 
       return {
         followers: totalFollowers,
