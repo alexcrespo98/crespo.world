@@ -266,6 +266,54 @@
       }
     }
 
+    // Interpolate missing data (0 or null values)
+    function interpolateHistoricalData(historyArray) {
+      if (historyArray.length === 0) return historyArray;
+      
+      const interpolated = [...historyArray];
+      
+      for (let i = 0; i < interpolated.length; i++) {
+        if (interpolated[i].value === 0 || interpolated[i].value === null) {
+          // Find previous valid value
+          let prevValue = null;
+          for (let j = i - 1; j >= 0; j--) {
+            if (interpolated[j].value > 0) {
+              prevValue = interpolated[j].value;
+              break;
+            }
+          }
+          
+          // Find next valid value
+          let nextValue = null;
+          let nextIndex = -1;
+          for (let j = i + 1; j < interpolated.length; j++) {
+            if (interpolated[j].value > 0) {
+              nextValue = interpolated[j].value;
+              nextIndex = j;
+              break;
+            }
+          }
+          
+          // Interpolate
+          if (prevValue !== null && nextValue !== null) {
+            // Linear interpolation between prev and next
+            const steps = nextIndex - i + 1;
+            const stepSize = (nextValue - prevValue) / steps;
+            interpolated[i].value = Math.round(prevValue + stepSize);
+          } else if (prevValue !== null) {
+            // No next value, use previous
+            interpolated[i].value = prevValue;
+          } else if (nextValue !== null) {
+            // No previous value, use next
+            interpolated[i].value = nextValue;
+          }
+          // else: no valid data at all, leave as 0
+        }
+      }
+      
+      return interpolated;
+    }
+
     // Smart scale detection: determines if logarithmic scale is needed
     function shouldUseLogScale(data) {
       if (data.length === 0) return false;
@@ -327,14 +375,14 @@
           followersHistory = row.slice(1).map((val, idx) => ({
             date: headers[idx],
             value: parseInt(val) || 0
-          })).filter(item => item.value > 0);
+          }));
         } else if (rowName === 'total_likes') {
           totalLikes = latestValue;
           // Get all historical values
           totalLikesHistory = row.slice(1).map((val, idx) => ({
             date: headers[idx],
             value: parseInt(val) || 0
-          })).filter(item => item.value > 0);
+          }));
         } else if (rowName === 'posts_scraped') {
           postsScraped = latestValue;
         } else if (rowName.startsWith('post_')) {
@@ -354,6 +402,14 @@
         }
       }
       
+      // INTERPOLATE missing data for followers and total_likes
+      followersHistory = interpolateHistoricalData(followersHistory);
+      totalLikesHistory = interpolateHistoricalData(totalLikesHistory);
+      
+      // Filter out any remaining zeros
+      followersHistory = followersHistory.filter(item => item.value > 0);
+      totalLikesHistory = totalLikesHistory.filter(item => item.value > 0);
+      
       // Clean up videos data
       let cleanVideos = videosData.filter(v => v.Date).map(v => ({
         date: new Date(v.Date),
@@ -367,9 +423,13 @@
       // Filter by time range
       cleanVideos = filterDataByTimeRange(cleanVideos, timeRangeDays);
       
+      // Use interpolated latest values if current is 0
+      const latestFollowers = followersHistory.length > 0 ? followersHistory[followersHistory.length - 1].value : followers;
+      const latestTotalLikes = totalLikesHistory.length > 0 ? totalLikesHistory[totalLikesHistory.length - 1].value : totalLikes;
+      
       return {
-        followers: parseInt(followers) || 0,
-        totalLikes: parseInt(totalLikes) || 0,
+        followers: parseInt(latestFollowers) || 0,
+        totalLikes: parseInt(latestTotalLikes) || 0,
         postsScraped: parseInt(postsScraped) || 0,
         videos: cleanVideos,
         followersHistory: followersHistory,
@@ -394,7 +454,7 @@
         totalPosts += data.postsScraped;
         allVideos = allVideos.concat(data.videos);
 
-        // Combine history by timestamp
+        // Combine history by timestamp (already interpolated per account)
         data.followersHistory.forEach(item => {
           if (!combinedFollowersHistory[item.date]) {
             combinedFollowersHistory[item.date] = 0;
@@ -580,7 +640,7 @@
       const chartsContainer = document.getElementById('chartsList');
       chartsContainer.innerHTML = '';
 
-      // Followers over time (KEEP LINES - historical tracking)
+      // Followers over time (KEEP LINES - historical tracking with interpolation)
       if (accountData.followersHistory && accountData.followersHistory.length > 0) {
         const followerValues = accountData.followersHistory.map(h => h.value);
         const useLogFollowers = shouldUseLogScale(followerValues);
@@ -601,7 +661,7 @@
         );
       }
 
-      // Total Likes over time (KEEP LINES - historical tracking)
+      // Total Likes over time (KEEP LINES - historical tracking with interpolation)
       if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
         const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
