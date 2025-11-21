@@ -279,58 +279,76 @@
     function interpolateHistoricalData(historyArray) {
       if (historyArray.length === 0) return historyArray;
       
-      // First pass: identify zero/null values that need interpolation
-      const needsInterpolation = historyArray.map((item, idx) => ({
+      // Create a working copy
+      const interpolated = historyArray.map((item, idx) => ({
         ...item,
         index: idx,
         needsInterp: item.value === 0 || item.value === null || item.value === undefined
       }));
       
-      // Second pass: interpolate missing values
-      for (let i = 0; i < needsInterpolation.length; i++) {
-        if (!needsInterpolation[i].needsInterp) continue;
+      // Find all consecutive groups of zeros that need interpolation
+      let i = 0;
+      while (i < interpolated.length) {
+        if (!interpolated[i].needsInterp) {
+          i++;
+          continue;
+        }
+        
+        // Found a zero - find the end of this zero group
+        let groupStart = i;
+        let groupEnd = i;
+        while (groupEnd < interpolated.length && interpolated[groupEnd].needsInterp) {
+          groupEnd++;
+        }
+        groupEnd--; // Back up to last zero in group
         
         // Find previous valid value
         let prevValue = null;
-        let prevIndex = -1;
-        for (let j = i - 1; j >= 0; j--) {
-          if (!needsInterpolation[j].needsInterp && needsInterpolation[j].value > 0) {
-            prevValue = needsInterpolation[j].value;
-            prevIndex = j;
+        for (let j = groupStart - 1; j >= 0; j--) {
+          if (!interpolated[j].needsInterp && interpolated[j].value > 0) {
+            prevValue = interpolated[j].value;
             break;
           }
         }
         
         // Find next valid value
         let nextValue = null;
-        let nextIndex = -1;
-        for (let j = i + 1; j < needsInterpolation.length; j++) {
-          if (!needsInterpolation[j].needsInterp && needsInterpolation[j].value > 0) {
-            nextValue = needsInterpolation[j].value;
-            nextIndex = j;
+        for (let j = groupEnd + 1; j < interpolated.length; j++) {
+          if (!interpolated[j].needsInterp && interpolated[j].value > 0) {
+            nextValue = interpolated[j].value;
             break;
           }
         }
         
-        // Interpolate based on what we found
+        // Interpolate the entire group
         if (prevValue !== null && nextValue !== null) {
-          // We have both prev and next - interpolate linearly
-          const totalSteps = nextIndex - prevIndex;
-          const currentStep = i - prevIndex;
-          const interpolatedValue = prevValue + ((nextValue - prevValue) * currentStep / totalSteps);
-          needsInterpolation[i].value = Math.round(interpolatedValue);
+          // Linear interpolation across the entire group
+          const groupSize = groupEnd - groupStart + 1;
+          const totalSteps = groupSize + 1; // +1 to include the gap between prev and next
+          
+          for (let j = groupStart; j <= groupEnd; j++) {
+            const stepNumber = j - groupStart + 1;
+            const interpolatedValue = prevValue + ((nextValue - prevValue) * stepNumber / totalSteps);
+            interpolated[j].value = Math.round(interpolatedValue);
+          }
         } else if (prevValue !== null) {
-          // Only have previous - use it
-          needsInterpolation[i].value = prevValue;
+          // Only have previous - use it for all in group
+          for (let j = groupStart; j <= groupEnd; j++) {
+            interpolated[j].value = prevValue;
+          }
         } else if (nextValue !== null) {
-          // Only have next - use it
-          needsInterpolation[i].value = nextValue;
+          // Only have next - use it for all in group
+          for (let j = groupStart; j <= groupEnd; j++) {
+            interpolated[j].value = nextValue;
+          }
         }
-        // If we have neither prev nor next, leave as 0 (will be filtered out later)
+        
+        // Move to next group
+        i = groupEnd + 1;
       }
       
-      // Return interpolated data
-      return needsInterpolation.map(item => ({
+      // Return clean array
+      return interpolated.map(item => ({
         date: item.date,
         value: item.value
       }));
