@@ -230,22 +230,18 @@
     let accountData = {};
     let isMoonMediaTotal = false;
     let selectedTimeRange = 'all';
-    let chartInstances = {}; // Store chart instances for toggling
+    let chartInstances = {};
 
-    // Load Excel file from Google Sheets
     async function loadSheetData() {
       try {
         document.getElementById('accountSelect').innerHTML = '<option value="">loading accounts...</option>';
         
-        // Google Sheets export as Excel
         const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
         const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
         
-        // Parse Excel file
         workbookData = XLSX.read(arrayBuffer, { type: 'array' });
         
-        // Get all sheet names (= accounts)
         const accounts = workbookData.SheetNames;
         
         if (accounts.length === 0) {
@@ -253,7 +249,6 @@
           return;
         }
         
-        // Populate dropdown with MoonMedia Total at top
         const select = document.getElementById('accountSelect');
         select.innerHTML = '<option value="">-- select an account --</option>' +
           '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">🌙 MoonMedia Total Analytics</option>' +
@@ -267,7 +262,6 @@
       }
     }
 
-    // Interpolate missing data (0 or null values)
     function interpolateHistoricalData(historyArray) {
       if (historyArray.length === 0) return historyArray;
       
@@ -275,7 +269,6 @@
       
       for (let i = 0; i < interpolated.length; i++) {
         if (interpolated[i].value === 0 || interpolated[i].value === null) {
-          // Find previous valid value
           let prevValue = null;
           for (let j = i - 1; j >= 0; j--) {
             if (interpolated[j].value > 0) {
@@ -284,7 +277,6 @@
             }
           }
           
-          // Find next valid value
           let nextValue = null;
           let nextIndex = -1;
           for (let j = i + 1; j < interpolated.length; j++) {
@@ -295,40 +287,31 @@
             }
           }
           
-          // Interpolate
           if (prevValue !== null && nextValue !== null) {
-            // Linear interpolation between prev and next
             const steps = nextIndex - i + 1;
             const stepSize = (nextValue - prevValue) / steps;
             interpolated[i].value = Math.round(prevValue + stepSize);
           } else if (prevValue !== null) {
-            // No next value, use previous
             interpolated[i].value = prevValue;
           } else if (nextValue !== null) {
-            // No previous value, use next
             interpolated[i].value = nextValue;
           }
-          // else: no valid data at all, leave as 0
         }
       }
       
       return interpolated;
     }
 
-    // Smart scale detection: determines if logarithmic scale is needed
     function shouldUseLogScale(data) {
       if (data.length === 0) return false;
       
-      const values = data.filter(v => v > 0); // Only positive values for log
+      const values = data.filter(v => v > 0);
       if (values.length === 0) return false;
       
       const max = Math.max(...values);
       const min = Math.min(...values);
       const median = values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
       
-      // Use log scale if:
-      // 1. Range spans more than 2 orders of magnitude (100x difference)
-      // 2. OR max is more than 10x the median (indicates viral outliers)
       const ratio = max / min;
       const medianRatio = max / median;
       
@@ -348,81 +331,75 @@
       const sheet = workbookData.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       
-      // Structure: Row 0 = headers (timestamps), Column 0 = row names
-      const headers = jsonData[0].slice(1); // All timestamp columns (skip first empty cell)
-      const latestTimestampIdx = headers.length; // Last column index in row array
+      const headers = jsonData[0].slice(1);
       
-      // Extract historical data for followers and total_likes
       let followersHistory = [];
       let totalLikesHistory = [];
       
-      // Extract data
       let followers = null;
       let totalLikes = null;
       let postsScraped = null;
-      const videosData = [];
       
-      // NEW: Track all unique video IDs across ALL columns
+      const allVideosMap = new Map();
       const allUniqueVideoIds = new Set();
       
-      // Parse each row
       for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
-        const rowName = row[0]; // First cell = row name
-        const latestValue = row[latestTimestampIdx]; // Last cell = latest data
+        const rowName = row[0];
         
         if (!rowName) continue;
         
         if (rowName === 'followers') {
-          followers = latestValue;
-          // Get all historical values WITH timestamps
           followersHistory = row.slice(1).map((val, idx) => ({
-            date: new Date(headers[idx]), // Parse as actual Date object
+            date: new Date(headers[idx]),
             value: parseInt(val) || 0
           }));
+          followers = followersHistory.length > 0 ? followersHistory[followersHistory.length - 1].value : 0;
         } else if (rowName === 'total_likes') {
-          totalLikes = latestValue;
-          // Get all historical values WITH timestamps
           totalLikesHistory = row.slice(1).map((val, idx) => ({
-            date: new Date(headers[idx]), // Parse as actual Date object
+            date: new Date(headers[idx]),
             value: parseInt(val) || 0
           }));
+          totalLikes = totalLikesHistory.length > 0 ? totalLikesHistory[totalLikesHistory.length - 1].value : 0;
         } else if (rowName === 'posts_scraped') {
-          postsScraped = latestValue;
+          postsScraped = row[row.length - 1];
         } else if (rowName.startsWith('post_')) {
-          // Parse post data: post_{VIDEO_ID}_{METRIC}
           const parts = rowName.split('_');
-          const metric = parts[parts.length - 1]; // Last part = metric name
-          const videoId = parts.slice(1, -1).join('_'); // Middle parts = video ID
+          const metric = parts[parts.length - 1];
+          const videoId = parts.slice(1, -1).join('_');
           
-          // Track this video ID as existing in the dataset
           if (metric === 'Date') {
             allUniqueVideoIds.add(videoId);
           }
           
-          // Only get data from LATEST column for this specific video
-          if (latestValue) {
-            // Find or create video entry
-            let video = videosData.find(v => v.id === videoId);
-            if (!video) {
-              video = { id: videoId };
-              videosData.push(video);
-            }
+          for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
+            const cellValue = row[colIdx];
             
-            video[metric] = latestValue;
+            if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+              if (!allVideosMap.has(videoId)) {
+                allVideosMap.set(videoId, { id: videoId });
+              }
+              
+              const video = allVideosMap.get(videoId);
+              
+              if (video[metric] === undefined) {
+                video[metric] = cellValue;
+              }
+              
+              break;
+            }
           }
         }
       }
       
-      // INTERPOLATE missing data for followers and total_likes
       followersHistory = interpolateHistoricalData(followersHistory);
       totalLikesHistory = interpolateHistoricalData(totalLikesHistory);
       
-      // Filter out any remaining zeros
       followersHistory = followersHistory.filter(item => item.value > 0);
       totalLikesHistory = totalLikesHistory.filter(item => item.value > 0);
       
-      // Clean up videos data
+      const videosData = Array.from(allVideosMap.values());
+      
       let cleanVideos = videosData.filter(v => v.Date).map(v => ({
         date: new Date(v.Date),
         views: parseInt(v.Views) || 0,
@@ -432,20 +409,19 @@
         engagement: parseFloat(v.EngagementRate) || 0
       })).sort((a, b) => a.date - b.date);
 
-      // Filter by time range
       cleanVideos = filterDataByTimeRange(cleanVideos, timeRangeDays);
       
-      // Use interpolated latest values if current is 0
       const latestFollowers = followersHistory.length > 0 ? followersHistory[followersHistory.length - 1].value : followers;
       const latestTotalLikes = totalLikesHistory.length > 0 ? totalLikesHistory[totalLikesHistory.length - 1].value : totalLikes;
       
-      // Use the TOTAL unique video count (historical total)
       const totalUniquePostsTracked = allUniqueVideoIds.size;
+      
+      console.log(`✅ Found ${cleanVideos.length} videos with data out of ${totalUniquePostsTracked} total tracked`);
       
       return {
         followers: parseInt(latestFollowers) || 0,
         totalLikes: parseInt(latestTotalLikes) || 0,
-        postsScraped: totalUniquePostsTracked, // NOW shows cumulative total
+        postsScraped: totalUniquePostsTracked,
         videos: cleanVideos,
         followersHistory: followersHistory,
         totalLikesHistory: totalLikesHistory
@@ -461,15 +437,13 @@
       let combinedFollowersHistory = {};
       let combinedLikesHistory = {};
 
-      // Aggregate data from all accounts
       accounts.forEach(sheetName => {
         const data = parseAccountData(sheetName, timeRangeDays);
         totalFollowers += data.followers;
         totalLikes += data.totalLikes;
-        totalPosts += data.postsScraped; // Now getting cumulative count per account
+        totalPosts += data.postsScraped;
         allVideos = allVideos.concat(data.videos);
 
-        // Combine history by timestamp (already interpolated per account)
         data.followersHistory.forEach(item => {
           const dateKey = item.date.toISOString();
           if (!combinedFollowersHistory[dateKey]) {
@@ -487,17 +461,14 @@
         });
       });
 
-      // Convert combined history back to arrays
       const followersHistory = Object.values(combinedFollowersHistory)
         .sort((a, b) => a.date - b.date);
 
       const totalLikesHistory = Object.values(combinedLikesHistory)
         .sort((a, b) => a.date - b.date);
 
-      // Sort all videos by date
       allVideos.sort((a, b) => a.date - b.date);
 
-      // Calculate total views and views per second from last 100 posts
       const last100Posts = allVideos.slice(-100);
       let totalViews = allVideos.reduce((sum, v) => sum + v.views, 0);
       let viewsPerSecond = 0;
@@ -506,7 +477,7 @@
         const oldestPost = last100Posts[0];
         const newestPost = last100Posts[last100Posts.length - 1];
         const totalViewsInPeriod = last100Posts.reduce((sum, v) => sum + v.views, 0);
-        const timeSpanSeconds = (newestPost.date - oldestPost.date) / 1000; // milliseconds to seconds
+        const timeSpanSeconds = (newestPost.date - oldestPost.date) / 1000;
 
         if (timeSpanSeconds > 0) {
           viewsPerSecond = totalViewsInPeriod / timeSpanSeconds;
@@ -516,7 +487,7 @@
       return {
         followers: totalFollowers,
         totalLikes: totalLikes,
-        postsScraped: totalPosts, // Sum of all accounts' cumulative counts
+        postsScraped: totalPosts,
         videos: allVideos,
         followersHistory: followersHistory,
         totalLikesHistory: totalLikesHistory,
@@ -537,7 +508,6 @@
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
       } else if (current === 2) {
-        // Go to time range selection
         document.getElementById('step2').classList.add('hidden');
         document.getElementById('step2_5').classList.remove('hidden');
       } else if (current === 3) {
@@ -552,7 +522,6 @@
       document.getElementById('step3').classList.add('hidden');
       document.getElementById('loading').classList.remove('hidden');
 
-      // Parse the data with time range filter
       if (isMoonMediaTotal) {
         accountData = parseMoonMediaTotal(days);
       } else {
@@ -564,7 +533,6 @@
         document.getElementById('charts').classList.remove('hidden');
         document.getElementById('accountName').textContent = isMoonMediaTotal ? 'MoonMedia Total' : selectedAccount;
         
-        // Set time range label
         let rangeText = '';
         if (days === 'all') rangeText = '(All Time)';
         else if (days === 365) rangeText = '(Last 1 Year)';
@@ -583,13 +551,11 @@
       return num.toLocaleString();
     }
 
-    // Smart formatting based on data range - shows more decimals when needed
     function formatNumberAxisSmart(value, dataRange) {
       const range = dataRange.max - dataRange.min;
       
       if (value >= 1000000000) {
         const val = value / 1000000000;
-        // If range is small relative to value, show more decimals
         const rangeRatio = range / value;
         if (rangeRatio < 0.01) return val.toFixed(3) + 'B';
         if (rangeRatio < 0.1) return val.toFixed(2) + 'B';
@@ -621,7 +587,6 @@
       chart.options.scales.y.type = newType;
       chart.update();
 
-      // Update badge appearance
       const badge = document.querySelector(`[data-chart-id="${chartId}"]`);
       if (badge) {
         if (newType === 'logarithmic') {
@@ -635,10 +600,8 @@
     }
 
     function renderDashboard() {
-      // Clear previous chart instances
       chartInstances = {};
 
-      // Summary stats
       const statsContainer = document.getElementById('statsSummary');
       
       let statsHTML = `
@@ -660,7 +623,6 @@
         </div>
       `;
 
-      // Add views stats for MoonMedia Total
       if (isMoonMediaTotal) {
         statsHTML += `
           <div class="stat-card">
@@ -680,11 +642,9 @@
 
       statsContainer.innerHTML = statsHTML;
 
-      // Charts
       const chartsContainer = document.getElementById('chartsList');
       chartsContainer.innerHTML = '';
 
-      // Followers over time (TIME-BASED X-AXIS)
       if (accountData.followersHistory && accountData.followersHistory.length > 0) {
         const followerValues = accountData.followersHistory.map(h => h.value);
         const followerDates = accountData.followersHistory.map(h => h.date);
@@ -706,7 +666,6 @@
         );
       }
 
-      // Total Likes over time (TIME-BASED X-AXIS)
       if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
         const likesDates = accountData.totalLikesHistory.map(h => h.date);
@@ -728,14 +687,12 @@
         );
       }
 
-      // Only show video charts if there's data
       if (accountData.videos.length > 0) {
         const viewsData = accountData.videos.map(v => v.views);
         const likesData = accountData.videos.map(v => v.likes);
         const useLogViews = shouldUseLogScale(viewsData);
         const useLogLikes = shouldUseLogScale(likesData);
 
-        // Views over time (DOTS ONLY - per-post data)
         createChart(chartsContainer, 'Views Over Time', 'scatter', 
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
@@ -750,7 +707,6 @@
           'views-time'
         );
 
-        // Likes over time (DOTS ONLY - per-post data)
         createChart(chartsContainer, 'Likes Over Time', 'scatter',
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
@@ -765,7 +721,6 @@
           'likes-time'
         );
 
-        // Engagement rate over time (DOTS ONLY - per-post data)
         createChart(chartsContainer, 'Engagement Rate Over Time', 'scatter',
           accountData.videos.map(v => v.date.toLocaleDateString()),
           [{
@@ -780,7 +735,6 @@
           'engagement-time'
         );
 
-        // Comments over time (DOTS ONLY - per-post data)
         const commentsData = accountData.videos.map(v => v.comments);
         const useLogComments = shouldUseLogScale(commentsData);
         
@@ -798,7 +752,6 @@
           'comments-time'
         );
 
-        // Shares over time (DOTS ONLY - per-post data)
         const sharesData = accountData.videos.map(v => v.shares);
         const useLogShares = shouldUseLogScale(sharesData);
         
@@ -816,7 +769,6 @@
           'shares-time'
         );
 
-        // Likes vs Views correlation (already scatter - perfect!)
         const useLogScatter = shouldUseLogScale(viewsData) || shouldUseLogScale(likesData);
         
         createChart(chartsContainer, 'Likes vs Views Correlation', 'scatter',
@@ -832,14 +784,13 @@
           }],
           useLogScatter,
           'correlation',
-          true // isCorrelationChart flag
+          true
         );
       } else {
         chartsContainer.innerHTML += '<div class="chart-container"><h3>No video data available for selected time range</h3></div>';
       }
     }
 
-    // NEW: Time-based chart function for follower/likes history
     function createTimeBasedChart(container, title, dates, datasets, useLogScale, chartId) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
@@ -854,7 +805,6 @@
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
-      // Calculate data range for smart formatting
       const yValues = datasets[0].data.map(d => d.y);
       const dataRange = {
         min: Math.min(...yValues),
@@ -932,7 +882,6 @@
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
-      // Calculate data range for smart formatting
       const yValues = datasets[0].data.map(d => d.y || d);
       const dataRange = {
         min: Math.min(...yValues),
@@ -1032,7 +981,6 @@
       chartInstances[chartId] = chart;
     }
 
-    // Initialize
     loadSheetData();
   </script>
 </body>
