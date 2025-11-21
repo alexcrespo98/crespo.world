@@ -422,18 +422,19 @@
       // Sort all videos by date
       allVideos.sort((a, b) => a.date - b.date);
 
-      // Calculate likes per second from last 100 posts
+      // Calculate total views and views per second from last 100 posts
       const last100Posts = allVideos.slice(-100);
-      let likesPerSecond = 0;
+      let totalViews = allVideos.reduce((sum, v) => sum + v.views, 0);
+      let viewsPerSecond = 0;
 
       if (last100Posts.length >= 2) {
         const oldestPost = last100Posts[0];
         const newestPost = last100Posts[last100Posts.length - 1];
-        const totalLikesInPeriod = last100Posts.reduce((sum, v) => sum + v.likes, 0);
+        const totalViewsInPeriod = last100Posts.reduce((sum, v) => sum + v.views, 0);
         const timeSpanSeconds = (newestPost.date - oldestPost.date) / 1000; // milliseconds to seconds
 
         if (timeSpanSeconds > 0) {
-          likesPerSecond = totalLikesInPeriod / timeSpanSeconds;
+          viewsPerSecond = totalViewsInPeriod / timeSpanSeconds;
         }
       }
 
@@ -444,7 +445,8 @@
         videos: allVideos,
         followersHistory: followersHistory,
         totalLikesHistory: totalLikesHistory,
-        likesPerSecond: likesPerSecond,
+        totalViews: totalViews,
+        viewsPerSecond: viewsPerSecond,
         accountCount: accounts.length
       };
     }
@@ -554,12 +556,16 @@
         </div>
       `;
 
-      // Add likes per second for MoonMedia Total
+      // Add views stats for MoonMedia Total
       if (isMoonMediaTotal) {
         statsHTML += `
           <div class="stat-card">
-            <h4>⚡ LIKES PER SECOND</h4>
-            <div class="value">${accountData.likesPerSecond.toFixed(2)}</div>
+            <h4>👁️ TOTAL VIEWS</h4>
+            <div class="value">${formatNumber(accountData.totalViews)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>⚡ VIEWS PER SECOND</h4>
+            <div class="value">${accountData.viewsPerSecond.toFixed(2)}</div>
           </div>
           <div class="stat-card">
             <h4>🏢 TOTAL ACCOUNTS</h4>
