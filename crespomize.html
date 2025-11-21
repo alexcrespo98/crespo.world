@@ -585,6 +585,15 @@
       return num.toLocaleString();
     }
 
+    // Format date for display
+    function formatDateShort(dateStr) {
+      const date = new Date(dateStr);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      const year = date.getFullYear().toString().slice(-2);
+      return `${month}/${day}/${year}`;
+    }
+
     function toggleLogScale(chartId) {
       const chart = chartInstances[chartId];
       if (!chart) return;
@@ -661,10 +670,11 @@
       // Followers over time (KEEP LINES - historical tracking with interpolation)
       if (accountData.followersHistory && accountData.followersHistory.length > 0) {
         const followerValues = accountData.followersHistory.map(h => h.value);
+        const followerDates = accountData.followersHistory.map(h => formatDateShort(h.date));
         const useLogFollowers = shouldUseLogScale(followerValues);
         
         createChart(chartsContainer, '👥 Followers Per Scrape', 'line',
-          accountData.followersHistory.map(h => new Date(h.date).toLocaleString()),
+          followerDates,
           [{
             label: 'Followers',
             data: followerValues,
@@ -682,10 +692,11 @@
       // Total Likes over time (KEEP LINES - historical tracking with interpolation)
       if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
+        const likesDates = accountData.totalLikesHistory.map(h => formatDateShort(h.date));
         const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
         
         createChart(chartsContainer, '❤️ Total Likes Per Scrape', 'line',
-          accountData.totalLikesHistory.map(h => new Date(h.date).toLocaleString()),
+          likesDates,
           [{
             label: 'Total Likes',
             data: likesHistoryValues,
@@ -886,7 +897,7 @@
           }
         };
       } else {
-        // Line charts (followers/likes history)
+        // Line charts (followers/likes history) - use dates on X axis
         scales = {
           y: {
             type: useLogScale ? 'logarithmic' : 'linear',
