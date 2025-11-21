@@ -160,6 +160,16 @@
       background: #333;
       color: #666;
     }
+    .data-quality-badge {
+      display: inline-block;
+      background: #00d2d3;
+      color: #000;
+      padding: 0.3em 0.6em;
+      border-radius: 3px;
+      font-size: 0.7em;
+      margin-left: 0.5em;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -265,7 +275,7 @@
         
         const select = document.getElementById('accountSelect');
         select.innerHTML = '<option value="">-- select an account --</option>' +
-          '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">🌙 MoonMedia Total Analytics</option>' +
+          '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">🌙 MoonMedia Total Analytics (Complete Scrapes Only)</option>' +
           accounts.map(acc => `<option value="${acc}">@${acc}</option>`).join('');
         
         console.log('✅ Loaded accounts:', accounts);
@@ -402,7 +412,6 @@
         if (!rowName) continue;
         
         if (rowName === 'followers') {
-          // Get all historical values WITH timestamps
           followersHistory = row.slice(1).map((val, idx) => {
             const dateVal = new Date(headers[idx]);
             const value = parseInt(val) || 0;
@@ -412,13 +421,11 @@
               value: value
             };
           }).filter(item => {
-            // Only filter out invalid dates, keep zeros for interpolation
             return isValidDate(item.date);
           });
           
           followers = followersHistory.length > 0 ? followersHistory[followersHistory.length - 1].value : 0;
         } else if (rowName === 'total_likes') {
-          // Get all historical values WITH timestamps
           totalLikesHistory = row.slice(1).map((val, idx) => {
             const dateVal = new Date(headers[idx]);
             const value = parseInt(val) || 0;
@@ -428,7 +435,6 @@
               value: value
             };
           }).filter(item => {
-            // Only filter out invalid dates, keep zeros for interpolation
             return isValidDate(item.date);
           });
           
@@ -464,11 +470,9 @@
         }
       }
       
-      // Interpolate AFTER collecting all data points (including zeros)
       followersHistory = interpolateHistoricalData(followersHistory);
       totalLikesHistory = interpolateHistoricalData(totalLikesHistory);
       
-      // NOW filter out any remaining zeros or invalid values AFTER interpolation
       followersHistory = followersHistory.filter(item => isValidDate(item.date) && item.value > 0);
       totalLikesHistory = totalLikesHistory.filter(item => isValidDate(item.date) && item.value > 0);
       
@@ -477,7 +481,6 @@
       let cleanVideos = videosData.filter(v => v.Date).map(v => {
         const dateObj = new Date(v.Date);
         
-        // Skip videos with invalid dates
         if (!isValidDate(dateObj)) {
           return null;
         }
@@ -519,8 +522,10 @@
       let totalLikes = 0;
       let totalPosts = 0;
       let allVideos = [];
-      let combinedFollowersHistory = {};
-      let combinedLikesHistory = {};
+      
+      // NEW: Collect data by timestamp with account count tracking
+      let followersByTimestamp = {};
+      let likesByTimestamp = {};
 
       accounts.forEach(sheetName => {
         const data = parseAccountData(sheetName, timeRangeDays);
@@ -529,37 +534,51 @@
         totalPosts += data.postsScraped;
         allVideos = allVideos.concat(data.videos);
 
-        // Combine history by timestamp
+        // Track followers by timestamp
         data.followersHistory.forEach(item => {
-          if (!isValidDate(item.date)) {
-            return;
-          }
+          if (!isValidDate(item.date)) return;
           
           const dateKey = item.date.toISOString();
-          if (!combinedFollowersHistory[dateKey]) {
-            combinedFollowersHistory[dateKey] = { date: item.date, value: 0 };
+          if (!followersByTimestamp[dateKey]) {
+            followersByTimestamp[dateKey] = { 
+              date: item.date, 
+              total: 0, 
+              accountCount: 0 
+            };
           }
-          combinedFollowersHistory[dateKey].value += item.value;
+          followersByTimestamp[dateKey].total += item.value;
+          followersByTimestamp[dateKey].accountCount += 1;
         });
 
+        // Track likes by timestamp
         data.totalLikesHistory.forEach(item => {
-          if (!isValidDate(item.date)) {
-            return;
-          }
+          if (!isValidDate(item.date)) return;
           
           const dateKey = item.date.toISOString();
-          if (!combinedLikesHistory[dateKey]) {
-            combinedLikesHistory[dateKey] = { date: item.date, value: 0 };
+          if (!likesByTimestamp[dateKey]) {
+            likesByTimestamp[dateKey] = { 
+              date: item.date, 
+              total: 0, 
+              accountCount: 0 
+            };
           }
-          combinedLikesHistory[dateKey].value += item.value;
+          likesByTimestamp[dateKey].total += item.value;
+          likesByTimestamp[dateKey].accountCount += 1;
         });
       });
 
-      const followersHistory = Object.values(combinedFollowersHistory)
+      // NEW: Filter to only include complete scrapes (all 7 accounts)
+      const totalAccountCount = accounts.length;
+      
+      const followersHistory = Object.values(followersByTimestamp)
+        .filter(item => item.accountCount === totalAccountCount) // ONLY complete scrapes
+        .map(item => ({ date: item.date, value: item.total }))
         .filter(item => isValidDate(item.date) && item.value > 0)
         .sort((a, b) => a.date - b.date);
 
-      const totalLikesHistory = Object.values(combinedLikesHistory)
+      const totalLikesHistory = Object.values(likesByTimestamp)
+        .filter(item => item.accountCount === totalAccountCount) // ONLY complete scrapes
+        .map(item => ({ date: item.date, value: item.total }))
         .filter(item => isValidDate(item.date) && item.value > 0)
         .sort((a, b) => a.date - b.date);
 
@@ -580,8 +599,8 @@
         }
       }
 
-      console.log(`✅ MoonMedia combined followers history: ${followersHistory.length} data points`);
-      console.log(`✅ MoonMedia combined likes history: ${totalLikesHistory.length} data points`);
+      console.log(`✅ MoonMedia COMPLETE followers scrapes: ${followersHistory.length} data points`);
+      console.log(`✅ MoonMedia COMPLETE likes scrapes: ${totalLikesHistory.length} data points`);
 
       return {
         followers: totalFollowers,
@@ -685,7 +704,6 @@
       
       chart.options.scales.y.type = newType;
       
-      // Also toggle x-axis for correlation chart
       if (chartId === 'correlation' && chart.options.scales.x) {
         chart.options.scales.x.type = newType;
       }
@@ -754,7 +772,9 @@
         const followerValues = accountData.followersHistory.map(h => h.value);
         const useLogFollowers = shouldUseLogScale(followerValues);
         
-        createTimeBasedChart(chartsContainer, '👥 Followers Per Scrape', 
+        const titleSuffix = isMoonMediaTotal ? '<span class="data-quality-badge">COMPLETE SCRAPES ONLY</span>' : '';
+        
+        createTimeBasedChart(chartsContainer, '👥 Followers Per Scrape ' + titleSuffix, 
           accountData.followersHistory,
           [{
             label: 'Followers',
@@ -774,7 +794,9 @@
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
         const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
         
-        createTimeBasedChart(chartsContainer, '❤️ Total Likes Per Scrape',
+        const titleSuffix = isMoonMediaTotal ? '<span class="data-quality-badge">COMPLETE SCRAPES ONLY</span>' : '';
+        
+        createTimeBasedChart(chartsContainer, '❤️ Total Likes Per Scrape ' + titleSuffix,
           accountData.totalLikesHistory,
           [{
             label: 'Total Likes',
@@ -1006,24 +1028,31 @@
           }
         },
         scales: {
-          x: { 
+          x: {
             type: useLogScale ? 'logarithmic' : 'linear',
-            title: { display: true, text: 'Views', color: '#0f0' },
+            position: 'bottom',
+            title: {
+              display: true,
+              text: 'Views',
+              color: '#0f0'
+            },
             ticks: { 
               color: '#0f0',
-              maxTicksLimit: 8,
               callback: function(value) {
                 return formatNumberAxisSmart(value, xRange);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
           },
-          y: { 
+          y: {
             type: useLogScale ? 'logarithmic' : 'linear',
-            title: { display: true, text: 'Likes', color: '#0f0' },
+            title: {
+              display: true,
+              text: 'Likes',
+              color: '#0f0'
+            },
             ticks: { 
               color: '#0f0',
-              maxTicksLimit: 8,
               callback: function(value) {
                 return formatNumberAxisSmart(value, yRange);
               }
@@ -1042,6 +1071,7 @@
       chartInstances[chartId] = chart;
     }
 
+    // Load data on page load
     loadSheetData();
   </script>
 </body>
