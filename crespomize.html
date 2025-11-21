@@ -160,16 +160,6 @@
       background: #333;
       color: #666;
     }
-    .data-quality-badge {
-      display: inline-block;
-      background: #00d2d3;
-      color: #000;
-      padding: 0.3em 0.6em;
-      border-radius: 3px;
-      font-size: 0.7em;
-      margin-left: 0.5em;
-      font-weight: bold;
-    }
   </style>
 </head>
 <body>
@@ -251,9 +241,25 @@
       const year = date.getFullYear();
       const currentYear = new Date().getFullYear();
       
-      // Reject dates before 2020 (catches 1969/1970 epoch errors)
-      // Reject dates more than 1 year in the future
       return year >= 2020 && year <= currentYear + 1;
+    }
+
+    // Calculate moving average for smooth trendline
+    function calculateMovingAverage(data, windowSize = 5) {
+      const result = [];
+      
+      for (let i = 0; i < data.length; i++) {
+        const start = Math.max(0, i - Math.floor(windowSize / 2));
+        const end = Math.min(data.length, i + Math.ceil(windowSize / 2));
+        const window = data.slice(start, end);
+        
+        const sum = window.reduce((acc, item) => acc + item.y, 0);
+        const avg = sum / window.length;
+        
+        result.push({ x: data[i].x, y: avg });
+      }
+      
+      return result;
     }
 
     async function loadSheetData() {
@@ -275,7 +281,7 @@
         
         const select = document.getElementById('accountSelect');
         select.innerHTML = '<option value="">-- select an account --</option>' +
-          '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">🌙 MoonMedia Total Analytics (Complete Scrapes Only)</option>' +
+          '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">All MoonMedia Analytics</option>' +
           accounts.map(acc => `<option value="${acc}">@${acc}</option>`).join('');
         
         console.log('✅ Loaded accounts:', accounts);
@@ -289,14 +295,12 @@
     function interpolateHistoricalData(historyArray) {
       if (historyArray.length === 0) return historyArray;
       
-      // Create a working copy
       const interpolated = historyArray.map((item, idx) => ({
         ...item,
         index: idx,
         needsInterp: item.value === 0 || item.value === null || item.value === undefined
       }));
       
-      // Find all consecutive groups of zeros that need interpolation
       let i = 0;
       while (i < interpolated.length) {
         if (!interpolated[i].needsInterp) {
@@ -304,15 +308,13 @@
           continue;
         }
         
-        // Found a zero - find the end of this zero group
         let groupStart = i;
         let groupEnd = i;
         while (groupEnd < interpolated.length && interpolated[groupEnd].needsInterp) {
           groupEnd++;
         }
-        groupEnd--; // Back up to last zero in group
+        groupEnd--;
         
-        // Find previous valid value
         let prevValue = null;
         for (let j = groupStart - 1; j >= 0; j--) {
           if (!interpolated[j].needsInterp && interpolated[j].value > 0) {
@@ -321,7 +323,6 @@
           }
         }
         
-        // Find next valid value
         let nextValue = null;
         for (let j = groupEnd + 1; j < interpolated.length; j++) {
           if (!interpolated[j].needsInterp && interpolated[j].value > 0) {
@@ -330,11 +331,9 @@
           }
         }
         
-        // Interpolate the entire group
         if (prevValue !== null && nextValue !== null) {
-          // Linear interpolation across the entire group
           const groupSize = groupEnd - groupStart + 1;
-          const totalSteps = groupSize + 1; // +1 to include the gap between prev and next
+          const totalSteps = groupSize + 1;
           
           for (let j = groupStart; j <= groupEnd; j++) {
             const stepNumber = j - groupStart + 1;
@@ -342,22 +341,18 @@
             interpolated[j].value = Math.round(interpolatedValue);
           }
         } else if (prevValue !== null) {
-          // Only have previous - use it for all in group
           for (let j = groupStart; j <= groupEnd; j++) {
             interpolated[j].value = prevValue;
           }
         } else if (nextValue !== null) {
-          // Only have next - use it for all in group
           for (let j = groupStart; j <= groupEnd; j++) {
             interpolated[j].value = nextValue;
           }
         }
         
-        // Move to next group
         i = groupEnd + 1;
       }
       
-      // Return clean array
       return interpolated.map(item => ({
         date: item.date,
         value: item.value
@@ -523,7 +518,6 @@
       let totalPosts = 0;
       let allVideos = [];
       
-      // NEW: Collect data by timestamp with account count tracking
       let followersByTimestamp = {};
       let likesByTimestamp = {};
 
@@ -534,7 +528,6 @@
         totalPosts += data.postsScraped;
         allVideos = allVideos.concat(data.videos);
 
-        // Track followers by timestamp
         data.followersHistory.forEach(item => {
           if (!isValidDate(item.date)) return;
           
@@ -550,7 +543,6 @@
           followersByTimestamp[dateKey].accountCount += 1;
         });
 
-        // Track likes by timestamp
         data.totalLikesHistory.forEach(item => {
           if (!isValidDate(item.date)) return;
           
@@ -567,17 +559,16 @@
         });
       });
 
-      // NEW: Filter to only include complete scrapes (all 7 accounts)
       const totalAccountCount = accounts.length;
       
       const followersHistory = Object.values(followersByTimestamp)
-        .filter(item => item.accountCount === totalAccountCount) // ONLY complete scrapes
+        .filter(item => item.accountCount === totalAccountCount)
         .map(item => ({ date: item.date, value: item.total }))
         .filter(item => isValidDate(item.date) && item.value > 0)
         .sort((a, b) => a.date - b.date);
 
       const totalLikesHistory = Object.values(likesByTimestamp)
-        .filter(item => item.accountCount === totalAccountCount) // ONLY complete scrapes
+        .filter(item => item.accountCount === totalAccountCount)
         .map(item => ({ date: item.date, value: item.total }))
         .filter(item => isValidDate(item.date) && item.value > 0)
         .sort((a, b) => a.date - b.date);
@@ -599,8 +590,8 @@
         }
       }
 
-      console.log(`✅ MoonMedia COMPLETE followers scrapes: ${followersHistory.length} data points`);
-      console.log(`✅ MoonMedia COMPLETE likes scrapes: ${totalLikesHistory.length} data points`);
+      console.log(`✅ All MoonMedia complete followers scrapes: ${followersHistory.length} data points`);
+      console.log(`✅ All MoonMedia complete likes scrapes: ${totalLikesHistory.length} data points`);
 
       return {
         followers: totalFollowers,
@@ -649,7 +640,7 @@
       setTimeout(() => {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
-        document.getElementById('accountName').textContent = isMoonMediaTotal ? 'MoonMedia Total' : selectedAccount;
+        document.getElementById('accountName').textContent = isMoonMediaTotal ? 'All MoonMedia' : selectedAccount;
         
         let rangeText = '';
         if (days === 'all') rangeText = '(All Time)';
@@ -772,9 +763,7 @@
         const followerValues = accountData.followersHistory.map(h => h.value);
         const useLogFollowers = shouldUseLogScale(followerValues);
         
-        const titleSuffix = isMoonMediaTotal ? '<span class="data-quality-badge">COMPLETE SCRAPES ONLY</span>' : '';
-        
-        createTimeBasedChart(chartsContainer, '👥 Followers Per Scrape ' + titleSuffix, 
+        createTimeBasedChart(chartsContainer, '👥 Followers Per Scrape', 
           accountData.followersHistory,
           [{
             label: 'Followers',
@@ -786,7 +775,8 @@
             fill: true
           }],
           useLogFollowers,
-          'followers-history'
+          'followers-history',
+          false
         );
       }
 
@@ -794,9 +784,7 @@
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
         const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
         
-        const titleSuffix = isMoonMediaTotal ? '<span class="data-quality-badge">COMPLETE SCRAPES ONLY</span>' : '';
-        
-        createTimeBasedChart(chartsContainer, '❤️ Total Likes Per Scrape ' + titleSuffix,
+        createTimeBasedChart(chartsContainer, '❤️ Total Likes Per Scrape',
           accountData.totalLikesHistory,
           [{
             label: 'Total Likes',
@@ -808,7 +796,8 @@
             fill: true
           }],
           useLogLikesHistory,
-          'likes-history'
+          'likes-history',
+          false
         );
       }
 
@@ -829,7 +818,8 @@
             pointHoverRadius: 6
           }],
           useLogViews,
-          'views-time'
+          'views-time',
+          true
         );
 
         createTimeBasedChart(chartsContainer, 'Likes Over Time',
@@ -843,7 +833,8 @@
             pointHoverRadius: 6
           }],
           useLogLikes,
-          'likes-time'
+          'likes-time',
+          true
         );
 
         createTimeBasedChart(chartsContainer, 'Engagement Rate Over Time',
@@ -857,7 +848,8 @@
             pointHoverRadius: 6
           }],
           false,
-          'engagement-time'
+          'engagement-time',
+          true
         );
 
         const commentsData = accountData.videos.map(v => v.comments);
@@ -874,7 +866,8 @@
             pointHoverRadius: 6
           }],
           useLogComments,
-          'comments-time'
+          'comments-time',
+          true
         );
 
         const sharesData = accountData.videos.map(v => v.shares);
@@ -891,7 +884,8 @@
             pointHoverRadius: 6
           }],
           useLogShares,
-          'shares-time'
+          'shares-time',
+          true
         );
 
         const useLogScatter = shouldUseLogScale(viewsData) || shouldUseLogScale(likesData);
@@ -914,7 +908,7 @@
       }
     }
 
-    function createTimeBasedChart(container, title, dataPoints, datasets, useLogScale, chartId) {
+    function createTimeBasedChart(container, title, dataPoints, datasets, useLogScale, chartId, showTrendline = false) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
       const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
@@ -927,6 +921,24 @@
       container.appendChild(chartDiv);
 
       const ctx = document.getElementById(canvasId).getContext('2d');
+      
+      // Add trendline if requested
+      if (showTrendline && datasets[0].data.length > 3) {
+        const trendlineData = calculateMovingAverage(datasets[0].data, Math.max(5, Math.floor(datasets[0].data.length / 10)));
+        
+        datasets.push({
+          label: 'Trend',
+          data: trendlineData,
+          borderColor: '#ffff00',
+          backgroundColor: 'transparent',
+          borderWidth: 3,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          borderDash: [0],
+          fill: false
+        });
+      }
       
       const yValues = datasets[0].data.map(d => d.y);
       const dataRange = {
