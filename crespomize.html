@@ -922,23 +922,30 @@
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
-      // Add trendline if requested
+      // Build final datasets array with trendline FIRST (so it renders on top)
+      let finalDatasets = [];
+      
+      // Add trendline first if requested (renders on top)
       if (showTrendline && datasets[0].data.length > 3) {
         const trendlineData = calculateMovingAverage(datasets[0].data, Math.max(5, Math.floor(datasets[0].data.length / 10)));
         
-        datasets.push({
+        finalDatasets.push({
           label: 'Trend',
           data: trendlineData,
           borderColor: '#ffff00',
           backgroundColor: 'transparent',
-          borderWidth: 3,
+          borderWidth: 4,
           tension: 0.4,
           pointRadius: 0,
           pointHoverRadius: 0,
-          borderDash: [0],
-          fill: false
+          fill: false,
+          order: 1  // Lower order renders on top
         });
       }
+      
+      // Add scatter points after (renders below)
+      datasets[0].order = 2;  // Higher order renders below
+      finalDatasets.push(datasets[0]);
       
       const yValues = datasets[0].data.map(d => d.y);
       const dataRange = {
@@ -998,7 +1005,7 @@
 
       const chart = new Chart(ctx, {
         type: chartType,
-        data: { datasets: datasets },
+        data: { datasets: finalDatasets },
         options: options
       });
 
