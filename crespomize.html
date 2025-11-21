@@ -5,6 +5,7 @@
   <title>crespomize - crespo.world</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body {
@@ -371,16 +372,16 @@
         
         if (rowName === 'followers') {
           followers = latestValue;
-          // Get all historical values
+          // Get all historical values WITH timestamps
           followersHistory = row.slice(1).map((val, idx) => ({
-            date: headers[idx],
+            date: new Date(headers[idx]), // Parse as actual Date object
             value: parseInt(val) || 0
           }));
         } else if (rowName === 'total_likes') {
           totalLikes = latestValue;
-          // Get all historical values
+          // Get all historical values WITH timestamps
           totalLikesHistory = row.slice(1).map((val, idx) => ({
-            date: headers[idx],
+            date: new Date(headers[idx]), // Parse as actual Date object
             value: parseInt(val) || 0
           }));
         } else if (rowName === 'posts_scraped') {
@@ -456,28 +457,28 @@
 
         // Combine history by timestamp (already interpolated per account)
         data.followersHistory.forEach(item => {
-          if (!combinedFollowersHistory[item.date]) {
-            combinedFollowersHistory[item.date] = 0;
+          const dateKey = item.date.toISOString();
+          if (!combinedFollowersHistory[dateKey]) {
+            combinedFollowersHistory[dateKey] = { date: item.date, value: 0 };
           }
-          combinedFollowersHistory[item.date] += item.value;
+          combinedFollowersHistory[dateKey].value += item.value;
         });
 
         data.totalLikesHistory.forEach(item => {
-          if (!combinedLikesHistory[item.date]) {
-            combinedLikesHistory[item.date] = 0;
+          const dateKey = item.date.toISOString();
+          if (!combinedLikesHistory[dateKey]) {
+            combinedLikesHistory[dateKey] = { date: item.date, value: 0 };
           }
-          combinedLikesHistory[item.date] += item.value;
+          combinedLikesHistory[dateKey].value += item.value;
         });
       });
 
       // Convert combined history back to arrays
-      const followersHistory = Object.keys(combinedFollowersHistory)
-        .map(date => ({ date, value: combinedFollowersHistory[date] }))
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
+      const followersHistory = Object.values(combinedFollowersHistory)
+        .sort((a, b) => a.date - b.date);
 
-      const totalLikesHistory = Object.keys(combinedLikesHistory)
-        .map(date => ({ date, value: combinedLikesHistory[date] }))
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
+      const totalLikesHistory = Object.values(combinedLikesHistory)
+        .sort((a, b) => a.date - b.date);
 
       // Sort all videos by date
       allVideos.sort((a, b) => a.date - b.date);
@@ -568,30 +569,32 @@
       return num.toLocaleString();
     }
 
-    // More precise formatting for chart axes with better significant figures
-    function formatNumberAxis(num) {
-      if (num >= 1000000000) {
-        const val = num / 1000000000;
-        return val.toFixed(val < 10 ? 2 : 1) + 'B';
+    // Smart formatting based on data range - shows more decimals when needed
+    function formatNumberAxisSmart(value, dataRange) {
+      const range = dataRange.max - dataRange.min;
+      
+      if (value >= 1000000000) {
+        const val = value / 1000000000;
+        // If range is small relative to value, show more decimals
+        const rangeRatio = range / value;
+        if (rangeRatio < 0.01) return val.toFixed(3) + 'B';
+        if (rangeRatio < 0.1) return val.toFixed(2) + 'B';
+        return val.toFixed(1) + 'B';
       }
-      if (num >= 1000000) {
-        const val = num / 1000000;
-        return val.toFixed(val < 10 ? 2 : 1) + 'M';
+      if (value >= 1000000) {
+        const val = value / 1000000;
+        const rangeRatio = range / value;
+        if (rangeRatio < 0.01) return val.toFixed(3) + 'M';
+        if (rangeRatio < 0.1) return val.toFixed(2) + 'M';
+        return val.toFixed(1) + 'M';
       }
-      if (num >= 1000) {
-        const val = num / 1000;
-        return val.toFixed(val < 10 ? 1 : 0) + 'K';
+      if (value >= 1000) {
+        const val = value / 1000;
+        const rangeRatio = range / value;
+        if (rangeRatio < 0.01) return val.toFixed(2) + 'K';
+        return val.toFixed(1) + 'K';
       }
-      return num.toLocaleString();
-    }
-
-    // Format date for display
-    function formatDateShort(dateStr) {
-      const date = new Date(dateStr);
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
-      const year = date.getFullYear().toString().slice(-2);
-      return `${month}/${day}/${year}`;
+      return value.toLocaleString();
     }
 
     function toggleLogScale(chartId) {
@@ -667,17 +670,17 @@
       const chartsContainer = document.getElementById('chartsList');
       chartsContainer.innerHTML = '';
 
-      // Followers over time (KEEP LINES - historical tracking with interpolation)
+      // Followers over time (TIME-BASED X-AXIS)
       if (accountData.followersHistory && accountData.followersHistory.length > 0) {
         const followerValues = accountData.followersHistory.map(h => h.value);
-        const followerDates = accountData.followersHistory.map(h => formatDateShort(h.date));
+        const followerDates = accountData.followersHistory.map(h => h.date);
         const useLogFollowers = shouldUseLogScale(followerValues);
         
-        createChart(chartsContainer, '👥 Followers Per Scrape', 'line',
+        createTimeBasedChart(chartsContainer, '👥 Followers Per Scrape', 
           followerDates,
           [{
             label: 'Followers',
-            data: followerValues,
+            data: accountData.followersHistory.map(h => ({ x: h.date, y: h.value })),
             borderColor: '#9b59b6',
             backgroundColor: 'rgba(155, 89, 182, 0.1)',
             borderWidth: 3,
@@ -689,17 +692,17 @@
         );
       }
 
-      // Total Likes over time (KEEP LINES - historical tracking with interpolation)
+      // Total Likes over time (TIME-BASED X-AXIS)
       if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
-        const likesDates = accountData.totalLikesHistory.map(h => formatDateShort(h.date));
+        const likesDates = accountData.totalLikesHistory.map(h => h.date);
         const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
         
-        createChart(chartsContainer, '❤️ Total Likes Per Scrape', 'line',
+        createTimeBasedChart(chartsContainer, '❤️ Total Likes Per Scrape',
           likesDates,
           [{
             label: 'Total Likes',
-            data: likesHistoryValues,
+            data: accountData.totalLikesHistory.map(h => ({ x: h.date, y: h.value })),
             borderColor: '#e91e63',
             backgroundColor: 'rgba(233, 30, 99, 0.1)',
             borderWidth: 3,
@@ -822,12 +825,12 @@
       }
     }
 
-    function createChart(container, title, type, labels, datasets, useLogScale = false, chartId, isCorrelationChart = false) {
+    // NEW: Time-based chart function for follower/likes history
+    function createTimeBasedChart(container, title, dates, datasets, useLogScale, chartId) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
       const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
       
-      // Add clickable badge
       const scaleText = useLogScale ? 'LOG SCALE' : 'LINEAR';
       const badgeClass = useLogScale ? '' : 'inactive';
       const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
@@ -837,10 +840,97 @@
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
+      // Calculate data range for smart formatting
+      const yValues = datasets[0].data.map(d => d.y);
+      const dataRange = {
+        min: Math.min(...yValues),
+        max: Math.max(...yValues)
+      };
+
+      const options = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: {
+            labels: { color: '#0f0', font: { family: 'monospace' } }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                let label = context.dataset.label || '';
+                if (label) label += ': ';
+                label += formatNumber(context.parsed.y);
+                return label;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'day',
+              displayFormats: {
+                day: 'MM/dd/yy'
+              }
+            },
+            ticks: { 
+              color: '#0f0',
+              maxRotation: 45,
+              minRotation: 45
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          },
+          y: {
+            type: useLogScale ? 'logarithmic' : 'linear',
+            ticks: { 
+              color: '#0f0',
+              maxTicksLimit: 8,
+              callback: function(value) {
+                return formatNumberAxisSmart(value, dataRange);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          }
+        }
+      };
+
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: datasets },
+        options: options
+      });
+
+      chartInstances[chartId] = chart;
+    }
+
+    function createChart(container, title, type, labels, datasets, useLogScale = false, chartId, isCorrelationChart = false) {
+      const chartDiv = document.createElement('div');
+      chartDiv.className = 'chart-container';
+      const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
+      
+      const scaleText = useLogScale ? 'LOG SCALE' : 'LINEAR';
+      const badgeClass = useLogScale ? '' : 'inactive';
+      const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
+      
+      chartDiv.innerHTML = `<h3>${title}${scaleBadge}</h3><canvas id="${canvasId}"></canvas>`;
+      container.appendChild(chartDiv);
+
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      
+      // Calculate data range for smart formatting
+      const yValues = datasets[0].data.map(d => d.y || d);
+      const dataRange = {
+        min: Math.min(...yValues),
+        max: Math.max(...yValues)
+      };
+
       let scales;
       
       if (isCorrelationChart) {
-        // Correlation chart: both axes can toggle log
+        const xValues = datasets[0].data.map(d => d.x);
+        const xRange = { min: Math.min(...xValues), max: Math.max(...xValues) };
+        
         scales = {
           x: { 
             type: useLogScale ? 'logarithmic' : 'linear',
@@ -849,7 +939,7 @@
               color: '#0f0',
               maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumberAxis(value);
+                return formatNumberAxisSmart(value, xRange);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
@@ -861,17 +951,16 @@
               color: '#0f0',
               maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumberAxis(value);
+                return formatNumberAxisSmart(value, dataRange);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
           }
         };
-      } else if (type === 'scatter') {
-        // Time-based scatter: X stays linear (dates), Y can toggle log
+      } else {
         scales = {
           x: {
-            type: 'linear', // ALWAYS LINEAR for dates/time
+            type: 'linear',
             ticks: { 
               color: '#0f0',
               maxTicksLimit: 10,
@@ -890,32 +979,8 @@
               color: '#0f0',
               maxTicksLimit: 8,
               callback: function(value) {
-                return formatNumberAxis(value);
+                return formatNumberAxisSmart(value, dataRange);
               }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          }
-        };
-      } else {
-        // Line charts (followers/likes history) - use dates on X axis
-        scales = {
-          y: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            ticks: { 
-              color: '#0f0',
-              maxTicksLimit: 8,
-              callback: function(value) {
-                return formatNumberAxis(value);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          },
-          x: {
-            ticks: { 
-              color: '#0f0', 
-              maxRotation: 45, 
-              minRotation: 45,
-              maxTicksLimit: 10
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
           }
@@ -933,9 +998,7 @@
             callbacks: {
               label: function(context) {
                 let label = context.dataset.label || '';
-                if (label) {
-                  label += ': ';
-                }
+                if (label) label += ': ';
                 const value = context.parsed.y !== null ? context.parsed.y : context.parsed;
                 label += formatNumber(value);
                 return label;
@@ -952,7 +1015,6 @@
         options: options
       });
 
-      // Store chart instance for toggling
       chartInstances[chartId] = chart;
     }
 
