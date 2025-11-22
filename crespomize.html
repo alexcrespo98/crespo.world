@@ -160,6 +160,27 @@
       background: #333;
       color: #666;
     }
+    .trendline-badge {
+      display: inline-block;
+      background: #ffff00;
+      color: #000;
+      padding: 0.3em 0.6em;
+      border-radius: 3px;
+      font-size: 0.8em;
+      margin-left: 0.5em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+      user-select: none;
+    }
+    .trendline-badge:hover {
+      background: #ffdd00;
+      box-shadow: 0 0 10px #ffff00;
+    }
+    .trendline-badge.inactive {
+      background: #333;
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -231,6 +252,7 @@
     let isMoonMediaTotal = false;
     let selectedTimeRange = 'all';
     let chartInstances = {};
+    let trendlineStates = {};
 
     // Validate date - reject dates before 2020 or in far future
     function isValidDate(date) {
@@ -244,8 +266,8 @@
       return year >= 2020 && year <= currentYear + 1;
     }
 
-    // Calculate moving average for smooth trendline
-    function calculateMovingAverage(data, windowSize = 5) {
+    // Calculate moving average for smooth trendline with larger window
+    function calculateMovingAverage(data, windowSize = 10) {
       const result = [];
       
       for (let i = 0; i < data.length; i++) {
@@ -713,8 +735,38 @@
       }
     }
 
+    function toggleTrendline(chartId) {
+      const chart = chartInstances[chartId];
+      if (!chart) return;
+
+      // Toggle the state
+      trendlineStates[chartId] = !trendlineStates[chartId];
+      const showTrendline = trendlineStates[chartId];
+
+      // Find and update the trendline dataset
+      const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
+      if (trendlineDataset) {
+        trendlineDataset.hidden = !showTrendline;
+      }
+
+      chart.update();
+
+      // Update badge
+      const badge = document.querySelector(`[data-trendline-id="${chartId}"]`);
+      if (badge) {
+        if (showTrendline) {
+          badge.classList.remove('inactive');
+          badge.textContent = '📈 TREND ON';
+        } else {
+          badge.classList.add('inactive');
+          badge.textContent = '📈 TREND OFF';
+        }
+      }
+    }
+
     function renderDashboard() {
       chartInstances = {};
+      trendlineStates = {};
 
       const statsContainer = document.getElementById('statsSummary');
       
@@ -917,35 +969,46 @@
       const badgeClass = useLogScale ? '' : 'inactive';
       const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
       
-      chartDiv.innerHTML = `<h3>${title}${scaleBadge}</h3><canvas id="${canvasId}"></canvas>`;
+      let trendlineBadge = '';
+      if (showTrendline) {
+        trendlineStates[chartId] = true; // Start with trendline visible
+        trendlineBadge = `<span class="trendline-badge" data-trendline-id="${chartId}" onclick="toggleTrendline('${chartId}')">📈 TREND ON</span>`;
+      }
+      
+      chartDiv.innerHTML = `<h3>${title}${scaleBadge}${trendlineBadge}</h3><canvas id="${canvasId}"></canvas>`;
       container.appendChild(chartDiv);
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
-      // Build final datasets array with trendline FIRST (so it renders on top)
+      // Build final datasets array - scatter points first, then trendline
       let finalDatasets = [];
       
-      // Add trendline first if requested (renders on top)
+      // Add scatter points first (renders below)
+      datasets[0].order = 2;  // Higher order renders below
+      finalDatasets.push(datasets[0]);
+      
+      // Add trendline after if requested (renders on top)
       if (showTrendline && datasets[0].data.length > 3) {
-        const trendlineData = calculateMovingAverage(datasets[0].data, Math.max(5, Math.floor(datasets[0].data.length / 10)));
+        // Use larger window for smoother line
+        const windowSize = Math.max(15, Math.floor(datasets[0].data.length / 8));
+        const trendlineData = calculateMovingAverage(datasets[0].data, windowSize);
         
         finalDatasets.push({
           label: 'Trend',
           data: trendlineData,
+          type: 'line',
           borderColor: '#ffff00',
           backgroundColor: 'transparent',
-          borderWidth: 4,
-          tension: 0.4,
+          borderWidth: 5,
+          tension: 0.5,
           pointRadius: 0,
           pointHoverRadius: 0,
           fill: false,
-          order: 1  // Lower order renders on top
+          order: 1,  // Lower order renders on top
+          borderCapStyle: 'round',
+          borderJoinStyle: 'round'
         });
       }
-      
-      // Add scatter points after (renders below)
-      datasets[0].order = 2;  // Higher order renders below
-      finalDatasets.push(datasets[0]);
       
       const yValues = datasets[0].data.map(d => d.y);
       const dataRange = {
@@ -956,6 +1019,11 @@
       const options = {
         responsive: true,
         maintainAspectRatio: true,
+        interaction: {
+          mode: 'nearest',
+          axis: 'x',
+          intersect: false
+        },
         plugins: {
           legend: {
             labels: { color: '#0f0', font: { family: 'monospace' } }
@@ -1001,10 +1069,8 @@
         }
       };
 
-      const chartType = datasets[0].pointRadius !== undefined ? 'scatter' : 'line';
-
       const chart = new Chart(ctx, {
-        type: chartType,
+        type: 'scatter',
         data: { datasets: finalDatasets },
         options: options
       });
@@ -1025,11 +1091,12 @@
       container.appendChild(chartDiv);
 
       const ctx = document.getElementById(canvasId).getContext('2d');
-      
-      const xValues = datasets[0].data.map(d => d.x);
-      const yValues = datasets[0].data.map(d => d.y);
-      const xRange = { min: Math.min(...xValues), max: Math.max(...xValues) };
-      const yRange = { min: Math.min(...yValues), max: Math.max(...yValues) };
+
+      const allValues = datasets[0].data.flatMap(d => [d.x, d.y]);
+      const dataRange = {
+        min: Math.min(...allValues),
+        max: Math.max(...allValues)
+      };
 
       const options = {
         responsive: true,
@@ -1049,16 +1116,16 @@
         scales: {
           x: {
             type: useLogScale ? 'logarithmic' : 'linear',
-            position: 'bottom',
             title: {
               display: true,
               text: 'Views',
-              color: '#0f0'
+              color: '#0f0',
+              font: { family: 'monospace' }
             },
             ticks: { 
               color: '#0f0',
               callback: function(value) {
-                return formatNumberAxisSmart(value, xRange);
+                return formatNumberAxisSmart(value, dataRange);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
@@ -1068,12 +1135,13 @@
             title: {
               display: true,
               text: 'Likes',
-              color: '#0f0'
+              color: '#0f0',
+              font: { family: 'monospace' }
             },
             ticks: { 
               color: '#0f0',
               callback: function(value) {
-                return formatNumberAxisSmart(value, yRange);
+                return formatNumberAxisSmart(value, dataRange);
               }
             },
             grid: { color: 'rgba(0, 255, 0, 0.1)' }
@@ -1090,8 +1158,7 @@
       chartInstances[chartId] = chart;
     }
 
-    // Load data on page load
-    loadSheetData();
+    window.onload = loadSheetData;
   </script>
 </body>
 </html>
