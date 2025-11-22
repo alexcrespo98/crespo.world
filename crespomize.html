@@ -280,7 +280,7 @@
     let selectedTimeRange = 'all';
     let chartInstances = {};
     let trendlineStates = {};
-    let trendlineSmoothnessLevels = {}; // Track smoothness for each chart
+    let trendlineDaysAverage = {}; // Track days average for each chart
 
     // Validate date - reject dates before 2020 or in far future
     function isValidDate(date) {
@@ -294,19 +294,32 @@
       return year >= 2020 && year <= currentYear + 1;
     }
 
-    // Calculate moving average for smooth trendline
-    function calculateMovingAverage(data, windowSize = 10) {
+    // Calculate moving average based on days
+    function calculateMovingAverageByDays(data, days = 7) {
       const result = [];
       
       for (let i = 0; i < data.length; i++) {
-        const start = Math.max(0, i - Math.floor(windowSize / 2));
-        const end = Math.min(data.length, i + Math.ceil(windowSize / 2));
-        const window = data.slice(start, end);
+        const currentDate = new Date(data[i].x);
+        const cutoffDate = new Date(currentDate);
+        cutoffDate.setDate(cutoffDate.getDate() - days);
         
-        const sum = window.reduce((acc, item) => acc + item.y, 0);
-        const avg = sum / window.length;
+        // Find all points within the time window
+        const windowPoints = [];
+        for (let j = 0; j < data.length; j++) {
+          const pointDate = new Date(data[j].x);
+          if (pointDate >= cutoffDate && pointDate <= currentDate) {
+            windowPoints.push(data[j].y);
+          }
+        }
         
-        result.push({ x: data[i].x, y: avg });
+        // Calculate average
+        if (windowPoints.length > 0) {
+          const sum = windowPoints.reduce((acc, val) => acc + val, 0);
+          const avg = sum / windowPoints.length;
+          result.push({ x: data[i].x, y: avg });
+        } else {
+          result.push({ x: data[i].x, y: data[i].y });
+        }
       }
       
       return result;
@@ -775,6 +788,11 @@
         trendlineDataset.hidden = !showTrendline;
       }
 
+      // Toggle right y-axis visibility
+      if (chart.options.scales.y1) {
+        chart.options.scales.y1.display = showTrendline;
+      }
+
       chart.update();
 
       const badge = document.querySelector(`[data-trendline-id="${chartId}"]`);
@@ -787,34 +805,32 @@
           badge.textContent = '📈 TREND OFF';
         }
       }
+
+      // Update smoothness controls visibility
+      const controls = document.querySelector(`[data-smoothness-controls="${chartId}"]`);
+      if (controls) {
+        controls.style.display = showTrendline ? 'inline-block' : 'none';
+      }
     }
 
     function adjustTrendlineSmoothness(chartId, direction) {
       const chart = chartInstances[chartId];
       if (!chart) return;
 
-      // Get current smoothness level (default is 3 - medium)
-      if (trendlineSmoothnessLevels[chartId] === undefined) {
-        trendlineSmoothnessLevels[chartId] = 3;
+      // Get current days average (default is 7)
+      if (trendlineDaysAverage[chartId] === undefined) {
+        trendlineDaysAverage[chartId] = 7;
       }
 
-      // Adjust smoothness (1 = very smooth, 5 = less smooth)
-      trendlineSmoothnessLevels[chartId] += direction;
-      trendlineSmoothnessLevels[chartId] = Math.max(1, Math.min(5, trendlineSmoothnessLevels[chartId]));
+      // Adjust days (minimum 1)
+      trendlineDaysAverage[chartId] += direction;
+      trendlineDaysAverage[chartId] = Math.max(1, trendlineDaysAverage[chartId]);
 
-      // Recalculate trendline with new smoothness
+      // Recalculate trendline with new days average
       const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
       if (!dataDataset) return;
 
-      const dataLength = dataDataset.data.length;
-      
-      // Calculate window size based on smoothness level
-      // Level 1 (smoothest): dataLength / 4
-      // Level 5 (least smooth): dataLength / 20
-      const smoothnessFactors = [4, 6, 8, 12, 20]; // Inverse - smaller = smoother
-      const windowSize = Math.max(5, Math.floor(dataLength / smoothnessFactors[trendlineSmoothnessLevels[chartId] - 1]));
-      
-      const trendlineData = calculateMovingAverage(dataDataset.data, windowSize);
+      const trendlineData = calculateMovingAverageByDays(dataDataset.data, trendlineDaysAverage[chartId]);
 
       const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
       if (trendlineDataset) {
@@ -823,13 +839,277 @@
 
       chart.update();
 
-      console.log(`Trendline smoothness for ${chartId}: Level ${trendlineSmoothnessLevels[chartId]}, Window: ${windowSize}`);
+      // Update display
+      const display = document.querySelector(`[data-days-display="${chartId}"]`);
+      if (display) {
+        display.textContent = trendlineDaysAverage[chartId];
+      }
+
+      console.log(`Trendline for ${chartId}: ${trendlineDaysAverage[chartId]} days average`);
+    }
+
+    function createLineChart(container, title, historyData, datasets, useLog, chartId) {
+      const chartDiv = document.createElement('div');
+      chartDiv.className = 'chart-container';
+      
+      const canvas = document.createElement('canvas');
+      canvas.id = chartId;
+      
+      const header = document.createElement('h3');
+      header.textContent = title;
+      
+      const scaleBadge = document.createElement('span');
+      scaleBadge.className = 'scale-badge' + (useLog ? '' : ' inactive');
+      scaleBadge.textContent = useLog ? 'LOG SCALE' : 'LINEAR';
+      scaleBadge.setAttribute('data-chart-id', chartId);
+      scaleBadge.onclick = () => toggleLogScale(chartId);
+      
+      header.appendChild(scaleBadge);
+      chartDiv.appendChild(header);
+      chartDiv.appendChild(canvas);
+      container.appendChild(chartDiv);
+
+      const ctx = canvas.getContext('2d');
+      
+      const allValues = datasets.flatMap(ds => ds.data.map(d => d.y)).filter(v => v > 0);
+      const dataRange = {
+        min: Math.min(...allValues),
+        max: Math.max(...allValues)
+      };
+
+      chartInstances[chartId] = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 2.5,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                color: '#0f0',
+                font: { family: 'monospace', size: 12 }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: '#0f0',
+              bodyColor: '#0f0',
+              borderColor: '#0f0',
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + formatNumber(context.parsed.y);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'day',
+                displayFormats: { day: 'MMM d, yyyy' }
+              },
+              ticks: { color: '#0f0', font: { family: 'monospace' } },
+              grid: { color: 'rgba(0, 255, 0, 0.1)' }
+            },
+            y: {
+              type: useLog ? 'logarithmic' : 'linear',
+              ticks: {
+                color: '#0f0',
+                font: { family: 'monospace' },
+                callback: function(value) {
+                  return formatNumberAxisSmart(value, dataRange);
+                }
+              },
+              grid: { color: 'rgba(0, 255, 0, 0.1)' }
+            }
+          }
+        }
+      });
+    }
+
+    function createTimeBasedChart(container, title, videos, datasets, useLog, chartId, includeTrendline = false) {
+      const chartDiv = document.createElement('div');
+      chartDiv.className = 'chart-container';
+      
+      const canvas = document.createElement('canvas');
+      canvas.id = chartId;
+      
+      const header = document.createElement('h3');
+      header.textContent = title;
+      
+      const scaleBadge = document.createElement('span');
+      scaleBadge.className = 'scale-badge' + (useLog ? '' : ' inactive');
+      scaleBadge.textContent = useLog ? 'LOG SCALE' : 'LINEAR';
+      scaleBadge.setAttribute('data-chart-id', chartId);
+      scaleBadge.onclick = () => toggleLogScale(chartId);
+      
+      header.appendChild(scaleBadge);
+
+      if (includeTrendline) {
+        const trendlineBadge = document.createElement('span');
+        trendlineBadge.className = 'trendline-badge inactive';
+        trendlineBadge.textContent = '📈 TREND OFF';
+        trendlineBadge.setAttribute('data-trendline-id', chartId);
+        trendlineBadge.onclick = () => toggleTrendline(chartId);
+        header.appendChild(trendlineBadge);
+
+        trendlineStates[chartId] = false;
+        trendlineDaysAverage[chartId] = 7;
+
+        const smoothnessControls = document.createElement('span');
+        smoothnessControls.className = 'smoothness-controls';
+        smoothnessControls.setAttribute('data-smoothness-controls', chartId);
+        smoothnessControls.style.display = 'none';
+
+        const downBtn = document.createElement('button');
+        downBtn.className = 'smoothness-btn';
+        downBtn.textContent = '◄';
+        downBtn.onclick = () => adjustTrendlineSmoothness(chartId, -1);
+
+        const daysDisplay = document.createElement('span');
+        daysDisplay.className = 'smoothness-btn';
+        daysDisplay.textContent = '7';
+        daysDisplay.style.cursor = 'default';
+        daysDisplay.setAttribute('data-days-display', chartId);
+
+        const upBtn = document.createElement('button');
+        upBtn.className = 'smoothness-btn';
+        upBtn.textContent = '►';
+        upBtn.onclick = () => adjustTrendlineSmoothness(chartId, 1);
+
+        smoothnessControls.appendChild(downBtn);
+        smoothnessControls.appendChild(daysDisplay);
+        smoothnessControls.appendChild(upBtn);
+        
+        header.appendChild(smoothnessControls);
+      }
+      
+      chartDiv.appendChild(header);
+      chartDiv.appendChild(canvas);
+      container.appendChild(chartDiv);
+
+      const ctx = canvas.getContext('2d');
+
+      if (includeTrendline && datasets.length > 0) {
+        const trendlineData = calculateMovingAverageByDays(datasets[0].data, 7);
+        
+        datasets.push({
+          label: 'Trend',
+          data: trendlineData,
+          borderColor: '#ffff00',
+          backgroundColor: 'transparent',
+          borderWidth: 3,
+          pointRadius: 0,
+          tension: 0.4,
+          yAxisID: 'y1',
+          hidden: true
+        });
+      }
+      
+      const allValues = datasets.filter(ds => ds.label !== 'Trend').flatMap(ds => ds.data.map(d => d.y)).filter(v => v > 0);
+      const dataRange = {
+        min: Math.min(...allValues),
+        max: Math.max(...allValues)
+      };
+
+      const scales = {
+        x: {
+          type: 'time',
+          time: {
+            unit: 'day',
+            displayFormats: { day: 'MMM d, yyyy' }
+          },
+          ticks: { color: '#0f0', font: { family: 'monospace' } },
+          grid: { color: 'rgba(0, 255, 0, 0.1)' }
+        },
+        y: {
+          type: useLog ? 'logarithmic' : 'linear',
+          position: 'left',
+          ticks: {
+            color: '#0f0',
+            font: { family: 'monospace' },
+            callback: function(value) {
+              return formatNumberAxisSmart(value, dataRange);
+            }
+          },
+          grid: { color: 'rgba(0, 255, 0, 0.1)' }
+        }
+      };
+
+      if (includeTrendline) {
+        scales.y1 = {
+          type: 'linear',
+          position: 'right',
+          display: false,
+          ticks: {
+            color: '#ffff00',
+            font: { family: 'monospace' },
+            callback: function(value) {
+              return formatNumberAxisSmart(value, dataRange);
+            }
+          },
+          grid: {
+            drawOnChartArea: false
+          }
+        };
+      }
+
+      chartInstances[chartId] = new Chart(ctx, {
+        type: datasets[0].type || 'scatter',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 2.5,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                color: '#0f0',
+                font: { family: 'monospace', size: 12 },
+                filter: function(item, chart) {
+                  // Hide Trend from legend if trendline is off
+                  if (item.text === 'Trend') {
+                    return trendlineStates[chartId] === true;
+                  }
+                  return true;
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: '#0f0',
+              bodyColor: '#0f0',
+              borderColor: '#0f0',
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + formatNumber(context.parsed.y);
+                }
+              }
+            }
+          },
+          scales: scales
+        }
+      });
     }
 
     function renderDashboard() {
       chartInstances = {};
       trendlineStates = {};
-      trendlineSmoothnessLevels = {};
+      trendlineDaysAverage = {};
 
       const statsContainer = document.getElementById('statsSummary');
       
@@ -1001,311 +1281,121 @@
           true
         );
 
-        const useLogScatter = shouldUseLogScale(viewsData) || shouldUseLogScale(likesData);
+        const correlationValues = accountData.videos.map(v => v.views);
+        const useLogCorrelation = shouldUseLogScale(correlationValues);
+
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
         
-        createScatterChart(chartsContainer, 'Likes vs Views Correlation',
-          [{
-            label: 'Posts',
-            data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
-            backgroundColor: 'rgba(233, 30, 99, 0.6)',
-            borderColor: '#e91e63',
-            borderWidth: 2,
-            pointRadius: 5,
-            pointHoverRadius: 7
-          }],
-          useLogScatter,
-          'correlation'
-        );
-      } else {
-        chartsContainer.innerHTML += '<div class="chart-container"><h3>No video data available for selected time range</h3></div>';
-      }
-    }
+        const canvas = document.createElement('canvas');
+        canvas.id = 'correlation';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Likes vs Views Correlation';
+        
+        const scaleBadge = document.createElement('span');
+        scaleBadge.className = 'scale-badge' + (useLogCorrelation ? '' : ' inactive');
+        scaleBadge.textContent = useLogCorrelation ? 'LOG SCALE' : 'LINEAR';
+        scaleBadge.setAttribute('data-chart-id', 'correlation');
+        scaleBadge.onclick = () => toggleLogScale('correlation');
+        
+        header.appendChild(scaleBadge);
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        chartsContainer.appendChild(chartDiv);
 
-    // Line chart for Followers and Total Likes (connected lines, no trendline)
-    function createLineChart(container, title, dataPoints, datasets, useLogScale, chartId) {
-      const chartDiv = document.createElement('div');
-      chartDiv.className = 'chart-container';
-      const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
-      
-      const scaleText = useLogScale ? 'LOG SCALE' : 'LINEAR';
-      const badgeClass = useLogScale ? '' : 'inactive';
-      const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
-      
-      chartDiv.innerHTML = `<h3>${title}${scaleBadge}</h3><canvas id="${canvasId}"></canvas>`;
-      container.appendChild(chartDiv);
+        const ctx = canvas.getContext('2d');
+        
+        const allViews = accountData.videos.map(v => v.views).filter(v => v > 0);
+        const allLikes = accountData.videos.map(v => v.likes).filter(v => v > 0);
+        const dataRangeX = {
+          min: Math.min(...allViews),
+          max: Math.max(...allViews)
+        };
+        const dataRangeY = {
+          min: Math.min(...allLikes),
+          max: Math.max(...allLikes)
+        };
 
-      const ctx = document.getElementById(canvasId).getContext('2d');
-      
-      const yValues = datasets[0].data.map(d => d.y);
-      const dataRange = {
-        min: Math.min(...yValues),
-        max: Math.max(...yValues)
-      };
-
-      const options = {
-        responsive: true,
-        maintainAspectRatio: true,
-        interaction: {
-          mode: 'nearest',
-          axis: 'x',
-          intersect: false
-        },
-        plugins: {
-          legend: {
-            labels: { color: '#0f0', font: { family: 'monospace' } }
+        chartInstances['correlation'] = new Chart(ctx, {
+          type: 'scatter',
+          data: {
+            datasets: [{
+              label: 'Posts',
+              data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
+              backgroundColor: 'rgba(0, 210, 211, 0.6)',
+              borderColor: '#00d2d3',
+              pointRadius: 6,
+              pointHoverRadius: 8
+            }]
           },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                let label = context.dataset.label || '';
-                if (label) label += ': ';
-                label += formatNumber(context.parsed.y);
-                return label;
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: function(context) {
+                    return 'Views: ' + formatNumber(context.parsed.x) + ', Likes: ' + formatNumber(context.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                type: useLogCorrelation ? 'logarithmic' : 'linear',
+                title: {
+                  display: true,
+                  text: 'Views',
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 14 }
+                },
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: function(value) {
+                    return formatNumberAxisSmart(value, dataRangeX);
+                  }
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                type: useLogCorrelation ? 'logarithmic' : 'linear',
+                title: {
+                  display: true,
+                  text: 'Likes',
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 14 }
+                },
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: function(value) {
+                    return formatNumberAxisSmart(value, dataRangeY);
+                  }
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
               }
             }
           }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              unit: 'day',
-              displayFormats: {
-                day: 'MM/dd/yy'
-              }
-            },
-            ticks: { 
-              color: '#0f0',
-              maxRotation: 45,
-              minRotation: 45
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          },
-          y: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            ticks: { 
-              color: '#0f0',
-              maxTicksLimit: 8,
-              callback: function(value) {
-                return formatNumberAxisSmart(value, dataRange);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          }
-        }
-      };
-
-      const chart = new Chart(ctx, {
-        type: 'line',
-        data: { datasets: datasets },
-        options: options
-      });
-
-      chartInstances[chartId] = chart;
-    }
-
-    // Time-based scatter chart with optional trendline
-    function createTimeBasedChart(container, title, dataPoints, datasets, useLogScale, chartId, showTrendline = false) {
-      const chartDiv = document.createElement('div');
-      chartDiv.className = 'chart-container';
-      const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
-      
-      const scaleText = useLogScale ? 'LOG SCALE' : 'LINEAR';
-      const badgeClass = useLogScale ? '' : 'inactive';
-      const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
-      
-      let trendlineBadge = '';
-      let smoothnessControls = '';
-      if (showTrendline) {
-        trendlineStates[chartId] = true;
-        trendlineSmoothnessLevels[chartId] = 3; // Start at medium smoothness
-        trendlineBadge = `<span class="trendline-badge" data-trendline-id="${chartId}" onclick="toggleTrendline('${chartId}')">📈 TREND ON</span>`;
-        smoothnessControls = `<span class="smoothness-controls">
-          <button class="smoothness-btn" onclick="adjustTrendlineSmoothness('${chartId}', -1)" title="Smoother">▼</button>
-          <button class="smoothness-btn" onclick="adjustTrendlineSmoothness('${chartId}', 1)" title="Less Smooth">▲</button>
-        </span>`;
-      }
-      
-      chartDiv.innerHTML = `<h3>${title}${scaleBadge}${trendlineBadge}${smoothnessControls}</h3><canvas id="${canvasId}"></canvas>`;
-      container.appendChild(chartDiv);
-
-      const ctx = document.getElementById(canvasId).getContext('2d');
-      
-      let finalDatasets = [];
-      
-      datasets[0].order = 2;
-      finalDatasets.push(datasets[0]);
-      
-      if (showTrendline && datasets[0].data.length > 3) {
-        const windowSize = Math.max(10, Math.floor(datasets[0].data.length / 8));
-        const trendlineData = calculateMovingAverage(datasets[0].data, windowSize);
-        
-        finalDatasets.push({
-          label: 'Trend',
-          data: trendlineData,
-          type: 'line',
-          borderColor: '#ffff00',
-          backgroundColor: 'transparent',
-          borderWidth: 5,
-          tension: 0.5,
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          fill: false,
-          order: 1,
-          borderCapStyle: 'round',
-          borderJoinStyle: 'round'
         });
       }
-      
-      const yValues = datasets[0].data.map(d => d.y);
-      const dataRange = {
-        min: Math.min(...yValues),
-        max: Math.max(...yValues)
-      };
-
-      const options = {
-        responsive: true,
-        maintainAspectRatio: true,
-        interaction: {
-          mode: 'nearest',
-          axis: 'x',
-          intersect: false
-        },
-        plugins: {
-          legend: {
-            labels: { color: '#0f0', font: { family: 'monospace' } }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                let label = context.dataset.label || '';
-                if (label) label += ': ';
-                label += formatNumber(context.parsed.y);
-                return label;
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              unit: 'day',
-              displayFormats: {
-                day: 'MM/dd/yy'
-              }
-            },
-            ticks: { 
-              color: '#0f0',
-              maxRotation: 45,
-              minRotation: 45
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          },
-          y: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            ticks: { 
-              color: '#0f0',
-              maxTicksLimit: 8,
-              callback: function(value) {
-                return formatNumberAxisSmart(value, dataRange);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          }
-        }
-      };
-
-      const chart = new Chart(ctx, {
-        type: 'scatter',
-        data: { datasets: finalDatasets },
-        options: options
-      });
-
-      chartInstances[chartId] = chart;
     }
 
-    function createScatterChart(container, title, datasets, useLogScale, chartId) {
-      const chartDiv = document.createElement('div');
-      chartDiv.className = 'chart-container';
-      const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
-      
-      const scaleText = useLogScale ? 'LOG SCALE' : 'LINEAR';
-      const badgeClass = useLogScale ? '' : 'inactive';
-      const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
-      
-      chartDiv.innerHTML = `<h3>${title}${scaleBadge}</h3><canvas id="${canvasId}"></canvas>`;
-      container.appendChild(chartDiv);
-
-      const ctx = document.getElementById(canvasId).getContext('2d');
-
-      const allValues = datasets[0].data.flatMap(d => [d.x, d.y]);
-      const dataRange = {
-        min: Math.min(...allValues),
-        max: Math.max(...allValues)
-      };
-
-      const options = {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: {
-            labels: { color: '#0f0', font: { family: 'monospace' } }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return `Views: ${formatNumber(context.parsed.x)}, Likes: ${formatNumber(context.parsed.y)}`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            title: {
-              display: true,
-              text: 'Views',
-              color: '#0f0',
-              font: { family: 'monospace' }
-            },
-            ticks: { 
-              color: '#0f0',
-              callback: function(value) {
-                return formatNumberAxisSmart(value, dataRange);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          },
-          y: {
-            type: useLogScale ? 'logarithmic' : 'linear',
-            title: {
-              display: true,
-              text: 'Likes',
-              color: '#0f0',
-              font: { family: 'monospace' }
-            },
-            ticks: { 
-              color: '#0f0',
-              callback: function(value) {
-                return formatNumberAxisSmart(value, dataRange);
-              }
-            },
-            grid: { color: 'rgba(0, 255, 0, 0.1)' }
-          }
-        }
-      };
-
-      const chart = new Chart(ctx, {
-        type: 'scatter',
-        data: { datasets: datasets },
-        options: options
-      });
-
-      chartInstances[chartId] = chart;
-    }
-
-    window.onload = loadSheetData;
+    window.addEventListener('load', loadSheetData);
   </script>
 </body>
 </html>
