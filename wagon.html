@@ -1,4 +1,4 @@
-wagon.html<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -26,24 +26,6 @@ wagon.html<!DOCTYPE html>
             font-size: 3em;
             margin: 20px 0;
             text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
-        }
-
-        #startButton {
-            font-size: 2em;
-            padding: 20px 40px;
-            background: #ff0000;
-            color: white;
-            border: 5px solid #000;
-            border-radius: 15px;
-            cursor: pointer;
-            font-family: 'Comic Sans MS', cursive;
-            font-weight: bold;
-            box-shadow: 5px 5px 10px rgba(0,0,0,0.3);
-            transition: transform 0.1s;
-        }
-
-        #startButton:hover {
-            transform: scale(1.1);
         }
 
         #countdown {
@@ -107,20 +89,15 @@ wagon.html<!DOCTYPE html>
         }
 
         #youtubePlayer {
-            display: none;
-            margin: 30px auto;
-            max-width: 560px;
-        }
-
-        .hidden {
-            display: none;
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
         }
     </style>
 </head>
 <body>
     <h1>🎉 WAGON 🎉</h1>
-    
-    <button id="startButton">Click to Celebrate Paul Simon!</button>
     
     <div id="countdown"></div>
     
@@ -131,9 +108,12 @@ wagon.html<!DOCTYPE html>
     
     <img id="paulImage" src="paul-simon.jpg" alt="Paul Simon">
     
+    <!-- Hidden YouTube player for audio only -->
     <div id="youtubePlayer">
-        <iframe width="560" height="315" 
-                src="https://www.youtube.com/embed/uq-gYOrU8bA?autoplay=1" 
+        <iframe id="youtubeIframe"
+                width="1" 
+                height="1" 
+                src="https://www.youtube.com/embed/jscOtHs6onw?autoplay=1&mute=0" 
                 title="Call Me Al 8-bit" 
                 frameborder="0" 
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
@@ -142,21 +122,16 @@ wagon.html<!DOCTYPE html>
     </div>
 
     <script>
-        let countdownActive = false;
-        const startButton = document.getElementById('startButton');
+        // Start countdown automatically when page loads
+        window.addEventListener('load', () => {
+            startCelebration();
+        });
+
         const countdownDisplay = document.getElementById('countdown');
         const message = document.getElementById('message');
         const paulImage = document.getElementById('paulImage');
-        const youtubePlayer = document.getElementById('youtubePlayer');
-
-        startButton.addEventListener('click', startCelebration);
 
         function startCelebration() {
-            if (countdownActive) return;
-            
-            countdownActive = true;
-            startButton.style.display = 'none';
-            
             let timeLeft = 6;
             countdownDisplay.textContent = timeLeft;
             
@@ -175,7 +150,6 @@ wagon.html<!DOCTYPE html>
             countdownDisplay.style.display = 'none';
             message.style.display = 'block';
             paulImage.style.display = 'block';
-            youtubePlayer.style.display = 'block';
             
             createConfetti();
         }
