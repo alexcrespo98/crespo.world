@@ -28,6 +28,25 @@
             text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
         }
 
+        #loveButton {
+            font-size: 1.5em;
+            padding: 15px 30px;
+            background: #ff69b4;
+            color: white;
+            border: 3px solid #000;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: 'Comic Sans MS', cursive;
+            font-weight: bold;
+            box-shadow: 5px 5px 10px rgba(0,0,0,0.3);
+            margin: 20px 0;
+            transition: transform 0.1s;
+        }
+
+        #loveButton:hover {
+            transform: scale(1.05);
+        }
+
         #countdown {
             font-size: 5em;
             font-weight: bold;
@@ -97,10 +116,16 @@
                 transform: translateY(100vh) rotate(360deg);
             }
         }
+
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <h1>🎉 Countdown to Paul Simon's Birthday 🎉</h1>
+    
+    <button id="loveButton">Click me if you love Paul Simon 💖</button>
     
     <div id="countdown"></div>
     
@@ -110,25 +135,32 @@
     </div>
     
     <img id="paulImage" src="paul-simon.jpg" alt="Paul Simon">
-    
-    <!-- Audio element for better autoplay support -->
-    <audio id="audioPlayer" autoplay loop>
-        <!-- We'll use JavaScript to play the YouTube video -->
-    </audio>
 
     <script>
-        // Start countdown and audio automatically when page loads
-        window.addEventListener('load', () => {
-            startCelebration();
-            playAudio();
-        });
-
+        let audioEnabled = false;
+        let countdownStarted = false;
+        
+        const loveButton = document.getElementById('loveButton');
         const countdownDisplay = document.getElementById('countdown');
         const message = document.getElementById('message');
         const paulImage = document.getElementById('paulImage');
 
+        // Start countdown automatically when page loads
+        window.addEventListener('load', () => {
+            startCelebration();
+        });
+
+        // Enable audio when button is clicked
+        loveButton.addEventListener('click', () => {
+            audioEnabled = true;
+            loveButton.classList.add('hidden');
+        });
+
         function startCelebration() {
-            let timeLeft = 6;
+            if (countdownStarted) return;
+            countdownStarted = true;
+            
+            let timeLeft = 10;
             countdownDisplay.textContent = timeLeft;
             
             const countdownInterval = setInterval(() => {
@@ -144,8 +176,14 @@
 
         function celebrate() {
             countdownDisplay.style.display = 'none';
+            loveButton.classList.add('hidden');
             message.style.display = 'block';
             paulImage.style.display = 'block';
+            
+            // Play audio only if button was clicked
+            if (audioEnabled) {
+                playAudio();
+            }
             
             createConfetti();
         }
