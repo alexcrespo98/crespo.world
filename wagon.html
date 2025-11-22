@@ -64,14 +64,24 @@
             max-width: 400px;
             margin: 20px auto;
             display: none;
-            animation: flip 1s steps(1) infinite, rock 0.5s ease-in-out infinite;
+            animation: flipAndRock 1s ease-in-out infinite;
             border: 5px solid #000;
             box-shadow: 10px 10px 20px rgba(0,0,0,0.5);
         }
 
-        @keyframes flip {
-            0%, 49% { transform: scaleX(1) rotate(-5deg); }
-            50%, 100% { transform: scaleX(-1) rotate(5deg); }
+        @keyframes flipAndRock {
+            0%, 24% { 
+                transform: scaleX(1) rotate(-5deg); 
+            }
+            25%, 49% { 
+                transform: scaleX(1) rotate(5deg); 
+            }
+            50%, 74% { 
+                transform: scaleX(-1) rotate(-5deg); 
+            }
+            75%, 100% { 
+                transform: scaleX(-1) rotate(5deg); 
+            }
         }
 
         .confetti {
@@ -87,17 +97,10 @@
                 transform: translateY(100vh) rotate(360deg);
             }
         }
-
-        #youtubePlayer {
-            position: absolute;
-            left: -9999px;
-            width: 1px;
-            height: 1px;
-        }
     </style>
 </head>
 <body>
-    <h1>🎉 WAGON 🎉</h1>
+    <h1>🎉 Countdown to Paul Simon's Birthday 🎉</h1>
     
     <div id="countdown"></div>
     
@@ -108,23 +111,16 @@
     
     <img id="paulImage" src="paul-simon.jpg" alt="Paul Simon">
     
-    <!-- Hidden YouTube player for audio only -->
-    <div id="youtubePlayer">
-        <iframe id="youtubeIframe"
-                width="1" 
-                height="1" 
-                src="https://www.youtube.com/embed/jscOtHs6onw?autoplay=1&mute=0" 
-                title="Call Me Al 8-bit" 
-                frameborder="0" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                allowfullscreen>
-        </iframe>
-    </div>
+    <!-- Audio element for better autoplay support -->
+    <audio id="audioPlayer" autoplay loop>
+        <!-- We'll use JavaScript to play the YouTube video -->
+    </audio>
 
     <script>
-        // Start countdown automatically when page loads
+        // Start countdown and audio automatically when page loads
         window.addEventListener('load', () => {
             startCelebration();
+            playAudio();
         });
 
         const countdownDisplay = document.getElementById('countdown');
@@ -152,6 +148,15 @@
             paulImage.style.display = 'block';
             
             createConfetti();
+        }
+
+        function playAudio() {
+            // Create a hidden iframe for YouTube audio
+            const iframe = document.createElement('iframe');
+            iframe.setAttribute('src', 'https://www.youtube.com/embed/jscOtHs6onw?autoplay=1&loop=1&playlist=jscOtHs6onw');
+            iframe.setAttribute('allow', 'autoplay');
+            iframe.setAttribute('style', 'display:none');
+            document.body.appendChild(iframe);
         }
 
         function createConfetti() {
