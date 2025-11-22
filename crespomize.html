@@ -208,6 +208,25 @@
     .smoothness-btn:active {
       transform: scale(0.95);
     }
+    .export-btn {
+      position: absolute;
+      top: 1.5em;
+      right: 1.5em;
+      background: #0f0;
+      color: #000;
+      border: 2px solid #0f0;
+      padding: 0.4em 0.8em;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.85em;
+      font-weight: bold;
+      transition: all 0.3s;
+      border-radius: 3px;
+    }
+    .export-btn:hover {
+      background: #00d2d3;
+      box-shadow: 0 0 10px #0f0;
+    }
   </style>
 </head>
 <body>
@@ -294,20 +313,25 @@
       return year >= 2020 && year <= currentYear + 1;
     }
 
-    // Calculate moving average based on days
+    // Calculate centered moving average based on days
     function calculateMovingAverageByDays(data, days = 7) {
       const result = [];
+      const halfWindow = Math.floor(days / 2);
       
       for (let i = 0; i < data.length; i++) {
         const currentDate = new Date(data[i].x);
-        const cutoffDate = new Date(currentDate);
-        cutoffDate.setDate(cutoffDate.getDate() - days);
+        const startDate = new Date(currentDate);
+        const endDate = new Date(currentDate);
+        
+        // Center the window around the current point
+        startDate.setDate(startDate.getDate() - halfWindow);
+        endDate.setDate(endDate.getDate() + (days - halfWindow));
         
         // Find all points within the time window
         const windowPoints = [];
         for (let j = 0; j < data.length; j++) {
           const pointDate = new Date(data[j].x);
-          if (pointDate >= cutoffDate && pointDate <= currentDate) {
+          if (pointDate >= startDate && pointDate <= endDate) {
             windowPoints.push(data[j].y);
           }
         }
@@ -323,6 +347,47 @@
       }
       
       return result;
+    }
+
+    function exportChart(chartId, title) {
+      const chart = chartInstances[chartId];
+      if (!chart) return;
+
+      const canvas = chart.canvas;
+      
+      // Create a temporary canvas with white background and title
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height + 80; // Extra space for title
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      // White background
+      tempCtx.fillStyle = '#ffffff';
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Add title and account info
+      tempCtx.fillStyle = '#000000';
+      tempCtx.font = 'bold 24px monospace';
+      tempCtx.textAlign = 'center';
+      tempCtx.fillText(title, tempCanvas.width / 2, 35);
+      
+      tempCtx.font = '16px monospace';
+      const accountText = isMoonMediaTotal ? 'All MoonMedia' : '@' + selectedAccount;
+      let rangeText = '';
+      if (selectedTimeRange === 'all') rangeText = '(All Time)';
+      else if (selectedTimeRange === 365) rangeText = '(Last 1 Year)';
+      else if (selectedTimeRange === 180) rangeText = '(Last 6 Months)';
+      else if (selectedTimeRange === 30) rangeText = '(Last 1 Month)';
+      tempCtx.fillText(`${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
+      
+      // Draw the chart
+      tempCtx.drawImage(canvas, 0, 80);
+      
+      // Download
+      const link = document.createElement('a');
+      link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}.png`;
+      link.href = tempCanvas.toDataURL('image/png');
+      link.click();
     }
 
     async function loadSheetData() {
@@ -758,6 +823,11 @@
       
       chart.options.scales.y.type = newType;
       
+      // Also toggle trendline axis if it exists
+      if (chart.options.scales.y1) {
+        chart.options.scales.y1.type = newType;
+      }
+      
       if (chartId === 'correlation' && chart.options.scales.x) {
         chart.options.scales.x.type = newType;
       }
@@ -865,7 +935,15 @@
       scaleBadge.onclick = () => toggleLogScale(chartId);
       
       header.appendChild(scaleBadge);
+      
+      // Add export button
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'export-btn';
+      exportBtn.textContent = '💾 Export';
+      exportBtn.onclick = () => exportChart(chartId, title);
+      
       chartDiv.appendChild(header);
+      chartDiv.appendChild(exportBtn);
       chartDiv.appendChild(canvas);
       container.appendChild(chartDiv);
 
@@ -992,7 +1070,14 @@
         header.appendChild(smoothnessControls);
       }
       
+      // Add export button
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'export-btn';
+      exportBtn.textContent = '💾 Export';
+      exportBtn.onclick = () => exportChart(chartId, title);
+      
       chartDiv.appendChild(header);
+      chartDiv.appendChild(exportBtn);
       chartDiv.appendChild(canvas);
       container.appendChild(chartDiv);
 
@@ -1010,7 +1095,7 @@
           pointRadius: 0,
           tension: 0.4,
           yAxisID: 'y1',
-          hidden: true
+          hidden: false  // Start visible
         });
       }
       
@@ -1019,6 +1104,14 @@
         min: Math.min(...allValues),
         max: Math.max(...allValues)
       };
+
+      // Get trendline values for auto-scaling
+      const trendlineValues = includeTrendline 
+        ? datasets.find(ds => ds.label === 'Trend').data.map(d => d.y).filter(v => v > 0)
+        : [];
+      const trendlineRange = trendlineValues.length > 0 
+        ? { min: Math.min(...trendlineValues), max: Math.max(...trendlineValues) }
+        : dataRange;
 
       const scales = {
         x: {
@@ -1046,14 +1139,14 @@
 
       if (includeTrendline) {
         scales.y1 = {
-          type: 'linear',
+          type: useLog ? 'logarithmic' : 'linear',
           position: 'right',
-          display: false,
+          display: false,  // Start hidden
           ticks: {
             color: '#ffff00',
             font: { family: 'monospace' },
             callback: function(value) {
-              return formatNumberAxisSmart(value, dataRange);
+              return formatNumberAxisSmart(value, trendlineRange);
             }
           },
           grid: {
@@ -1300,7 +1393,15 @@
         scaleBadge.onclick = () => toggleLogScale('correlation');
         
         header.appendChild(scaleBadge);
+        
+        // Add export button
+        const exportBtn = document.createElement('button');
+        exportBtn.className = 'export-btn';
+        exportBtn.textContent = '💾 Export';
+        exportBtn.onclick = () => exportChart('correlation', 'Likes vs Views Correlation');
+        
         chartDiv.appendChild(header);
+        chartDiv.appendChild(exportBtn);
         chartDiv.appendChild(canvas);
         chartsContainer.appendChild(chartDiv);
 
