@@ -1,0 +1,223 @@
+wagon.html<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wagon - Paul Simon Celebration!</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(45deg, #ff00ff, #00ffff, #ffff00);
+            background-size: 400% 400%;
+            animation: gradientShift 3s ease infinite;
+            font-family: 'Comic Sans MS', cursive;
+            text-align: center;
+            overflow-x: hidden;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        h1 {
+            font-size: 3em;
+            margin: 20px 0;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+        }
+
+        #startButton {
+            font-size: 2em;
+            padding: 20px 40px;
+            background: #ff0000;
+            color: white;
+            border: 5px solid #000;
+            border-radius: 15px;
+            cursor: pointer;
+            font-family: 'Comic Sans MS', cursive;
+            font-weight: bold;
+            box-shadow: 5px 5px 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+
+        #startButton:hover {
+            transform: scale(1.1);
+        }
+
+        #countdown {
+            font-size: 5em;
+            font-weight: bold;
+            margin: 30px 0;
+            text-shadow: 4px 4px 8px rgba(0,0,0,0.5);
+        }
+
+        #message {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 20px auto;
+            max-width: 800px;
+            display: none;
+            animation: rock 0.5s ease-in-out infinite, colorFlash 0.3s infinite;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+        }
+
+        @keyframes rock {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
+
+        @keyframes colorFlash {
+            0% { color: #ff0000; }
+            16% { color: #ff7700; }
+            33% { color: #ffff00; }
+            50% { color: #00ff00; }
+            66% { color: #0000ff; }
+            83% { color: #ff00ff; }
+            100% { color: #ff0000; }
+        }
+
+        #paulImage {
+            max-width: 400px;
+            margin: 20px auto;
+            display: none;
+            animation: flip 1s steps(1) infinite, rock 0.5s ease-in-out infinite;
+            border: 5px solid #000;
+            box-shadow: 10px 10px 20px rgba(0,0,0,0.5);
+        }
+
+        @keyframes flip {
+            0%, 49% { transform: scaleX(1) rotate(-5deg); }
+            50%, 100% { transform: scaleX(-1) rotate(5deg); }
+        }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            top: -10px;
+            animation: fall linear forwards;
+        }
+
+        @keyframes fall {
+            to {
+                transform: translateY(100vh) rotate(360deg);
+            }
+        }
+
+        #youtubePlayer {
+            display: none;
+            margin: 30px auto;
+            max-width: 560px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎉 WAGON 🎉</h1>
+    
+    <button id="startButton">Click to Celebrate Paul Simon!</button>
+    
+    <div id="countdown"></div>
+    
+    <div id="message">
+        It doesn't need to be your birthday for us to celebrate :)<br>
+        HAPPY BIRTHDAY PAUL!
+    </div>
+    
+    <img id="paulImage" src="paul-simon.jpg" alt="Paul Simon">
+    
+    <div id="youtubePlayer">
+        <iframe width="560" height="315" 
+                src="https://www.youtube.com/embed/uq-gYOrU8bA?autoplay=1" 
+                title="Call Me Al 8-bit" 
+                frameborder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                allowfullscreen>
+        </iframe>
+    </div>
+
+    <script>
+        let countdownActive = false;
+        const startButton = document.getElementById('startButton');
+        const countdownDisplay = document.getElementById('countdown');
+        const message = document.getElementById('message');
+        const paulImage = document.getElementById('paulImage');
+        const youtubePlayer = document.getElementById('youtubePlayer');
+
+        startButton.addEventListener('click', startCelebration);
+
+        function startCelebration() {
+            if (countdownActive) return;
+            
+            countdownActive = true;
+            startButton.style.display = 'none';
+            
+            let timeLeft = 6;
+            countdownDisplay.textContent = timeLeft;
+            
+            const countdownInterval = setInterval(() => {
+                timeLeft--;
+                countdownDisplay.textContent = timeLeft;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(countdownInterval);
+                    celebrate();
+                }
+            }, 1000);
+        }
+
+        function celebrate() {
+            countdownDisplay.style.display = 'none';
+            message.style.display = 'block';
+            paulImage.style.display = 'block';
+            youtubePlayer.style.display = 'block';
+            
+            createConfetti();
+        }
+
+        function createConfetti() {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+            const confettiCount = 150;
+            
+            for (let i = 0; i < confettiCount; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                    confetti.style.animationDelay = Math.random() * 0.5 + 's';
+                    
+                    document.body.appendChild(confetti);
+                    
+                    setTimeout(() => {
+                        confetti.remove();
+                    }, 5000);
+                }, i * 30);
+            }
+            
+            // Keep creating confetti
+            setInterval(() => {
+                for (let i = 0; i < 10; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                    
+                    document.body.appendChild(confetti);
+                    
+                    setTimeout(() => {
+                        confetti.remove();
+                    }, 5000);
+                }
+            }, 300);
+        }
+    </script>
+</body>
+</html>
