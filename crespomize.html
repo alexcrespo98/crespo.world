@@ -181,6 +181,33 @@
       background: #333;
       color: #666;
     }
+    .smoothness-controls {
+      display: inline-block;
+      margin-left: 0.3em;
+      vertical-align: middle;
+    }
+    .smoothness-btn {
+      background: #ffff00;
+      color: #000;
+      border: 2px solid #ffff00;
+      padding: 0.2em 0.5em;
+      margin: 0 0.1em;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.8em;
+      font-weight: bold;
+      transition: all 0.3s;
+      user-select: none;
+      display: inline-block;
+      min-width: 30px;
+    }
+    .smoothness-btn:hover {
+      background: #ffdd00;
+      box-shadow: 0 0 5px #ffff00;
+    }
+    .smoothness-btn:active {
+      transform: scale(0.95);
+    }
   </style>
 </head>
 <body>
@@ -253,6 +280,7 @@
     let selectedTimeRange = 'all';
     let chartInstances = {};
     let trendlineStates = {};
+    let trendlineSmoothnessLevels = {}; // Track smoothness for each chart
 
     // Validate date - reject dates before 2020 or in far future
     function isValidDate(date) {
@@ -266,7 +294,7 @@
       return year >= 2020 && year <= currentYear + 1;
     }
 
-    // Calculate moving average for smooth trendline with larger window
+    // Calculate moving average for smooth trendline
     function calculateMovingAverage(data, windowSize = 10) {
       const result = [];
       
@@ -739,11 +767,9 @@
       const chart = chartInstances[chartId];
       if (!chart) return;
 
-      // Toggle the state
       trendlineStates[chartId] = !trendlineStates[chartId];
       const showTrendline = trendlineStates[chartId];
 
-      // Find and update the trendline dataset
       const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
       if (trendlineDataset) {
         trendlineDataset.hidden = !showTrendline;
@@ -751,7 +777,6 @@
 
       chart.update();
 
-      // Update badge
       const badge = document.querySelector(`[data-trendline-id="${chartId}"]`);
       if (badge) {
         if (showTrendline) {
@@ -764,9 +789,47 @@
       }
     }
 
+    function adjustTrendlineSmoothness(chartId, direction) {
+      const chart = chartInstances[chartId];
+      if (!chart) return;
+
+      // Get current smoothness level (default is 3 - medium)
+      if (trendlineSmoothnessLevels[chartId] === undefined) {
+        trendlineSmoothnessLevels[chartId] = 3;
+      }
+
+      // Adjust smoothness (1 = very smooth, 5 = less smooth)
+      trendlineSmoothnessLevels[chartId] += direction;
+      trendlineSmoothnessLevels[chartId] = Math.max(1, Math.min(5, trendlineSmoothnessLevels[chartId]));
+
+      // Recalculate trendline with new smoothness
+      const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
+      if (!dataDataset) return;
+
+      const dataLength = dataDataset.data.length;
+      
+      // Calculate window size based on smoothness level
+      // Level 1 (smoothest): dataLength / 4
+      // Level 5 (least smooth): dataLength / 20
+      const smoothnessFactors = [4, 6, 8, 12, 20]; // Inverse - smaller = smoother
+      const windowSize = Math.max(5, Math.floor(dataLength / smoothnessFactors[trendlineSmoothnessLevels[chartId] - 1]));
+      
+      const trendlineData = calculateMovingAverage(dataDataset.data, windowSize);
+
+      const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
+      if (trendlineDataset) {
+        trendlineDataset.data = trendlineData;
+      }
+
+      chart.update();
+
+      console.log(`Trendline smoothness for ${chartId}: Level ${trendlineSmoothnessLevels[chartId]}, Window: ${windowSize}`);
+    }
+
     function renderDashboard() {
       chartInstances = {};
       trendlineStates = {};
+      trendlineSmoothnessLevels = {};
 
       const statsContainer = document.getElementById('statsSummary');
       
@@ -815,7 +878,7 @@
         const followerValues = accountData.followersHistory.map(h => h.value);
         const useLogFollowers = shouldUseLogScale(followerValues);
         
-        createTimeBasedChart(chartsContainer, '👥 Followers Per Scrape', 
+        createLineChart(chartsContainer, '👥 Followers Per Scrape', 
           accountData.followersHistory,
           [{
             label: 'Followers',
@@ -827,8 +890,7 @@
             fill: true
           }],
           useLogFollowers,
-          'followers-history',
-          false
+          'followers-history'
         );
       }
 
@@ -836,7 +898,7 @@
         const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
         const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
         
-        createTimeBasedChart(chartsContainer, '❤️ Total Likes Per Scrape',
+        createLineChart(chartsContainer, '❤️ Total Likes Per Scrape',
           accountData.totalLikesHistory,
           [{
             label: 'Total Likes',
@@ -848,8 +910,7 @@
             fill: true
           }],
           useLogLikesHistory,
-          'likes-history',
-          false
+          'likes-history'
         );
       }
 
@@ -960,6 +1021,90 @@
       }
     }
 
+    // Line chart for Followers and Total Likes (connected lines, no trendline)
+    function createLineChart(container, title, dataPoints, datasets, useLogScale, chartId) {
+      const chartDiv = document.createElement('div');
+      chartDiv.className = 'chart-container';
+      const canvasId = 'chart-' + Math.random().toString(36).substr(2, 9);
+      
+      const scaleText = useLogScale ? 'LOG SCALE' : 'LINEAR';
+      const badgeClass = useLogScale ? '' : 'inactive';
+      const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
+      
+      chartDiv.innerHTML = `<h3>${title}${scaleBadge}</h3><canvas id="${canvasId}"></canvas>`;
+      container.appendChild(chartDiv);
+
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      
+      const yValues = datasets[0].data.map(d => d.y);
+      const dataRange = {
+        min: Math.min(...yValues),
+        max: Math.max(...yValues)
+      };
+
+      const options = {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: {
+          mode: 'nearest',
+          axis: 'x',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#0f0', font: { family: 'monospace' } }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                let label = context.dataset.label || '';
+                if (label) label += ': ';
+                label += formatNumber(context.parsed.y);
+                return label;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'day',
+              displayFormats: {
+                day: 'MM/dd/yy'
+              }
+            },
+            ticks: { 
+              color: '#0f0',
+              maxRotation: 45,
+              minRotation: 45
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          },
+          y: {
+            type: useLogScale ? 'logarithmic' : 'linear',
+            ticks: { 
+              color: '#0f0',
+              maxTicksLimit: 8,
+              callback: function(value) {
+                return formatNumberAxisSmart(value, dataRange);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          }
+        }
+      };
+
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: datasets },
+        options: options
+      });
+
+      chartInstances[chartId] = chart;
+    }
+
+    // Time-based scatter chart with optional trendline
     function createTimeBasedChart(container, title, dataPoints, datasets, useLogScale, chartId, showTrendline = false) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
@@ -970,27 +1115,29 @@
       const scaleBadge = `<span class="scale-badge ${badgeClass}" data-chart-id="${chartId}" onclick="toggleLogScale('${chartId}')">${scaleText}</span>`;
       
       let trendlineBadge = '';
+      let smoothnessControls = '';
       if (showTrendline) {
-        trendlineStates[chartId] = true; // Start with trendline visible
+        trendlineStates[chartId] = true;
+        trendlineSmoothnessLevels[chartId] = 3; // Start at medium smoothness
         trendlineBadge = `<span class="trendline-badge" data-trendline-id="${chartId}" onclick="toggleTrendline('${chartId}')">📈 TREND ON</span>`;
+        smoothnessControls = `<span class="smoothness-controls">
+          <button class="smoothness-btn" onclick="adjustTrendlineSmoothness('${chartId}', -1)" title="Smoother">▼</button>
+          <button class="smoothness-btn" onclick="adjustTrendlineSmoothness('${chartId}', 1)" title="Less Smooth">▲</button>
+        </span>`;
       }
       
-      chartDiv.innerHTML = `<h3>${title}${scaleBadge}${trendlineBadge}</h3><canvas id="${canvasId}"></canvas>`;
+      chartDiv.innerHTML = `<h3>${title}${scaleBadge}${trendlineBadge}${smoothnessControls}</h3><canvas id="${canvasId}"></canvas>`;
       container.appendChild(chartDiv);
 
       const ctx = document.getElementById(canvasId).getContext('2d');
       
-      // Build final datasets array - scatter points first, then trendline
       let finalDatasets = [];
       
-      // Add scatter points first (renders below)
-      datasets[0].order = 2;  // Higher order renders below
+      datasets[0].order = 2;
       finalDatasets.push(datasets[0]);
       
-      // Add trendline after if requested (renders on top)
       if (showTrendline && datasets[0].data.length > 3) {
-        // Use larger window for smoother line
-        const windowSize = Math.max(15, Math.floor(datasets[0].data.length / 8));
+        const windowSize = Math.max(10, Math.floor(datasets[0].data.length / 8));
         const trendlineData = calculateMovingAverage(datasets[0].data, windowSize);
         
         finalDatasets.push({
@@ -1004,7 +1151,7 @@
           pointRadius: 0,
           pointHoverRadius: 0,
           fill: false,
-          order: 1,  // Lower order renders on top
+          order: 1,
           borderCapStyle: 'round',
           borderJoinStyle: 'round'
         });
