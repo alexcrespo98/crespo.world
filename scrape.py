@@ -3,9 +3,11 @@
 Multi-Account TikTok Analytics Tracker
 - Auto-detects accounts from existing Excel file
 - Scrapes multiple TikTok accounts
-- Always fetches 100 posts per account
+- Configurable scrape days (default: 100, or deep scrape for all available)
 - Updates Excel file with separate tabs for each account
 - Uses yt-dlp for detailed per-post metrics
+- Retries failed screenshot scrapes at the end
+- Auto-syncs to Google Drive via rclone
 """
 
 import csv
@@ -26,7 +28,6 @@ import time
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 OUTPUT_EXCEL = "tiktok_analytics_tracker.xlsx"
-MAX_POSTS = 100  # Always scrape 100 posts
 
 
 # -------------------------
@@ -34,7 +35,6 @@ MAX_POSTS = 100  # Always scrape 100 posts
 # -------------------------
 def install_package(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
-
 
 def ensure_packages():
     packages_needed = []
@@ -198,14 +198,14 @@ def scrape_tiktok_profile(username, max_videos=100):
     import yt_dlp
     from datetime import datetime as _dt
 
-    print(f"  🔍 Scraping {max_videos} posts with yt-dlp...")
+    print(f"  🔍 Scraping {max_videos if max_videos != 9999999 else 'ALL'} posts with yt-dlp...")
 
     ydl_opts = {
         'quiet': False,
         'no_warnings': False,
         'extract_flat': False,
         'skip_download': True,
-        'playlistend': max_videos,
+        'playlistend': max_videos if max_videos != 9999999 else None,
         'writeinfojson': False,
         'ignoreerrors': True,
     }
@@ -236,7 +236,9 @@ def scrape_tiktok_profile(username, max_videos=100):
         if not entries and 'url' in playlist_info:
             entries = [playlist_info]
 
-        for i, entry in enumerate(entries[:max_videos]):
+        posts_to_scrape = entries if max_videos == 9999999 else entries[:max_videos]
+
+        for i, entry in enumerate(posts_to_scrape):
             try:
                 if isinstance(entry, dict) and entry.get('_type') == 'url':
                     with yt_dlp.YoutubeDL({'quiet': True, 'ignoreerrors': True}) as ydl_single:
@@ -336,6 +338,48 @@ def save_to_excel(all_account_data):
 
 
 # -------------------------
+# Google Drive sync with rclone
+# -------------------------
+def sync_to_google_drive():
+    """Upload the Excel file to Google Drive using rclone"""
+    print("\n" + "="*60)
+    print("☁️  SYNCING TO GOOGLE DRIVE")
+    print("="*60)
+    
+    excel_path = os.path.join(r"C:\Users\alexc\Desktop", OUTPUT_EXCEL)
+    
+    if not os.path.exists(excel_path):
+        print(f"❌ File not found: {excel_path}")
+        return False
+    
+    try:
+        print(f"\n📤 Uploading {OUTPUT_EXCEL} to Google Drive...")
+        
+        # Run rclone copy command
+        result = subprocess.run(
+            ['rclone', 'copy', excel_path, 'gdrive:'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        print("✅ Successfully synced to Google Drive!")
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ rclone sync failed: {e}")
+        print(f"Error output: {e.stderr}")
+        return False
+    except FileNotFoundError:
+        print("❌ rclone not found. Make sure rclone is installed and in your PATH.")
+        print("   You can install it with: winget install Rclone.Rclone")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error during sync: {e}")
+        return False
+
+
+# -------------------------
 # Dashboard
 # -------------------------
 def show_account_summary(username, df):
@@ -370,17 +414,87 @@ def show_account_summary(username, df):
 
 
 # -------------------------
-# Main loop
+# Get scrape configuration
 # -------------------------
-def run_scrape():
+def get_scrape_config():
+    """Ask user for scrape configuration at the start"""
+    print("\n" + "="*60)
+    print("⚙️  SCRAPE CONFIGURATION")
+    print("="*60)
+    
+    while True:
+        print("\nHow many posts would you like to scrape per account?")
+        print("  • Enter a number (default: 100)")
+        print("  • Type 'deep' for maximum scrape (all available)")
+        
+        user_input = input("\n📊 Posts to scrape [100]: ").strip().lower()
+        
+        if user_input == "":
+            return 100
+        elif user_input == "deep":
+            print("\n🔥 Deep scrape selected - will scrape ALL available posts!")
+            return 9999999  # Large number to get all posts
+        else:
+            try:
+                num_posts = int(user_input)
+                if num_posts > 0:
+                    print(f"\n✅ Will scrape {num_posts} posts per account")
+                    return num_posts
+                else:
+                    print("❌ Please enter a positive number")
+            except ValueError:
+                print("❌ Invalid input. Please enter a number or 'deep'")
+
+
+# -------------------------
+# Retry failed screenshot scrapes
+# -------------------------
+def retry_failed_scrapes(failed_accounts):
+    """Retry screenshot scraping for accounts that returned N/A"""
+    if not failed_accounts:
+        return {}
+    
+    print("\n" + "="*60)
+    print("🔄 RETRY FAILED SCREENSHOT SCRAPES")
+    print("="*60)
+    print(f"\nThe following accounts had N/A for follower count:")
+    for username in failed_accounts:
+        print(f"  • @{username}")
+    
+    while True:
+        retry = input("\n🔄 Would you like to retry screenshot scraping for these accounts? (y/n): ").strip().lower()
+        if retry in ["y", "yes"]:
+            break
+        elif retry in ["n", "no"]:
+            return {}
+        else:
+            print("❌ Please type 'y' or 'n'.")
+    
+    print("\n📸 Retrying screenshot scrapes...")
+    retry_results = {}
+    
+    for username in failed_accounts:
+        print(f"\n  🔄 Retrying @{username}...")
+        tokcount_followers, tokcount_likes = get_tokcount_stats(username)
+        if tokcount_followers:
+            retry_results[username] = (tokcount_followers, tokcount_likes)
+            print(f"  ✅ Successfully retrieved: {tokcount_followers:,} followers")
+        else:
+            print(f"  ❌ Still N/A")
+    
+    return retry_results
+
+
+# -------------------------
+# Main scrape function
+# -------------------------
+def run_scrape(max_posts=None):
     import pandas as pd
     
     ensure_packages()
     
     print("\n" + "="*60)
     print("🎯 Multi-Account TikTok Analytics Tracker")
-    print("="*60)
-    print(f"📊 Scraping {MAX_POSTS} posts per account")
     print("="*60)
     
     # Auto-detect accounts from Excel file
@@ -390,13 +504,20 @@ def run_scrape():
         print("\n❌ Could not detect accounts. Make sure the Excel file exists!")
         return
     
-    print(f"\n✅ Will update {len(accounts_to_scrape)} account(s)")
+    # Get scrape configuration if not provided
+    if max_posts is None:
+        max_posts = get_scrape_config()
+    
+    scrape_type = "ALL posts" if max_posts == 9999999 else f"{max_posts} posts"
+    print(f"\n📊 Scraping {scrape_type} per account")
+    print(f"✅ Will update {len(accounts_to_scrape)} account(s)")
     
     # Load existing data
     existing_data = load_existing_excel()
     timestamp_col = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     all_account_data = {}
+    failed_screenshot_accounts = []
     
     # Scrape each account
     for idx, username in enumerate(accounts_to_scrape, 1):
@@ -407,8 +528,12 @@ def run_scrape():
         # Get TokCount stats
         tokcount_followers, tokcount_likes = get_tokcount_stats(username)
         
+        # Track failed screenshot scrapes
+        if tokcount_followers is None:
+            failed_screenshot_accounts.append(username)
+        
         # Get detailed post metrics
-        videos_data, ytdlp_followers, ytdlp_likes = scrape_tiktok_profile(username, MAX_POSTS)
+        videos_data, ytdlp_followers, ytdlp_likes = scrape_tiktok_profile(username, max_posts)
         
         # Use best available data
         followers = tokcount_followers if tokcount_followers else ytdlp_followers
@@ -422,25 +547,27 @@ def run_scrape():
         # Show summary
         show_account_summary(username, df)
     
+    # Retry failed screenshot scrapes
+    retry_results = retry_failed_scrapes(failed_screenshot_accounts)
+    
+    # Update data with retry results
+    if retry_results:
+        for username, (followers, total_likes) in retry_results.items():
+            df = all_account_data[username]
+            df.loc["followers", timestamp_col] = followers
+            df.loc["total_likes", timestamp_col] = total_likes
+            all_account_data[username] = df
+    
     # Save to Excel
     print("\n" + "="*60)
     save_to_excel(all_account_data)
     
+    # Sync to Google Drive
+    sync_to_google_drive()
+    
     print("\n✅ All accounts scraped successfully!")
     print(f"📁 Updated: '{OUTPUT_EXCEL}'")
-    print("="*60)
-    
-    # Ask if user wants to re-scrape
-    while True:
-        again = input("\n🔄 Would you like to re-scrape and check for changes? (y/n): ").strip().lower()
-        if again in ["y", "yes"]:
-            run_scrape()
-            break
-        elif again in ["n", "no"]:
-            print("\n👋 Done. Exiting.")
-            break
-        else:
-            print("❌ Please type 'y' or 'n'.")
+    print("="*60 + "\n")
 
 
 if __name__ == "__main__":
