@@ -414,7 +414,7 @@
       tempCanvas.height = canvas.height + 80; // Extra space for title
       const tempCtx = tempCanvas.getContext('2d');
       
-      // White background
+      // Black background
       tempCtx.fillStyle = '#000000';
       tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
       
@@ -431,14 +431,16 @@
       else if (selectedTimeRange === 365) rangeText = '(Last 1 Year)';
       else if (selectedTimeRange === 180) rangeText = '(Last 6 Months)';
       else if (selectedTimeRange === 30) rangeText = '(Last 1 Month)';
-      tempCtx.fillText(`${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
+      
+      const platformEmoji = selectedPlatform === 'instagram' ? '📸' : '🎵';
+      tempCtx.fillText(`${platformEmoji} ${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
       
       // Draw the chart
       tempCtx.drawImage(canvas, 0, 80);
       
       // Download
       const link = document.createElement('a');
-      link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}.png`;
+      link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}_${selectedPlatform}.png`;
       link.href = tempCanvas.toDataURL('image/png');
       link.click();
     }
@@ -1433,6 +1435,8 @@
 
       const statsContainer = document.getElementById('statsSummary');
       
+      const contentType = selectedPlatform === 'instagram' ? 'REELS' : 'POSTS';
+      
       let statsHTML = `
         <div class="stat-card">
           <h4>👥 FOLLOWERS</h4>
@@ -1443,7 +1447,7 @@
           <div class="value">${formatNumber(accountData.totalLikes)}</div>
         </div>
         <div class="stat-card">
-          <h4>🎬 POSTS TRACKED</h4>
+          <h4>🎬 ${contentType} TRACKED</h4>
           <div class="value">${accountData.postsScraped}</div>
         </div>
         <div class="stat-card">
@@ -1517,7 +1521,4 @@
       if (accountData.videos.length > 0) {
         const viewsData = accountData.videos.map(v => v.views);
         const likesData = accountData.videos.map(v => v.likes);
-        const useLogViews = shouldUseLogScale(viewsData);
-        const useLogLikes = shouldUseLogScale(likesData);
-
-        createTimeBasedChart(chartsContainer, 
+        const useLogVi
