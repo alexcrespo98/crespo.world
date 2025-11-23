@@ -1,7 +1,8 @@
 // crespomize-display.js
 // UI and chart functions for crespomize analytics
 
-// Note: State variables are defined in crespomize-data.js which loads first
+// This file depends on crespomize-data.js being loaded first.
+// State is managed via the AppState namespace defined in crespomize-data.js.
 
 function selectPlatform(platform) {
   AppState.selectedPlatform = platform;
