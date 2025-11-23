@@ -253,57 +253,41 @@
     <a href="crespomize.html">crespomize</a>
   </nav>
 
-  <h1>📊 crespomize analytics</h1>
+  <h1>crespomize analytics</h1>
   
   <div class="container">
     <!-- Step 0: Platform selection -->
     <div id="step0">
       <div class="question">which platform?</div>
-      <button class="platform-btn instagram" onclick="selectPlatform('instagram')">📸 Instagram Reels</button>
-      <button class="platform-btn tiktok" onclick="selectPlatform('tiktok')">🎵 TikTok</button>
+      <button class="platform-btn instagram" onclick="selectPlatform('instagram')">Instagram Reels</button>
+      <button class="platform-btn tiktok" onclick="selectPlatform('tiktok')">TikTok</button>
     </div>
 
     <!-- Step 1: Select account -->
     <div id="step1" class="hidden">
       <div class="question">pick a company:</div>
-      <select id="accountSelect">
+      <select id="accountSelect" onchange="onAccountChange()">
         <option value="">loading accounts...</option>
       </select>
       <br>
-      <button onclick="nextStep(1)">next</button>
       <button onclick="backToStep(0)">← back</button>
-    </div>
-
-    <!-- Step 2: Demo question -->
-    <div id="step2" class="hidden">
-      <div class="question">want demo analytics or something specific?</div>
-      <button onclick="nextStep(2)">demo analytics - show me everything</button>
-      <button onclick="nextStep(3)">something specific</button>
-      <button onclick="backToStep(1)">← back</button>
     </div>
 
     <!-- Step 2.5: Time range selection -->
     <div id="step2_5" class="hidden">
       <div class="question">select time range for analysis:</div>
       <div class="time-range-buttons">
-        <button onclick="selectTimeRange('all')">📅 All Time</button>
-        <button onclick="selectTimeRange(365)">📆 1 Year</button>
-        <button onclick="selectTimeRange(180)">📆 6 Months</button>
-        <button onclick="selectTimeRange(30)">📆 1 Month</button>
+        <button onclick="selectTimeRange('all')">All Time</button>
+        <button onclick="selectTimeRange(365)">1 Year</button>
+        <button onclick="selectTimeRange(180)">6 Months</button>
+        <button onclick="selectTimeRange(30)">1 Month</button>
       </div>
-      <button onclick="backToStep(2)">← back</button>
-    </div>
-
-    <!-- Step 3: Coming soon -->
-    <div id="step3" class="hidden">
-      <div class="question">custom options coming soon! 🚀</div>
-      <button onclick="selectTimeRange('all')">just show me the demo for now</button>
-      <button onclick="backToStep(2)">← back</button>
+      <button onclick="backToStep(1)">← back</button>
     </div>
 
     <!-- Charts display -->
     <div id="charts" class="hidden">
-      <div class="question">📈 <span id="platformIcon"></span> analytics for @<span id="accountName"></span> <span id="timeRangeLabel"></span></div>
+      <div class="question">analytics for @<span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
       <!-- Summary stats -->
       <div class="stats-summary" id="statsSummary"></div>
@@ -321,5 +305,17 @@
   <script src="crespomize-data.js"></script>
   <!-- Load display and chart functions -->
   <script src="crespomize-display.js"></script>
+  
+  <script>
+    function onAccountChange() {
+      const selectedAccount = document.getElementById('accountSelect').value;
+      if (selectedAccount) {
+        AppState.selectedAccount = selectedAccount;
+        AppState.isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
+        document.getElementById('step1').classList.add('hidden');
+        document.getElementById('step2_5').classList.remove('hidden');
+      }
+    }
+  </script>
 </body>
 </html>
