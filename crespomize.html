@@ -376,9 +376,11 @@
         const startDate = new Date(currentDate);
         const endDate = new Date(currentDate);
         
+        // Center the window around the current point
         startDate.setDate(startDate.getDate() - halfWindow);
         endDate.setDate(endDate.getDate() + (days - halfWindow));
         
+        // Find all points within the time window
         const windowPoints = [];
         for (let j = 0; j < data.length; j++) {
           const pointDate = new Date(data[j].x);
@@ -387,6 +389,7 @@
           }
         }
         
+        // Calculate average
         if (windowPoints.length > 0) {
           const sum = windowPoints.reduce((acc, val) => acc + val, 0);
           const avg = sum / windowPoints.length;
@@ -405,14 +408,17 @@
 
       const canvas = chart.canvas;
       
+      // Create a temporary canvas with white background and title
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height + 80;
+      tempCanvas.height = canvas.height + 80; // Extra space for title
       const tempCtx = tempCanvas.getContext('2d');
       
+      // White background
       tempCtx.fillStyle = '#000000';
       tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
       
+      // Add title and account info
       tempCtx.fillStyle = '#ffffff';
       tempCtx.font = 'bold 24px monospace';
       tempCtx.textAlign = 'center';
@@ -427,8 +433,10 @@
       else if (selectedTimeRange === 30) rangeText = '(Last 1 Month)';
       tempCtx.fillText(`${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
       
+      // Draw the chart
       tempCtx.drawImage(canvas, 0, 80);
       
+      // Download
       const link = document.createElement('a');
       link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}.png`;
       link.href = tempCanvas.toDataURL('image/png');
@@ -1040,6 +1048,7 @@
       
       chart.options.scales.y.type = newType;
       
+      // Also toggle trendline axis if it exists
       if (chart.options.scales.y1) {
         chart.options.scales.y1.type = newType;
       }
@@ -1074,6 +1083,7 @@
         trendlineDataset.hidden = !showTrendline;
       }
 
+      // Toggle right y-axis visibility
       if (chart.options.scales.y1) {
         chart.options.scales.y1.display = showTrendline;
       }
@@ -1091,6 +1101,7 @@
         }
       }
 
+      // Update smoothness controls visibility
       const controls = document.querySelector(`[data-smoothness-controls="${chartId}"]`);
       if (controls) {
         controls.style.display = showTrendline ? 'inline-block' : 'none';
@@ -1101,13 +1112,16 @@
       const chart = chartInstances[chartId];
       if (!chart) return;
 
+      // Get current days average (default is 7)
       if (trendlineDaysAverage[chartId] === undefined) {
         trendlineDaysAverage[chartId] = 7;
       }
 
+      // Adjust days (minimum 1)
       trendlineDaysAverage[chartId] += direction;
       trendlineDaysAverage[chartId] = Math.max(1, trendlineDaysAverage[chartId]);
 
+      // Recalculate trendline with new days average
       const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
       if (!dataDataset) return;
 
@@ -1120,6 +1134,7 @@
 
       chart.update();
 
+      // Update display
       const display = document.querySelector(`[data-days-display="${chartId}"]`);
       if (display) {
         display.textContent = trendlineDaysAverage[chartId];
@@ -1146,6 +1161,7 @@
       
       header.appendChild(scaleBadge);
       
+      // Add export button
       const exportBtn = document.createElement('button');
       exportBtn.className = 'export-btn';
       exportBtn.textContent = '💾 Export';
@@ -1222,142 +1238,286 @@
       });
     }
 
-    function renderDashboard() {
-      const chartsList = document.getElementById('chartsList');
-      const statsSummary = document.getElementById('statsSummary');
-      chartsList.innerHTML = '';
-      statsSummary.innerHTML = '';
+    function createTimeBasedChart(container, title, videos, datasets, useLog, chartId, includeTrendline = false) {
+      const chartDiv = document.createElement('div');
+      chartDiv.className = 'chart-container';
+      
+      const canvas = document.createElement('canvas');
+      canvas.id = chartId;
+      
+      const header = document.createElement('h3');
+      header.textContent = title;
+      
+      const scaleBadge = document.createElement('span');
+      scaleBadge.className = 'scale-badge' + (useLog ? '' : ' inactive');
+      scaleBadge.textContent = useLog ? 'LOG SCALE' : 'LINEAR';
+      scaleBadge.setAttribute('data-chart-id', chartId);
+      scaleBadge.onclick = () => toggleLogScale(chartId);
+      
+      header.appendChild(scaleBadge);
 
-      // Summary stats
-      const stats = [
-        { title: 'Followers', value: formatNumber(accountData.followers) },
-        { title: 'Total Likes', value: formatNumber(accountData.totalLikes) },
-        { title: 'Posts Tracked', value: formatNumber(accountData.postsScraped) },
-        { title: 'Total Videos', value: formatNumber(accountData.videos.length) }
-      ];
+      if (includeTrendline) {
+        const trendlineBadge = document.createElement('span');
+        trendlineBadge.className = 'trendline-badge inactive';
+        trendlineBadge.textContent = '📈 TREND OFF';
+        trendlineBadge.setAttribute('data-trendline-id', chartId);
+        trendlineBadge.onclick = () => toggleTrendline(chartId);
+        header.appendChild(trendlineBadge);
 
-      if (accountData.totalViews) {
-        stats.push({ title: 'Total Views', value: formatNumber(accountData.totalViews) });
+        trendlineStates[chartId] = false;
+        trendlineDaysAverage[chartId] = 7;
+
+        const smoothnessControls = document.createElement('span');
+        smoothnessControls.className = 'smoothness-controls';
+        smoothnessControls.setAttribute('data-smoothness-controls', chartId);
+        smoothnessControls.style.display = 'none';
+
+        const downBtn = document.createElement('button');
+        downBtn.className = 'smoothness-btn';
+        downBtn.textContent = '◄';
+        downBtn.onclick = () => adjustTrendlineSmoothness(chartId, -1);
+
+        const daysDisplay = document.createElement('span');
+        daysDisplay.className = 'smoothness-btn';
+        daysDisplay.textContent = '7';
+        daysDisplay.style.cursor = 'default';
+        daysDisplay.setAttribute('data-days-display', chartId);
+
+        const upBtn = document.createElement('button');
+        upBtn.className = 'smoothness-btn';
+        upBtn.textContent = '►';
+        upBtn.onclick = () => adjustTrendlineSmoothness(chartId, 1);
+
+        smoothnessControls.appendChild(downBtn);
+        smoothnessControls.appendChild(daysDisplay);
+        smoothnessControls.appendChild(upBtn);
+        
+        header.appendChild(smoothnessControls);
+      }
+      
+      // Add export button
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'export-btn';
+      exportBtn.textContent = '💾 Export';
+      exportBtn.onclick = () => exportChart(chartId, title);
+      
+      chartDiv.appendChild(header);
+      chartDiv.appendChild(exportBtn);
+      chartDiv.appendChild(canvas);
+      container.appendChild(chartDiv);
+
+      const ctx = canvas.getContext('2d');
+
+      if (includeTrendline && datasets.length > 0) {
+        const trendlineData = calculateMovingAverageByDays(datasets[0].data, 7);
+        
+        datasets.push({
+          label: 'Trend',
+          data: trendlineData,
+          type: 'line',
+          borderColor: '#ffff00',
+          backgroundColor: 'transparent',
+          borderWidth: 3,
+          pointRadius: 0,
+          tension: 0.4,
+          yAxisID: 'y1',
+          hidden: true,
+          order: 0
+        });
+      }
+      
+      const allValues = datasets.filter(ds => ds.label !== 'Trend').flatMap(ds => ds.data.map(d => d.y)).filter(v => v > 0);
+      const dataRange = {
+        min: Math.min(...allValues),
+        max: Math.max(...allValues)
+      };
+
+      // Get trendline values for auto-scaling
+      const trendlineValues = includeTrendline 
+        ? datasets.find(ds => ds.label === 'Trend').data.map(d => d.y).filter(v => v > 0)
+        : [];
+      const trendlineRange = trendlineValues.length > 0 
+        ? { min: Math.min(...trendlineValues), max: Math.max(...trendlineValues) }
+        : dataRange;
+
+      const scales = {
+        x: {
+          type: 'time',
+          time: {
+            unit: 'day',
+            displayFormats: { day: 'MMM d, yyyy' }
+          },
+          ticks: { color: '#0f0', font: { family: 'monospace' } },
+          grid: { color: 'rgba(0, 255, 0, 0.1)' }
+        },
+        y: {
+          type: useLog ? 'logarithmic' : 'linear',
+          position: 'left',
+          ticks: {
+            color: '#0f0',
+            font: { family: 'monospace' },
+            callback: function(value) {
+              return formatNumberAxisSmart(value, dataRange);
+            }
+          },
+          grid: { color: 'rgba(0, 255, 0, 0.1)' }
+        }
+      };
+
+      if (includeTrendline) {
+        scales.y1 = {
+          type: useLog ? 'logarithmic' : 'linear',
+          position: 'right',
+          display: false,  // Start hidden
+          ticks: {
+            color: '#ffff00',
+            font: { family: 'monospace' },
+            callback: function(value) {
+              return formatNumberAxisSmart(value, trendlineRange);
+            }
+          },
+          grid: {
+            drawOnChartArea: false
+          }
+        };
       }
 
-      stats.forEach(stat => {
-        const card = document.createElement('div');
-        card.className = 'stat-card';
-        card.innerHTML = `<h4>${stat.title}</h4><div class="value">${stat.value}</div>`;
-        statsSummary.appendChild(card);
+      chartInstances[chartId] = new Chart(ctx, {
+        type: datasets[0].type || 'scatter',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 2.5,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                color: '#0f0',
+                font: { family: 'monospace', size: 12 },
+                filter: function(item, chart) {
+                  // Hide Trend from legend if trendline is off
+                  if (item.text === 'Trend') {
+                    return trendlineStates[chartId] === true;
+                  }
+                  return true;
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: '#0f0',
+              bodyColor: '#0f0',
+              borderColor: '#0f0',
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + formatNumber(context.parsed.y);
+                }
+              }
+            }
+          },
+          scales: scales
+        }
       });
+    }
 
-      // Followers history chart
-      if (accountData.followersHistory.length > 0) {
-        const followersData = accountData.followersHistory.map(item => ({
-          x: item.date,
-          y: item.value
-        }));
+    function renderDashboard() {
+      chartInstances = {};
+      trendlineStates = {};
+      trendlineDaysAverage = {};
 
-        const useLog = shouldUseLogScale(followersData.map(d => d.y));
+      const statsContainer = document.getElementById('statsSummary');
+      
+      let statsHTML = `
+        <div class="stat-card">
+          <h4>👥 FOLLOWERS</h4>
+          <div class="value">${formatNumber(accountData.followers)}</div>
+        </div>
+        <div class="stat-card">
+          <h4>❤️ TOTAL LIKES</h4>
+          <div class="value">${formatNumber(accountData.totalLikes)}</div>
+        </div>
+        <div class="stat-card">
+          <h4>🎬 POSTS TRACKED</h4>
+          <div class="value">${accountData.postsScraped}</div>
+        </div>
+        <div class="stat-card">
+          <h4>📈 AVG ENGAGEMENT</h4>
+          <div class="value">${accountData.videos.length > 0 ? (accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / accountData.videos.length).toFixed(2) : 0}%</div>
+        </div>
+      `;
 
-        createLineChart(
-          chartsList,
-          '👥 Follower Growth',
+      if (isMoonMediaTotal) {
+        statsHTML += `
+          <div class="stat-card">
+            <h4>👁️ TOTAL VIEWS</h4>
+            <div class="value">${formatNumber(accountData.totalViews)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>⚡ VIEWS PER SECOND</h4>
+            <div class="value">${accountData.viewsPerSecond.toFixed(2)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>🏢 TOTAL ACCOUNTS</h4>
+            <div class="value">${accountData.accountCount}</div>
+          </div>
+        `;
+      }
+
+      statsContainer.innerHTML = statsHTML;
+
+      const chartsContainer = document.getElementById('chartsList');
+      chartsContainer.innerHTML = '';
+
+      if (accountData.followersHistory && accountData.followersHistory.length > 0) {
+        const followerValues = accountData.followersHistory.map(h => h.value);
+        const useLogFollowers = shouldUseLogScale(followerValues);
+        
+        createLineChart(chartsContainer, '👥 Followers Per Scrape', 
           accountData.followersHistory,
           [{
             label: 'Followers',
-            data: followersData,
-            borderColor: '#0f0',
-            backgroundColor: 'rgba(0, 255, 0, 0.1)',
-            tension: 0.1,
+            data: accountData.followersHistory.map(h => ({ x: h.date, y: h.value })),
+            borderColor: '#9b59b6',
+            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+            borderWidth: 3,
+            tension: 0.4,
             fill: true
           }],
-          useLog,
-          'followers'
+          useLogFollowers,
+          'followers-history'
         );
       }
 
-      // Total likes history chart
-      if (accountData.totalLikesHistory.length > 0) {
-        const likesData = accountData.totalLikesHistory.map(item => ({
-          x: item.date,
-          y: item.value
-        }));
-
-        const useLog = shouldUseLogScale(likesData.map(d => d.y));
-
-        createLineChart(
-          chartsList,
-          '❤️ Total Likes Over Time',
+      if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
+        const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
+        const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
+        
+        createLineChart(chartsContainer, '❤️ Total Likes Per Scrape',
           accountData.totalLikesHistory,
           [{
             label: 'Total Likes',
-            data: likesData,
-            borderColor: '#ff0050',
-            backgroundColor: 'rgba(255, 0, 80, 0.1)',
-            tension: 0.1,
+            data: accountData.totalLikesHistory.map(h => ({ x: h.date, y: h.value })),
+            borderColor: '#e91e63',
+            backgroundColor: 'rgba(233, 30, 99, 0.1)',
+            borderWidth: 3,
+            tension: 0.4,
             fill: true
           }],
-          useLog,
-          'totalLikes'
+          useLogLikesHistory,
+          'likes-history'
         );
       }
 
-      // Views over time
       if (accountData.videos.length > 0) {
-        const viewsData = accountData.videos.map(v => ({
-          x: v.date,
-          y: v.views
-        }));
+        const viewsData = accountData.videos.map(v => v.views);
+        const likesData = accountData.videos.map(v => v.likes);
+        const useLogViews = shouldUseLogScale(viewsData);
+        const useLogLikes = shouldUseLogScale(likesData);
 
-        const useLog = shouldUseLogScale(viewsData.map(d => d.y));
-
-        createLineChart(
-          chartsList,
-          '👁️ Views Per Post',
-          accountData.videos,
-          [{
-            label: 'Views',
-            data: viewsData,
-            borderColor: '#00d2d3',
-            backgroundColor: 'rgba(0, 210, 211, 0.1)',
-            tension: 0.1,
-            fill: false
-          }],
-          useLog,
-          'views'
-        );
-      }
-
-      // Engagement rate
-      if (accountData.videos.length > 0 && accountData.videos.some(v => v.engagement > 0)) {
-        const engagementData = accountData.videos
-          .filter(v => v.engagement > 0)
-          .map(v => ({
-            x: v.date,
-            y: v.engagement
-          }));
-
-        createLineChart(
-          chartsList,
-          '📊 Engagement Rate (%)',
-          accountData.videos,
-          [{
-            label: 'Engagement %',
-            data: engagementData,
-            borderColor: '#ffff00',
-            backgroundColor: 'rgba(255, 255, 0, 0.1)',
-            tension: 0.1,
-            fill: false
-          }],
-          false,
-          'engagement'
-        );
-      }
-
-      console.log('✅ Dashboard rendered');
-    }
-
-    // Initialize on load
-    window.onload = function() {
-      console.log('🚀 Crespomize Analytics loaded');
-    };
-  </script>
-</body>
-</html>
+        createTimeBasedChart(chartsContainer, 
