@@ -6,16 +6,18 @@ const SHEET_IDS = {
   instagram: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2'
 };
 
-// Shared state variables accessible by both data and display modules
-var selectedPlatform = '';
-var workbookData = null;
-var selectedAccount = '';
-var accountData = {};
-var isMoonMediaTotal = false;
-var selectedTimeRange = 'all';
-var chartInstances = {};
-var trendlineStates = {};
-var trendlineDaysAverage = {};
+// Shared state - using a namespace to avoid global scope pollution
+const AppState = {
+  selectedPlatform: '',
+  workbookData: null,
+  selectedAccount: '',
+  accountData: {},
+  isMoonMediaTotal: false,
+  selectedTimeRange: 'all',
+  chartInstances: {},
+  trendlineStates: {},
+  trendlineDaysAverage: {}
+};
 
 function isValidDate(date) {
   if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
@@ -64,14 +66,14 @@ async function loadSheetData() {
   try {
     document.getElementById('accountSelect').innerHTML = '<option value="">loading accounts...</option>';
     
-    const sheetId = SHEET_IDS[selectedPlatform];
+    const sheetId = SHEET_IDS[AppState.selectedPlatform];
     const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
     
-    workbookData = XLSX.read(arrayBuffer, { type: 'array' });
+    AppState.workbookData = XLSX.read(arrayBuffer, { type: 'array' });
     
-    const accounts = workbookData.SheetNames;
+    const accounts = AppState.workbookData.SheetNames;
     
     if (accounts.length === 0) {
       document.getElementById('accountSelect').innerHTML = '<option>no accounts found</option>';
@@ -79,7 +81,7 @@ async function loadSheetData() {
     }
     
     const select = document.getElementById('accountSelect');
-    const platformEmoji = selectedPlatform === 'instagram' ? '📸' : '🎵';
+    const platformEmoji = AppState.selectedPlatform === 'instagram' ? '📸' : '🎵';
     select.innerHTML = '<option value="">-- select an account --</option>' +
       '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">All MoonMedia Analytics</option>' +
       accounts.map(acc => `<option value="${acc}">${platformEmoji} @${acc}</option>`).join('');
@@ -185,7 +187,7 @@ function filterDataByTimeRange(videos, timeRangeDays) {
 }
 
 function parseAccountDataTikTok(sheetName, timeRangeDays = 'all') {
-  const sheet = workbookData.Sheets[sheetName];
+  const sheet = AppState.workbookData.Sheets[sheetName];
   const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
   
   const headers = jsonData[0].slice(1);
@@ -312,7 +314,7 @@ function parseAccountDataTikTok(sheetName, timeRangeDays = 'all') {
 }
 
 function parseAccountDataInstagram(sheetName, timeRangeDays = 'all') {
-  const sheet = workbookData.Sheets[sheetName];
+  const sheet = AppState.workbookData.Sheets[sheetName];
   const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
   
   const headers = jsonData[0].slice(1);
@@ -463,7 +465,7 @@ function parseAccountDataInstagram(sheetName, timeRangeDays = 'all') {
 }
 
 function parseAccountData(sheetName, timeRangeDays = 'all') {
-  if (selectedPlatform === 'instagram') {
+  if (AppState.selectedPlatform === 'instagram') {
     return parseAccountDataInstagram(sheetName, timeRangeDays);
   } else {
     return parseAccountDataTikTok(sheetName, timeRangeDays);
@@ -471,7 +473,7 @@ function parseAccountData(sheetName, timeRangeDays = 'all') {
 }
 
 function parseMoonMediaTotal(timeRangeDays = 'all') {
-  const accounts = workbookData.SheetNames;
+  const accounts = AppState.workbookData.SheetNames;
   let totalFollowers = 0;
   let totalLikes = 0;
   let totalPosts = 0;
