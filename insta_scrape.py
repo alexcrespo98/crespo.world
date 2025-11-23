@@ -6,6 +6,7 @@ Multi-Account Instagram Reels Analytics Tracker
 - Auto-detects and skips pinned posts
 - Updates Excel file with separate tabs for each account
 - Cross-validates likes/comments from both methods
+- NEW: Choose custom post count or deep scrape mode
 """
 
 import sys
@@ -203,14 +204,15 @@ def extract_hover_overlay_data(parent):
     return likes, comments
 
 
-def hover_scrape_reels(driver, username, max_reels=25):
+def hover_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
     """Scrape reels using hover method"""
     reels_url = f"https://www.instagram.com/{username}/reels/"
     driver.get(reels_url)
     time.sleep(5)
     
     # Scroll to load more reels
-    for _ in range(4):
+    scroll_iterations = 20 if deep_scrape else 4
+    for _ in range(scroll_iterations):
         driver.execute_script("window.scrollBy(0, 800)")
         time.sleep(1.5)
     driver.execute_script("window.scrollTo(0, 0)")
@@ -220,7 +222,9 @@ def hover_scrape_reels(driver, username, max_reels=25):
     
     hover_data = []
     
-    for idx in range(min(max_reels, len(reel_links))):
+    reels_to_scrape = len(reel_links) if deep_scrape else min(max_reels, len(reel_links))
+    
+    for idx in range(reels_to_scrape):
         try:
             reel_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
             if idx >= len(reel_links):
@@ -333,7 +337,7 @@ def detect_pinned_posts(initial_reels):
     return newest_idx
 
 
-def arrow_scrape_reels(driver, username, max_reels=25):
+def arrow_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
     """Scrape reels using arrow keys"""
     reels_url = f"https://www.instagram.com/{username}/reels/"
     driver.get(reels_url)
@@ -382,18 +386,25 @@ def arrow_scrape_reels(driver, username, max_reels=25):
     
     # Extract organic posts
     arrow_data = []
-    for idx in range(max_reels):
+    max_iterations = 500 if deep_scrape else max_reels
+    
+    for idx in range(max_iterations):
         try:
             time.sleep(1)
             data = extract_reel_data_from_overlay(driver)
             arrow_data.append(data)
             
-            if idx < max_reels - 1:
+            if deep_scrape and idx % 10 == 0:
+                print(f"    Progress: {idx + 1} reels scraped...")
+            
+            if idx < max_iterations - 1:
                 body = driver.find_element(By.TAG_NAME, "body")
                 body.send_keys(Keys.ARROW_RIGHT)
                 time.sleep(1.5)
         except:
-            continue
+            if deep_scrape:
+                print(f"    Reached end at {idx + 1} reels")
+            break
     
     return arrow_data, pinned_count
 
@@ -458,14 +469,14 @@ def merge_data(hover_data, arrow_data, pinned_count):
 # -------------------------
 # Scrape account
 # -------------------------
-def scrape_instagram_account(driver, username, max_reels=18):
+def scrape_instagram_account(driver, username, max_reels=18, deep_scrape=False):
     """Scrape a single Instagram account"""
     print(f"\n  📊 Hover scraping @{username}...")
-    hover_data = hover_scrape_reels(driver, username, max_reels=25)
+    hover_data = hover_scrape_reels(driver, username, max_reels=max_reels if not deep_scrape else 500, deep_scrape=deep_scrape)
     print(f"  ✅ Hover complete: {len(hover_data)} reels")
     
     print(f"  📅 Arrow key scraping @{username}...")
-    arrow_data, pinned_count = arrow_scrape_reels(driver, username, max_reels=max_reels)
+    arrow_data, pinned_count = arrow_scrape_reels(driver, username, max_reels=max_reels, deep_scrape=deep_scrape)
     print(f"  ✅ Arrow complete: {len(arrow_data)} reels")
     
     if pinned_count > 0:
@@ -541,9 +552,91 @@ def save_to_excel(all_account_data):
 
 
 # -------------------------
+# Upload to Google Drive
+# -------------------------
+def upload_to_google_drive():
+    """Upload Excel file to Google Drive using rclone"""
+    print("\n" + "="*60)
+    print("☁️  Uploading to Google Drive...")
+    print("="*60)
+    
+    try:
+        # Check if rclone is installed
+        result = subprocess.run(['rclone', 'version'], 
+                              capture_output=True, 
+                              text=True)
+        
+        if result.returncode != 0:
+            print("❌ rclone not found. Please install rclone first.")
+            print("   Visit: https://rclone.org/downloads/")
+            return False
+        
+        # Get the full path to the Excel file
+        excel_path = os.path.abspath(OUTPUT_EXCEL)
+        
+        # Upload using rclone
+        print(f"\n📤 Uploading {OUTPUT_EXCEL}...")
+        upload_result = subprocess.run(
+            ['rclone', 'copy', excel_path, 'gdrive:', '--update', '-v'],
+            capture_output=True,
+            text=True
+        )
+        
+        if upload_result.returncode == 0:
+            print("✅ Successfully uploaded to Google Drive!")
+            print("📁 File ID: 19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2")
+            return True
+        else:
+            print(f"❌ Upload failed: {upload_result.stderr}")
+            return False
+            
+    except FileNotFoundError:
+        print("❌ rclone not found. Please install rclone first.")
+        print("   Visit: https://rclone.org/downloads/")
+        return False
+    except Exception as e:
+        print(f"❌ Upload error: {e}")
+        return False
+
+
+# -------------------------
+# User input
+# -------------------------
+def get_scrape_mode():
+    """Ask user for scrape mode"""
+    print("\n" + "="*60)
+    print("🎯 SELECT SCRAPE MODE")
+    print("="*60)
+    print("\n1. Custom number of posts")
+    print("2. Deep scrape (all available posts)")
+    print()
+    
+    while True:
+        choice = input("Enter your choice (1 or 2): ").strip()
+        if choice == '1':
+            while True:
+                try:
+                    num_posts = int(input("\nHow many posts do you want to scrape per account? "))
+                    if num_posts > 0:
+                        return num_posts, False
+                    else:
+                        print("Please enter a positive number.")
+                except ValueError:
+                    print("Please enter a valid number.")
+        elif choice == '2':
+            confirm = input("\n⚠️  Deep scrape may take a long time. Continue? (y/n): ").strip().lower()
+            if confirm == 'y':
+                return None, True
+            else:
+                continue
+        else:
+            print("Invalid choice. Please enter 1 or 2.")
+
+
+# -------------------------
 # Main
 # -------------------------
-def run_scrape(max_reels=18):
+def run_scrape():
     """Main scrape function"""
     import pandas as pd
     
@@ -552,11 +645,17 @@ def run_scrape(max_reels=18):
     print("\n" + "="*60)
     print("📸 Instagram Reels Analytics Tracker")
     print("="*60)
-    print(f"\n📊 Scraping {max_reels} reels per account")
-    print(f"✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s)\n")
     
+    print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
     for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
         print(f"   {i}. @{account}")
+    
+    max_reels, deep_scrape = get_scrape_mode()
+    
+    if deep_scrape:
+        print("\n🔍 Mode: DEEP SCRAPE (all posts)")
+    else:
+        print(f"\n📊 Mode: {max_reels} posts per account")
     
     input("\n▶️  Press ENTER to start scraping...")
     
@@ -573,7 +672,9 @@ def run_scrape(max_reels=18):
             print("="*60)
             
             try:
-                reels_data, followers, pinned_count = scrape_instagram_account(driver, username, max_reels)
+                reels_data, followers, pinned_count = scrape_instagram_account(
+                    driver, username, max_reels=max_reels or 18, deep_scrape=deep_scrape
+                )
                 
                 existing_df = existing_data.get(username, pd.DataFrame())
                 df = create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
@@ -588,6 +689,9 @@ def run_scrape(max_reels=18):
                 continue
         
         save_to_excel(all_account_data)
+        
+        # Upload to Google Drive
+        upload_to_google_drive()
         
         print("\n" + "="*60)
         print("✅ All accounts scraped successfully!")
