@@ -62,6 +62,8 @@ function calculateMovingAverageByDays(data, days = 7) {
   return result;
 }
 
+// Load data from Google Sheets and populate the account dropdown
+// Note: This function handles both data fetching and UI updates for convenience
 async function loadSheetData() {
   try {
     document.getElementById('accountSelect').innerHTML = '<option value="">loading accounts...</option>';
