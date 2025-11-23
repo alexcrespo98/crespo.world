@@ -1,16 +1,7 @@
 // crespomize-display.js
 // UI and chart functions for crespomize analytics
 
-// State variables
-let selectedPlatform = '';
-let workbookData = null;
-let selectedAccount = '';
-let accountData = {};
-let isMoonMediaTotal = false;
-let selectedTimeRange = 'all';
-let chartInstances = {};
-let trendlineStates = {};
-let trendlineDaysAverage = {};
+// Note: State variables are defined in crespomize-data.js which loads first
 
 function selectPlatform(platform) {
   selectedPlatform = platform;
