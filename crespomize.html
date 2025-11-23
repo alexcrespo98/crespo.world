@@ -297,7 +297,7 @@
     <div id="step3" class="hidden">
       <div class="question">custom options coming soon!</div>
       <button onclick="selectTimeRange('all')">just show me the demo for now</button>
-      <button onclick="backToStep(2)">← back</button>
+      <button onclick="backToStep('2_5')">← back</button>
     </div>
 
     <!-- Charts display -->
@@ -354,7 +354,11 @@
       document.getElementById('step2_5').classList.add('hidden');
       document.getElementById('step3').classList.add('hidden');
       
-      document.getElementById('step' + stepNumber).classList.remove('hidden');
+      if (stepNumber === '2_5') {
+        document.getElementById('step2_5').classList.remove('hidden');
+      } else {
+        document.getElementById('step' + stepNumber).classList.remove('hidden');
+      }
       
       if (stepNumber === 0) {
         selectedPlatform = '';
@@ -948,15 +952,12 @@
     }
 
     function nextStep(current) {
-      if (current === 1) {
-        selectedAccount = document.getElementById('accountSelect').value;
-        if (!selectedAccount) {
-          alert('pick an account first!');
-          return;
-        }
-        isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
-        document.getElementById('step1').classList.add('hidden');
+      if (current === 2) {
+        document.getElementById('step2').classList.add('hidden');
         document.getElementById('step2_5').classList.remove('hidden');
+      } else if (current === 3) {
+        document.getElementById('step2').classList.add('hidden');
+        document.getElementById('step3').classList.remove('hidden');
       }
     }
 
