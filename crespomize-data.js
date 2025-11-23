@@ -6,6 +6,17 @@ const SHEET_IDS = {
   instagram: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2'
 };
 
+// Shared state variables accessible by both data and display modules
+var selectedPlatform = '';
+var workbookData = null;
+var selectedAccount = '';
+var accountData = {};
+var isMoonMediaTotal = false;
+var selectedTimeRange = 'all';
+var chartInstances = {};
+var trendlineStates = {};
+var trendlineDaysAverage = {};
+
 function isValidDate(date) {
   if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
     return false;
