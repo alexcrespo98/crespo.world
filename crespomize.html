@@ -266,7 +266,7 @@
     <!-- Step 1: Select account -->
     <div id="step1" class="hidden">
       <div class="question">pick a company:</div>
-      <select id="accountSelect" onchange="onAccountChange()">
+      <select id="accountSelect" onchange="handleAccountSelection()">
         <option value="">loading accounts...</option>
       </select>
       <br>
@@ -307,14 +307,16 @@
   <script src="crespomize-display.js"></script>
   
   <script>
-    function onAccountChange() {
+    // Handle account selection and auto-advance to time range
+    function handleAccountSelection() {
       const selectedAccount = document.getElementById('accountSelect').value;
-      if (selectedAccount) {
-        AppState.selectedAccount = selectedAccount;
-        AppState.isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
-        document.getElementById('step1').classList.add('hidden');
-        document.getElementById('step2_5').classList.remove('hidden');
+      if (!selectedAccount) {
+        return;
       }
+      AppState.selectedAccount = selectedAccount;
+      AppState.isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
+      document.getElementById('step1').classList.add('hidden');
+      document.getElementById('step2_5').classList.remove('hidden');
     }
   </script>
 </body>
