@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Multi-Account Instagram Reels Analytics Tracker
-- Scrapes multiple Instagram accounts for Reels data
-- Uses hybrid method: hover scrape + arrow key navigation
+Instagram Reels Analytics Tracker v2.2
+- FIXED: Continuous scroll for hover scrape (no snap back!)
+- Hybrid method: hover scrape + arrow key navigation
 - Auto-detects and skips pinned posts
-- Updates Excel file with separate tabs for each account
+- Updates Excel with separate tabs per account
 - Cross-validates likes/comments from both methods
-- NEW: Choose custom post count or deep scrape mode
+- Auto-uploads to Google Drive
+- NEW: Gets exact follower count via Instagram API
+- NEW: Auto-detects incomplete scrapes and offers to rescrape
+- TEST MODE: Try 30 reels on @popdartsgame first
 """
 
 import sys
@@ -15,6 +18,8 @@ import os
 from datetime import datetime
 import time
 import re
+import requests
+import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -35,7 +40,7 @@ ACCOUNTS_TO_TRACK = [
     "low_tide_golf"
 ]
 
-# Instagram cookies from Firefox
+# Instagram cookies
 INSTAGRAM_COOKIES = [
     {'name': 'sessionid', 'value': '8438482535%3A38IX9Bm9deq9jo%3A17%3AAYiVmEzuyxxTnjyeCI9hapArXNlkzUnBss_8pz4EJg', 'domain': '.instagram.com'},
     {'name': 'csrftoken', 'value': 'R81AQp-PTmKwPM1DIeNHN-', 'domain': '.instagram.com'},
@@ -59,7 +64,8 @@ def ensure_packages():
         'selenium': 'selenium',
         'webdriver_manager': 'webdriver-manager',
         'pandas': 'pandas',
-        'openpyxl': 'openpyxl'
+        'openpyxl': 'openpyxl',
+        'requests': 'requests'
     }
     
     for module, package in required.items():
@@ -73,6 +79,58 @@ def ensure_packages():
         for p in packages_needed:
             install_package(p)
         print("✅ All packages installed!")
+
+
+# -------------------------
+# EXACT FOLLOWER COUNT (from instagram_follower_scraper.py)
+# -------------------------
+def get_exact_follower_count(username):
+    """
+    Fetch the exact follower count for an Instagram username using Instagram API
+    
+    Args:
+        username: Instagram username (without @)
+    
+    Returns:
+        int: exact follower count, or None if failed
+    """
+    # Remove @ if user included it
+    username = username.replace('@', '')
+    
+    # Instagram's web profile info endpoint
+    url = f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}"
+    
+    # Headers to mimic Instagram's mobile app
+    headers = {
+        'User-Agent': 'Instagram 76.0.0.15.395 Android (24/7.0; 640dpi; 1440x2560; samsung; SM-G930F; herolte; samsungexynos8890; en_US; 138226743)',
+        'x-ig-app-id': '936619743392459',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Extract user data
+        user_data = data['data']['user']
+        follower_count = user_data['edge_followed_by']['count']
+        
+        return follower_count
+        
+    except requests.exceptions.RequestException as e:
+        print(f"    ⚠️  API request failed: {e}")
+        return None
+    except KeyError as e:
+        print(f"    ⚠️  Failed to parse follower count from API")
+        return None
+    except Exception as e:
+        print(f"    ⚠️  Unexpected error getting follower count: {e}")
+        return None
 
 
 # -------------------------
@@ -141,7 +199,7 @@ def setup_driver():
 
 
 # -------------------------
-# Hover scrape method
+# Hover scrape method - FIXED WITH CONTINUOUS SCROLL
 # -------------------------
 def extract_views_from_container(container):
     """Extract view count from container"""
@@ -166,7 +224,6 @@ def extract_hover_overlay_data(parent):
         overlay_text = parent.text
         overlay_lines = [line.strip() for line in overlay_text.split('\n') if line.strip()]
         
-        # Method 1: Look for explicit "X likes" and "X comments"
         for line in overlay_lines:
             line_lower = line.lower()
             
@@ -180,7 +237,6 @@ def extract_hover_overlay_data(parent):
                 if match:
                     comments = parse_number(match.group(1))
         
-        # Method 2: Standalone numbers side-by-side
         if not likes or not comments:
             standalone_numbers = []
             for line in overlay_lines:
@@ -204,60 +260,122 @@ def extract_hover_overlay_data(parent):
     return likes, comments
 
 
-def hover_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
-    """Scrape reels using hover method"""
+def hover_scrape_reels(driver, username, max_reels=100, deep_scrape=False, test_mode=False):
+    """
+    Scrape reels using hover method - FIXED VERSION
+    - Scrolls AND hovers simultaneously (no snap back to top)
+    - Processes reels as they become visible
+    """
     reels_url = f"https://www.instagram.com/{username}/reels/"
     driver.get(reels_url)
     time.sleep(5)
     
-    # Scroll to load more reels
-    scroll_iterations = 20 if deep_scrape else 4
-    for _ in range(scroll_iterations):
-        driver.execute_script("window.scrollBy(0, 800)")
-        time.sleep(1.5)
-    driver.execute_script("window.scrollTo(0, 0)")
+    # Start at top
+    driver.execute_script("window.scrollTo(0, 0);")
     time.sleep(2)
     
-    reel_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
-    
+    target_reels = 500 if deep_scrape else max_reels
     hover_data = []
+    processed_reel_ids = set()
+    consecutive_no_progress = 0
     
-    reels_to_scrape = len(reel_links) if deep_scrape else min(max_reels, len(reel_links))
+    if test_mode:
+        print(f"\n  🧪 TEST MODE: Hover scraping {target_reels} reels...")
+    else:
+        print(f"  🎯 Hover scraping (target: {target_reels} reels)...")
     
-    for idx in range(reels_to_scrape):
-        try:
-            reel_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
-            if idx >= len(reel_links):
+    while len(hover_data) < target_reels:
+        # Stop if no progress for too long
+        if consecutive_no_progress >= 15:
+            if test_mode:
+                print(f"    ✅ Reached end at {len(hover_data)} reels")
+            break
+        
+        # Get currently visible reel links
+        reel_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+        
+        new_reels_this_cycle = 0
+        
+        for reel_link in reel_links:
+            if len(hover_data) >= target_reels:
                 break
             
-            reel_link = reel_links[idx]
-            reel_url = reel_link.get_attribute('href')
-            reel_id = reel_url.split('/reel/')[-1].rstrip('/')
-            
-            parent = reel_link.find_element(By.XPATH, "..")
-            views = extract_views_from_container(parent)
-            
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", parent)
-            time.sleep(0.6)
-            
-            actions = ActionChains(driver)
-            actions.move_to_element(parent).perform()
-            time.sleep(2.5)
-            
-            likes, comments = extract_hover_overlay_data(parent)
-            
-            hover_data.append({
-                'reel_id': reel_id,
-                'views': views,
-                'likes': likes,
-                'comments': comments,
-                'position': idx
-            })
-            
-            time.sleep(0.3)
-            
-        except:
-            continue
+            try:
+                reel_url = reel_link.get_attribute('href')
+                if not reel_url or '/reel/' not in reel_url:
+                    continue
+                
+                reel_id = reel_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                
+                # Skip if already processed
+                if reel_id in processed_reel_ids:
+                    continue
+                
+                # Check if element is visible in viewport
+                is_visible = driver.execute_script(
+                    "var rect = arguments[0].getBoundingClientRect();"
+                    "return (rect.top >= 0 && rect.top < window.innerHeight - 100);",
+                    reel_link
+                )
+                
+                if not is_visible:
+                    continue
+                
+                # Process this reel
+                parent = reel_link.find_element(By.XPATH, "..")
+                
+                # Get views
+                views = extract_views_from_container(parent)
+                
+                # Hover for likes/comments
+                try:
+                    actions = ActionChains(driver)
+                    actions.move_to_element(parent).perform()
+                    time.sleep(2.0)
+                    likes, comments = extract_hover_overlay_data(parent)
+                except:
+                    likes, comments = None, None
+                
+                hover_data.append({
+                    'reel_id': reel_id,
+                    'views': views,
+                    'likes': likes,
+                    'comments': comments,
+                    'position': len(hover_data)
+                })
+                
+                processed_reel_ids.add(reel_id)
+                new_reels_this_cycle += 1
+                
+                # Progress updates
+                if test_mode and len(hover_data) <= 10:
+                    print(f"    [{len(hover_data)}] {reel_id}: {views} views, {likes} likes, {comments} comments")
+                elif not test_mode and len(hover_data) % 25 == 0:
+                    print(f"    Progress: {len(hover_data)}/{target_reels} reels")
+                
+                time.sleep(0.2)
+                
+            except:
+                continue
+        
+        # Track progress
+        if new_reels_this_cycle > 0:
+            consecutive_no_progress = 0
+        else:
+            consecutive_no_progress += 1
+        
+        # Scroll down to load more (NEVER scroll back up!)
+        driver.execute_script("window.scrollBy(0, 600);")
+        time.sleep(0.5)
+        
+        # If no progress, scroll more aggressively
+        if new_reels_this_cycle == 0:
+            for _ in range(3):
+                driver.execute_script("window.scrollBy(0, 800);")
+                time.sleep(0.3)
+    
+    if test_mode:
+        print(f"\n  📊 Hover scrape complete: {len(hover_data)} reels")
     
     return hover_data
 
@@ -337,7 +455,7 @@ def detect_pinned_posts(initial_reels):
     return newest_idx
 
 
-def arrow_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
+def arrow_scrape_reels(driver, username, max_reels=100, deep_scrape=False, test_mode=False):
     """Scrape reels using arrow keys"""
     reels_url = f"https://www.instagram.com/{username}/reels/"
     driver.get(reels_url)
@@ -349,6 +467,11 @@ def arrow_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
     
     driver.execute_script("arguments[0].click();", reel_links[0])
     time.sleep(3)
+    
+    if test_mode:
+        print(f"\n  🧪 TEST MODE: Arrow scraping for dates...")
+    else:
+        print(f"  📅 Arrow key scraping for dates...")
     
     # Detect pinned posts
     initial_reels = []
@@ -366,6 +489,9 @@ def arrow_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
             break
     
     pinned_count = detect_pinned_posts(initial_reels)
+    
+    if test_mode and pinned_count > 0:
+        print(f"    📌 Detected {pinned_count} pinned post(s)")
     
     # Navigate to organic posts
     if pinned_count > 0:
@@ -394,17 +520,26 @@ def arrow_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
             data = extract_reel_data_from_overlay(driver)
             arrow_data.append(data)
             
-            if deep_scrape and idx % 10 == 0:
-                print(f"    Progress: {idx + 1} reels scraped...")
+            # Progress updates
+            if test_mode and idx < 10:
+                reel_id = data.get('reel_id', 'N/A')
+                date = data.get('date_display', 'N/A')
+                likes = data.get('likes', 'N/A')
+                print(f"    [{idx+1}] {reel_id}: {date}, {likes} likes")
+            elif not test_mode and deep_scrape and idx % 25 == 0:
+                print(f"    Arrow progress: {idx + 1}/{max_iterations} reels...")
             
             if idx < max_iterations - 1:
                 body = driver.find_element(By.TAG_NAME, "body")
                 body.send_keys(Keys.ARROW_RIGHT)
                 time.sleep(1.5)
         except:
-            if deep_scrape:
-                print(f"    Reached end at {idx + 1} reels")
+            if test_mode:
+                print(f"    ✅ Arrow scrape complete: {idx + 1} reels")
             break
+    
+    if test_mode:
+        print(f"\n  📊 Arrow scrape complete: {len(arrow_data)} reels")
     
     return arrow_data, pinned_count
 
@@ -412,7 +547,7 @@ def arrow_scrape_reels(driver, username, max_reels=25, deep_scrape=False):
 # -------------------------
 # Merge data
 # -------------------------
-def merge_data(hover_data, arrow_data, pinned_count):
+def merge_data(hover_data, arrow_data, pinned_count, test_mode=False):
     """Merge hover and arrow data"""
     merged = []
     
@@ -428,7 +563,7 @@ def merge_data(hover_data, arrow_data, pinned_count):
         if not hover_reel and hover_idx < len(hover_data):
             hover_reel = hover_data[hover_idx]
         
-        # Prefer higher number for likes (as per your request)
+        # Prefer higher number for likes
         likes_hover = hover_reel.get('likes') if hover_reel else None
         likes_arrow = arrow_reel.get('likes')
         
@@ -463,36 +598,61 @@ def merge_data(hover_data, arrow_data, pinned_count):
         
         merged.append(combined)
     
+    if test_mode:
+        print(f"\n  🔗 Merged data:")
+        print(f"     Total reels: {len(merged)}")
+        print(f"\n  📋 Sample merged reels (first 5):")
+        for i, reel in enumerate(merged[:5], 1):
+            print(f"     {i}. {reel['reel_id']}")
+            print(f"        Date: {reel['date_display']}")
+            print(f"        Views: {reel['views']}, Likes: {reel['likes']}, Comments: {reel['comments']}")
+            print(f"        Engagement: {reel['engagement']}%")
+    
     return merged
 
 
 # -------------------------
 # Scrape account
 # -------------------------
-def scrape_instagram_account(driver, username, max_reels=18, deep_scrape=False):
+def scrape_instagram_account(driver, username, max_reels=100, deep_scrape=False, test_mode=False):
     """Scrape a single Instagram account"""
-    print(f"\n  📊 Hover scraping @{username}...")
-    hover_data = hover_scrape_reels(driver, username, max_reels=max_reels if not deep_scrape else 500, deep_scrape=deep_scrape)
-    print(f"  ✅ Hover complete: {len(hover_data)} reels")
     
-    print(f"  📅 Arrow key scraping @{username}...")
-    arrow_data, pinned_count = arrow_scrape_reels(driver, username, max_reels=max_reels, deep_scrape=deep_scrape)
-    print(f"  ✅ Arrow complete: {len(arrow_data)} reels")
+    # Get exact follower count FIRST using API
+    print(f"  👥 Getting exact follower count...")
+    exact_followers = get_exact_follower_count(username)
     
-    if pinned_count > 0:
+    if exact_followers:
+        print(f"  ✅ Exact follower count: {exact_followers:,}")
+    else:
+        print(f"  ⚠️  Could not get exact follower count via API, will try Selenium fallback...")
+    
+    hover_data = hover_scrape_reels(driver, username, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode)
+    
+    arrow_data, pinned_count = arrow_scrape_reels(driver, username, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode)
+    
+    if pinned_count > 0 and not test_mode:
         print(f"  📌 Skipped {pinned_count} pinned post(s)")
     
-    final_data = merge_data(hover_data, arrow_data, pinned_count)
+    final_data = merge_data(hover_data, arrow_data, pinned_count, test_mode=test_mode)
     
-    # Get follower count
-    try:
-        driver.get(f"https://www.instagram.com/{username}/")
-        time.sleep(3)
-        followers_elem = driver.find_element(By.XPATH, "//a[contains(@href, '/followers/')]/span")
-        followers = followers_elem.get_attribute('title') or followers_elem.text
-        followers = parse_number(followers.replace(',', ''))
-    except:
-        followers = None
+    # Use exact follower count if we got it, otherwise fallback to Selenium scrape
+    if exact_followers:
+        followers = exact_followers
+    else:
+        # Fallback: Try to get follower count from profile page
+        try:
+            driver.get(f"https://www.instagram.com/{username}/")
+            time.sleep(3)
+            followers_elem = driver.find_element(By.XPATH, "//a[contains(@href, '/followers/')]/span")
+            followers = followers_elem.get_attribute('title') or followers_elem.text
+            followers = parse_number(followers.replace(',', ''))
+            print(f"  ℹ️  Selenium fallback follower count: {followers:,}")
+        except:
+            followers = None
+            print(f"  ⚠️  Could not retrieve follower count")
+    
+    if test_mode:
+        print(f"\n  👥 Final Followers: {followers:,}" if followers else "\n  👥 Followers: N/A")
     
     return final_data, followers, pinned_count
 
@@ -556,9 +716,9 @@ def save_to_excel(all_account_data):
 # -------------------------
 def upload_to_google_drive():
     """Upload Excel file to Google Drive using rclone"""
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print("☁️  Uploading to Google Drive...")
-    print("="*60)
+    print("="*70)
     
     try:
         # Check if rclone is installed
@@ -585,6 +745,7 @@ def upload_to_google_drive():
         if upload_result.returncode == 0:
             print("✅ Successfully uploaded to Google Drive!")
             print("📁 File ID: 19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2")
+            print("🌐 View at: https://crespo.world/crespomize.html")
             return True
         else:
             print(f"❌ Upload failed: {upload_result.stderr}")
@@ -600,37 +761,119 @@ def upload_to_google_drive():
 
 
 # -------------------------
+# RESCRAPE FUNCTIONALITY
+# -------------------------
+def analyze_scrape_quality(scrape_results, expected_reels):
+    """
+    Analyze scrape results and identify incomplete accounts
+    
+    Returns:
+        dict: {username: {'reels_expected': int, 'reels_actual': int, 'missing': int}}
+    """
+    incomplete_accounts = {}
+    
+    for username, result in scrape_results.items():
+        reels_actual = result['reels_count']
+        missing = expected_reels - reels_actual
+        
+        # Consider incomplete if missing more than 10% of expected reels
+        if missing > 0 and missing >= (expected_reels * 0.1):
+            incomplete_accounts[username] = {
+                'reels_expected': expected_reels,
+                'reels_actual': reels_actual,
+                'missing': missing
+            }
+    
+    return incomplete_accounts
+
+
+def rescrape_accounts(driver, incomplete_accounts, existing_data, timestamp_col):
+    """
+    Rescrape incomplete accounts and merge with existing data
+    
+    Returns:
+        dict: updated account data
+    """
+    import pandas as pd
+    
+    print("\n" + "="*70)
+    print("🔄 RESCRAPIN INCOMPLETE ACCOUNTS")
+    print("="*70)
+    
+    updated_data = {}
+    
+    for username, stats in incomplete_accounts.items():
+        print(f"\n📱 Rescaping @{username}")
+        print(f"  Previous attempt: {stats['reels_actual']}/{stats['reels_expected']} reels")
+        print(f"  Missing: {stats['missing']} reels")
+        
+        try:
+            # Rescrape with same parameters
+            reels_data, followers, pinned_count = scrape_instagram_account(
+                driver, username, 
+                max_reels=stats['reels_expected'], 
+                deep_scrape=False, 
+                test_mode=False
+            )
+            
+            print(f"\n  ✅ Rescrape complete!")
+            print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
+            print(f"  🎬 Reels: {len(reels_data)}")
+            
+            # Update the existing dataframe
+            existing_df = existing_data.get(username, pd.DataFrame())
+            df = create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
+            updated_data[username] = df
+            
+        except Exception as e:
+            print(f"\n  ❌ Rescrape failed for @{username}: {e}")
+            # Keep the old data if rescrape fails
+            if username in existing_data:
+                updated_data[username] = existing_data[username]
+    
+    return updated_data
+
+
+# -------------------------
 # User input
 # -------------------------
 def get_scrape_mode():
     """Ask user for scrape mode"""
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print("🎯 SELECT SCRAPE MODE")
-    print("="*60)
-    print("\n1. Custom number of posts")
-    print("2. Deep scrape (all available posts)")
+    print("="*70)
+    print("\n1. Custom number of posts (default: 100)")
+    print("2. Deep scrape (up to 500 posts)")
+    print("3. Test mode (30 reels on @popdartsgame, no file created)")
     print()
     
     while True:
-        choice = input("Enter your choice (1 or 2): ").strip()
-        if choice == '1':
-            while True:
-                try:
-                    num_posts = int(input("\nHow many posts do you want to scrape per account? "))
-                    if num_posts > 0:
-                        return num_posts, False
-                    else:
-                        print("Please enter a positive number.")
-                except ValueError:
-                    print("Please enter a valid number.")
+        choice = input("Enter your choice (1, 2, or 3): ").strip()
+        
+        if choice == '1' or choice == '':
+            num_input = input("\nHow many posts per account? (default 100): ").strip()
+            try:
+                num_posts = int(num_input) if num_input else 100
+                if num_posts > 0:
+                    return num_posts, False, False
+                else:
+                    print("Please enter a positive number.")
+            except ValueError:
+                print("Invalid input. Using default: 100")
+                return 100, False, False
+        
         elif choice == '2':
-            confirm = input("\n⚠️  Deep scrape may take a long time. Continue? (y/n): ").strip().lower()
+            confirm = input("\n⚠️  Deep scrape may take a while. Continue? (y/n): ").strip().lower()
             if confirm == 'y':
-                return None, True
+                return None, True, False
             else:
                 continue
+        
+        elif choice == '3':
+            return 30, False, True
+        
         else:
-            print("Invalid choice. Please enter 1 or 2.")
+            print("Invalid choice. Please enter 1, 2, or 3.")
 
 
 # -------------------------
@@ -642,61 +885,164 @@ def run_scrape():
     
     ensure_packages()
     
-    print("\n" + "="*60)
-    print("📸 Instagram Reels Analytics Tracker")
-    print("="*60)
+    print("\n" + "="*70)
+    print("📸 Instagram Reels Analytics Tracker v2.2")
+    print("="*70)
     
-    print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
-    for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
-        print(f"   {i}. @{account}")
+    max_reels, deep_scrape, test_mode = get_scrape_mode()
     
-    max_reels, deep_scrape = get_scrape_mode()
+    if test_mode:
+        print("\n🧪 TEST MODE ACTIVATED")
+        print(f"   Account: @popdartsgame")
+        print(f"   Reels: 30")
+        print(f"   Output: Terminal only (no Excel file)")
+        accounts = ["popdartsgame"]
+    else:
+        print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
+        for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
+            print(f"   {i}. @{account}")
+        accounts = ACCOUNTS_TO_TRACK
     
     if deep_scrape:
-        print("\n🔍 Mode: DEEP SCRAPE (all posts)")
-    else:
+        print("\n🔍 Mode: DEEP SCRAPE (up to 500 posts)")
+        expected_reels = 500
+    elif not test_mode:
         print(f"\n📊 Mode: {max_reels} posts per account")
+        expected_reels = max_reels
+    else:
+        expected_reels = 30
     
     input("\n▶️  Press ENTER to start scraping...")
     
     driver = setup_driver()
     
-    existing_data = load_existing_excel()
+    existing_data = load_existing_excel() if not test_mode else {}
     timestamp_col = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     all_account_data = {}
+    scrape_results = {}  # Track scrape results for quality analysis
     
     try:
-        for idx, username in enumerate(ACCOUNTS_TO_TRACK, 1):
-            print("\n" + "="*60)
-            print(f"📱 [{idx}/{len(ACCOUNTS_TO_TRACK)}] Processing @{username}")
-            print("="*60)
+        for idx, username in enumerate(accounts, 1):
+            print("\n" + "="*70)
+            if test_mode:
+                print(f"🧪 TEST SCRAPE: @{username}")
+            else:
+                print(f"📱 [{idx}/{len(accounts)}] Processing @{username}")
+            print("="*70)
             
             try:
                 reels_data, followers, pinned_count = scrape_instagram_account(
-                    driver, username, max_reels=max_reels or 18, deep_scrape=deep_scrape
+                    driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, test_mode=test_mode
                 )
                 
-                existing_df = existing_data.get(username, pd.DataFrame())
-                df = create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
-                all_account_data[username] = df
+                # Track results
+                scrape_results[username] = {
+                    'reels_count': len(reels_data),
+                    'followers': followers,
+                    'pinned_count': pinned_count
+                }
                 
-                print(f"\n  ✅ @{username} complete!")
-                print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
-                print(f"  🎬 Reels: {len(reels_data)}")
+                if test_mode:
+                    # Test mode: just print summary
+                    print("\n" + "="*70)
+                    print("✅ TEST COMPLETE!")
+                    print("="*70)
+                    print(f"\n📊 Summary:")
+                    print(f"   Account: @{username}")
+                    print(f"   Followers: {followers:,}" if followers else "   Followers: N/A")
+                    print(f"   Reels scraped: {len(reels_data)}")
+                    print(f"   Pinned posts: {pinned_count}")
+                    
+                    # Data quality
+                    views_count = sum(1 for r in reels_data if r['views'])
+                    likes_count = sum(1 for r in reels_data if r['likes'])
+                    comments_count = sum(1 for r in reels_data if r['comments'])
+                    dates_count = sum(1 for r in reels_data if r['date'])
+                    
+                    print(f"\n   Data coverage:")
+                    print(f"     Dates:    {dates_count}/{len(reels_data)} ({dates_count/len(reels_data)*100:.1f}%)")
+                    print(f"     Views:    {views_count}/{len(reels_data)} ({views_count/len(reels_data)*100:.1f}%)")
+                    print(f"     Likes:    {likes_count}/{len(reels_data)} ({likes_count/len(reels_data)*100:.1f}%)")
+                    print(f"     Comments: {comments_count}/{len(reels_data)} ({comments_count/len(reels_data)*100:.1f}%)")
+                    
+                    print(f"\n💡 This is what will be saved to Excel for each account.")
+                    print(f"   If this looks good, run again without test mode!")
+                    print("="*70 + "\n")
+                    
+                else:
+                    # Normal mode: save to Excel
+                    existing_df = existing_data.get(username, pd.DataFrame())
+                    df = create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
+                    all_account_data[username] = df
+                    
+                    print(f"\n  ✅ @{username} complete!")
+                    print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
+                    print(f"  🎬 Reels: {len(reels_data)}/{expected_reels}")
                 
             except Exception as e:
                 print(f"\n  ❌ Error with @{username}: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Track failed scrapes
+                scrape_results[username] = {
+                    'reels_count': 0,
+                    'followers': None,
+                    'pinned_count': 0
+                }
                 continue
         
-        save_to_excel(all_account_data)
-        
-        # Upload to Google Drive
-        upload_to_google_drive()
-        
-        print("\n" + "="*60)
-        print("✅ All accounts scraped successfully!")
-        print(f"📁 Created: '{OUTPUT_EXCEL}'")
-        print("="*60 + "\n")
+        if not test_mode:
+            # Save initial Excel
+            save_to_excel(all_account_data)
+            
+            # Upload to Google Drive
+            upload_success = upload_to_google_drive()
+            
+            # Analyze scrape quality
+            incomplete_accounts = analyze_scrape_quality(scrape_results, expected_reels)
+            
+            if incomplete_accounts:
+                print("\n" + "="*70)
+                print("⚠️  INCOMPLETE SCRAPES DETECTED")
+                print("="*70)
+                
+                for username, stats in incomplete_accounts.items():
+                    print(f"\n  @{username}:")
+                    print(f"    Expected: {stats['reels_expected']} reels")
+                    print(f"    Got: {stats['reels_actual']} reels")
+                    print(f"    Missing: {stats['missing']} reels")
+                
+                print("\n" + "="*70)
+                rescrape = input("\n🔄 Would you like to rescrape incomplete accounts? (y/n): ").strip().lower()
+                
+                if rescrape == 'y':
+                    # Rescrape incomplete accounts
+                    updated_accounts = rescrape_accounts(driver, incomplete_accounts, all_account_data, timestamp_col)
+                    
+                    # Merge updated data with existing
+                    for username, df in updated_accounts.items():
+                        all_account_data[username] = df
+                    
+                    # Save updated Excel
+                    print("\n💾 Updating Excel with rescraped data...")
+                    save_to_excel(all_account_data)
+                    
+                    # Re-upload to Google Drive
+                    print("\n☁️  Re-uploading updated file to Google Drive...")
+                    upload_to_google_drive()
+                    
+                    print("\n" + "="*70)
+                    print("✅ Rescrape complete! File updated on Google Drive.")
+                    print("="*70)
+                else:
+                    print("\n⏭️  Skipping rescrape. Initial data has been saved and uploaded.")
+            
+            print("\n" + "="*70)
+            print("✅ All scraping complete!")
+            print(f"📁 Local file: '{OUTPUT_EXCEL}'")
+            print(f"🌐 View analytics: https://crespo.world/crespomize.html")
+            print("="*70 + "\n")
         
     finally:
         driver.quit()
