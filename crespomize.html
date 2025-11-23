@@ -295,7 +295,7 @@
 
     <!-- Step 3: Coming soon -->
     <div id="step3" class="hidden">
-      <div class="question">custom options coming soon! 🚀</div>
+      <div class="question">custom options coming soon!</div>
       <button onclick="selectTimeRange('all')">just show me the demo for now</button>
       <button onclick="backToStep(2)">← back</button>
     </div>
@@ -957,12 +957,6 @@
         isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2_5').classList.remove('hidden');
-      } else if (current === 2) {
-        document.getElementById('step2').classList.add('hidden');
-        document.getElementById('step2_5').classList.remove('hidden');
-      } else if (current === 3) {
-        document.getElementById('step2').classList.add('hidden');
-        document.getElementById('step3').classList.remove('hidden');
       }
     }
 
