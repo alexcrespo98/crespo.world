@@ -4,7 +4,7 @@
 // Note: State variables are defined in crespomize-data.js which loads first
 
 function selectPlatform(platform) {
-  selectedPlatform = platform;
+  AppState.selectedPlatform = platform;
   document.getElementById('step0').classList.add('hidden');
   document.getElementById('step1').classList.remove('hidden');
   loadSheetData();
@@ -19,19 +19,19 @@ function backToStep(stepNumber) {
   document.getElementById('step' + stepNumber).classList.remove('hidden');
   
   if (stepNumber === 0) {
-    selectedPlatform = '';
-    workbookData = null;
+    AppState.selectedPlatform = '';
+    AppState.workbookData = null;
   }
 }
 
 function nextStep(current) {
   if (current === 1) {
-    selectedAccount = document.getElementById('accountSelect').value;
-    if (!selectedAccount) {
+    AppState.selectedAccount = document.getElementById('accountSelect').value;
+    if (!AppState.selectedAccount) {
       alert('pick an account first!');
       return;
     }
-    isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
+    AppState.isMoonMediaTotal = (AppState.selectedAccount === 'MOONMEDIA_TOTAL');
     document.getElementById('step1').classList.add('hidden');
     document.getElementById('step2').classList.remove('hidden');
   } else if (current === 2) {
@@ -44,24 +44,24 @@ function nextStep(current) {
 }
 
 function selectTimeRange(days) {
-  selectedTimeRange = days;
+  AppState.selectedTimeRange = days;
   document.getElementById('step2_5').classList.add('hidden');
   document.getElementById('step3').classList.add('hidden');
   document.getElementById('loading').classList.remove('hidden');
 
-  if (isMoonMediaTotal) {
-    accountData = parseMoonMediaTotal(days);
+  if (AppState.isMoonMediaTotal) {
+    AppState.accountData = parseMoonMediaTotal(days);
   } else {
-    accountData = parseAccountData(selectedAccount, days);
+    AppState.accountData = parseAccountData(AppState.selectedAccount, days);
   }
   
   setTimeout(() => {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('charts').classList.remove('hidden');
     
-    const platformIcon = selectedPlatform === 'instagram' ? '📸' : '🎵';
+    const platformIcon = AppState.selectedPlatform === 'instagram' ? '📸' : '🎵';
     document.getElementById('platformIcon').textContent = platformIcon;
-    document.getElementById('accountName').textContent = isMoonMediaTotal ? 'All MoonMedia' : selectedAccount;
+    document.getElementById('accountName').textContent = AppState.isMoonMediaTotal ? 'All MoonMedia' : AppState.selectedAccount;
     
     let rangeText = '';
     if (days === 'all') rangeText = '(All Time)';
@@ -108,7 +108,7 @@ function formatNumberAxisSmart(value, dataRange) {
 }
 
 function exportChart(chartId, title) {
-  const chart = chartInstances[chartId];
+  const chart = AppState.chartInstances[chartId];
   if (!chart) return;
 
   const canvas = chart.canvas;
@@ -126,26 +126,26 @@ function exportChart(chartId, title) {
   tempCtx.fillText(title, tempCanvas.width / 2, 35);
   
   tempCtx.font = '16px monospace';
-  const accountText = isMoonMediaTotal ? 'All MoonMedia' : '@' + selectedAccount;
+  const accountText = AppState.isMoonMediaTotal ? 'All MoonMedia' : '@' + AppState.selectedAccount;
   let rangeText = '';
-  if (selectedTimeRange === 'all') rangeText = '(All Time)';
-  else if (selectedTimeRange === 365) rangeText = '(Last 1 Year)';
-  else if (selectedTimeRange === 180) rangeText = '(Last 6 Months)';
-  else if (selectedTimeRange === 30) rangeText = '(Last 1 Month)';
+  if (AppState.selectedTimeRange === 'all') rangeText = '(All Time)';
+  else if (AppState.selectedTimeRange === 365) rangeText = '(Last 1 Year)';
+  else if (AppState.selectedTimeRange === 180) rangeText = '(Last 6 Months)';
+  else if (AppState.selectedTimeRange === 30) rangeText = '(Last 1 Month)';
   
-  const platformEmoji = selectedPlatform === 'instagram' ? '📸' : '🎵';
+  const platformEmoji = AppState.selectedPlatform === 'instagram' ? '📸' : '🎵';
   tempCtx.fillText(`${platformEmoji} ${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
   
   tempCtx.drawImage(canvas, 0, 80);
   
   const link = document.createElement('a');
-  link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}_${selectedPlatform}.png`;
+  link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}_${AppState.selectedPlatform}.png`;
   link.href = tempCanvas.toDataURL('image/png');
   link.click();
 }
 
 function toggleLogScale(chartId) {
-  const chart = chartInstances[chartId];
+  const chart = AppState.chartInstances[chartId];
   if (!chart) return;
 
   const currentType = chart.options.scales.y.type;
@@ -176,11 +176,11 @@ function toggleLogScale(chartId) {
 }
 
 function toggleTrendline(chartId) {
-  const chart = chartInstances[chartId];
+  const chart = AppState.chartInstances[chartId];
   if (!chart) return;
 
-  trendlineStates[chartId] = !trendlineStates[chartId];
-  const showTrendline = trendlineStates[chartId];
+  AppState.trendlineStates[chartId] = !AppState.trendlineStates[chartId];
+  const showTrendline = AppState.trendlineStates[chartId];
 
   const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
   if (trendlineDataset) {
@@ -211,20 +211,20 @@ function toggleTrendline(chartId) {
 }
 
 function adjustTrendlineSmoothness(chartId, direction) {
-  const chart = chartInstances[chartId];
+  const chart = AppState.chartInstances[chartId];
   if (!chart) return;
 
-  if (trendlineDaysAverage[chartId] === undefined) {
-    trendlineDaysAverage[chartId] = 7;
+  if (AppState.trendlineDaysAverage[chartId] === undefined) {
+    AppState.trendlineDaysAverage[chartId] = 7;
   }
 
-  trendlineDaysAverage[chartId] += direction;
-  trendlineDaysAverage[chartId] = Math.max(1, trendlineDaysAverage[chartId]);
+  AppState.trendlineDaysAverage[chartId] += direction;
+  AppState.trendlineDaysAverage[chartId] = Math.max(1, AppState.trendlineDaysAverage[chartId]);
 
   const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
   if (!dataDataset) return;
 
-  const trendlineData = calculateMovingAverageByDays(dataDataset.data, trendlineDaysAverage[chartId]);
+  const trendlineData = calculateMovingAverageByDays(dataDataset.data, AppState.trendlineDaysAverage[chartId]);
 
   const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
   if (trendlineDataset) {
@@ -235,10 +235,10 @@ function adjustTrendlineSmoothness(chartId, direction) {
 
   const display = document.querySelector(`[data-days-display="${chartId}"]`);
   if (display) {
-    display.textContent = trendlineDaysAverage[chartId];
+    display.textContent = AppState.trendlineDaysAverage[chartId];
   }
 
-  console.log(`Trendline for ${chartId}: ${trendlineDaysAverage[chartId]} days average`);
+  console.log(`Trendline for ${chartId}: ${AppState.trendlineDaysAverage[chartId]} days average`);
 }
 
 function createLineChart(container, title, historyData, datasets, useLog, chartId) {
@@ -277,7 +277,7 @@ function createLineChart(container, title, historyData, datasets, useLog, chartI
     max: Math.max(...allValues)
   };
 
-  chartInstances[chartId] = new Chart(ctx, {
+  AppState.chartInstances[chartId] = new Chart(ctx, {
     type: 'line',
     data: { datasets },
     options: {
@@ -361,8 +361,8 @@ function createTimeBasedChart(container, title, videos, datasets, useLog, chartI
     trendlineBadge.onclick = () => toggleTrendline(chartId);
     header.appendChild(trendlineBadge);
 
-    trendlineStates[chartId] = false;
-    trendlineDaysAverage[chartId] = 7;
+    AppState.trendlineStates[chartId] = false;
+    AppState.trendlineDaysAverage[chartId] = 7;
 
     const smoothnessControls = document.createElement('span');
     smoothnessControls.className = 'smoothness-controls';
@@ -477,7 +477,7 @@ function createTimeBasedChart(container, title, videos, datasets, useLog, chartI
     };
   }
 
-  chartInstances[chartId] = new Chart(ctx, {
+  AppState.chartInstances[chartId] = new Chart(ctx, {
     type: datasets[0].type || 'scatter',
     data: { datasets },
     options: {
@@ -496,7 +496,7 @@ function createTimeBasedChart(container, title, videos, datasets, useLog, chartI
             font: { family: 'monospace', size: 12 },
             filter: function(item, chart) {
               if (item.text === 'Trend') {
-                return trendlineStates[chartId] === true;
+                return AppState.trendlineStates[chartId] === true;
               }
               return true;
             }
@@ -521,46 +521,46 @@ function createTimeBasedChart(container, title, videos, datasets, useLog, chartI
 }
 
 function renderDashboard() {
-  chartInstances = {};
-  trendlineStates = {};
-  trendlineDaysAverage = {};
+  AppState.chartInstances = {};
+  AppState.trendlineStates = {};
+  AppState.trendlineDaysAverage = {};
 
   const statsContainer = document.getElementById('statsSummary');
   
-  const contentType = selectedPlatform === 'instagram' ? 'REELS' : 'POSTS';
+  const contentType = AppState.selectedPlatform === 'instagram' ? 'REELS' : 'POSTS';
   
   let statsHTML = `
     <div class="stat-card">
       <h4>👥 FOLLOWERS</h4>
-      <div class="value">${formatNumber(accountData.followers)}</div>
+      <div class="value">${formatNumber(AppState.accountData.followers)}</div>
     </div>
     <div class="stat-card">
       <h4>❤️ TOTAL LIKES</h4>
-      <div class="value">${formatNumber(accountData.totalLikes)}</div>
+      <div class="value">${formatNumber(AppState.accountData.totalLikes)}</div>
     </div>
     <div class="stat-card">
       <h4>🎬 ${contentType} TRACKED</h4>
-      <div class="value">${accountData.postsScraped}</div>
+      <div class="value">${AppState.accountData.postsScraped}</div>
     </div>
     <div class="stat-card">
       <h4>📈 AVG ENGAGEMENT</h4>
-      <div class="value">${accountData.videos.length > 0 ? (accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / accountData.videos.length).toFixed(2) : 0}%</div>
+      <div class="value">${AppState.accountData.videos.length > 0 ? (AppState.accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / AppState.accountData.videos.length).toFixed(2) : 0}%</div>
     </div>
   `;
 
-  if (isMoonMediaTotal) {
+  if (AppState.isMoonMediaTotal) {
     statsHTML += `
       <div class="stat-card">
         <h4>👁️ TOTAL VIEWS</h4>
-        <div class="value">${formatNumber(accountData.totalViews)}</div>
+        <div class="value">${formatNumber(AppState.accountData.totalViews)}</div>
       </div>
       <div class="stat-card">
         <h4>⚡ VIEWS PER SECOND</h4>
-        <div class="value">${accountData.viewsPerSecond.toFixed(2)}</div>
+        <div class="value">${AppState.accountData.viewsPerSecond.toFixed(2)}</div>
       </div>
       <div class="stat-card">
         <h4>🏢 TOTAL ACCOUNTS</h4>
-        <div class="value">${accountData.accountCount}</div>
+        <div class="value">${AppState.accountData.accountCount}</div>
       </div>
     `;
   }
@@ -570,15 +570,15 @@ function renderDashboard() {
   const chartsContainer = document.getElementById('chartsList');
   chartsContainer.innerHTML = '';
 
-  if (accountData.followersHistory && accountData.followersHistory.length > 0) {
-    const followerValues = accountData.followersHistory.map(h => h.value);
+  if (AppState.accountData.followersHistory && AppState.accountData.followersHistory.length > 0) {
+    const followerValues = AppState.accountData.followersHistory.map(h => h.value);
     const useLogFollowers = shouldUseLogScale(followerValues);
     
     createLineChart(chartsContainer, '👥 Followers Per Scrape', 
-      accountData.followersHistory,
+      AppState.accountData.followersHistory,
       [{
         label: 'Followers',
-        data: accountData.followersHistory.map(h => ({ x: h.date, y: h.value })),
+        data: AppState.accountData.followersHistory.map(h => ({ x: h.date, y: h.value })),
         borderColor: '#9b59b6',
         backgroundColor: 'rgba(155, 89, 182, 0.1)',
         borderWidth: 3,
@@ -590,15 +590,15 @@ function renderDashboard() {
     );
   }
 
-  if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
-    const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
+  if (AppState.accountData.totalLikesHistory && AppState.accountData.totalLikesHistory.length > 0) {
+    const likesHistoryValues = AppState.accountData.totalLikesHistory.map(h => h.value);
     const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
     
     createLineChart(chartsContainer, '❤️ Total Likes Per Scrape',
-      accountData.totalLikesHistory,
+      AppState.accountData.totalLikesHistory,
       [{
         label: 'Total Likes',
-        data: accountData.totalLikesHistory.map(h => ({ x: h.date, y: h.value })),
+        data: AppState.accountData.totalLikesHistory.map(h => ({ x: h.date, y: h.value })),
         borderColor: '#e91e63',
         backgroundColor: 'rgba(233, 30, 99, 0.1)',
         borderWidth: 3,
@@ -610,17 +610,17 @@ function renderDashboard() {
     );
   }
 
-  if (accountData.videos.length > 0) {
-    const viewsData = accountData.videos.map(v => v.views);
-    const likesData = accountData.videos.map(v => v.likes);
+  if (AppState.accountData.videos.length > 0) {
+    const viewsData = AppState.accountData.videos.map(v => v.views);
+    const likesData = AppState.accountData.videos.map(v => v.likes);
     const useLogViews = shouldUseLogScale(viewsData);
     const useLogLikes = shouldUseLogScale(likesData);
 
     createTimeBasedChart(chartsContainer, 'Views Over Time',
-      accountData.videos,
+      AppState.accountData.videos,
       [{
         label: 'Views',
-        data: accountData.videos.map(v => ({ x: v.date, y: v.views })),
+        data: AppState.accountData.videos.map(v => ({ x: v.date, y: v.views })),
         borderColor: '#00d2d3',
         backgroundColor: 'rgba(0, 210, 211, 0.7)',
         pointRadius: 4,
@@ -632,10 +632,10 @@ function renderDashboard() {
     );
 
     createTimeBasedChart(chartsContainer, 'Likes Over Time',
-      accountData.videos,
+      AppState.accountData.videos,
       [{
         label: 'Likes',
-        data: accountData.videos.map(v => ({ x: v.date, y: v.likes })),
+        data: AppState.accountData.videos.map(v => ({ x: v.date, y: v.likes })),
         borderColor: '#ff6b6b',
         backgroundColor: 'rgba(255, 107, 107, 0.7)',
         pointRadius: 4,
@@ -647,10 +647,10 @@ function renderDashboard() {
     );
 
     createTimeBasedChart(chartsContainer, 'Engagement Rate Over Time',
-      accountData.videos,
+      AppState.accountData.videos,
       [{
         label: 'Engagement %',
-        data: accountData.videos.map(v => ({ x: v.date, y: v.engagement })),
+        data: AppState.accountData.videos.map(v => ({ x: v.date, y: v.engagement })),
         borderColor: '#2ecc71',
         backgroundColor: 'rgba(46, 204, 113, 0.7)',
         pointRadius: 4,
@@ -661,14 +661,14 @@ function renderDashboard() {
       true
     );
 
-    const commentsData = accountData.videos.map(v => v.comments);
+    const commentsData = AppState.accountData.videos.map(v => v.comments);
     const useLogComments = shouldUseLogScale(commentsData);
     
     createTimeBasedChart(chartsContainer, 'Comments Over Time',
-      accountData.videos,
+      AppState.accountData.videos,
       [{
         label: 'Comments',
-        data: accountData.videos.map(v => ({ x: v.date, y: v.comments })),
+        data: AppState.accountData.videos.map(v => ({ x: v.date, y: v.comments })),
         borderColor: '#1abc9c',
         backgroundColor: 'rgba(26, 188, 156, 0.7)',
         pointRadius: 4,
@@ -679,15 +679,15 @@ function renderDashboard() {
       true
     );
 
-    if (selectedPlatform === 'tiktok') {
-      const sharesData = accountData.videos.map(v => v.shares);
+    if (AppState.selectedPlatform === 'tiktok') {
+      const sharesData = AppState.accountData.videos.map(v => v.shares);
       const useLogShares = shouldUseLogScale(sharesData);
       
       createTimeBasedChart(chartsContainer, 'Shares Over Time',
-        accountData.videos,
+        AppState.accountData.videos,
         [{
           label: 'Shares',
-          data: accountData.videos.map(v => ({ x: v.date, y: v.shares })),
+          data: AppState.accountData.videos.map(v => ({ x: v.date, y: v.shares })),
           borderColor: '#e74c3c',
           backgroundColor: 'rgba(231, 76, 60, 0.7)',
           pointRadius: 4,
@@ -699,7 +699,7 @@ function renderDashboard() {
       );
     }
 
-    const correlationValues = accountData.videos.map(v => v.views);
+    const correlationValues = AppState.accountData.videos.map(v => v.views);
     const useLogCorrelation = shouldUseLogScale(correlationValues);
 
     const chartDiv = document.createElement('div');
@@ -731,8 +731,8 @@ function renderDashboard() {
 
     const ctx = canvas.getContext('2d');
     
-    const allViews = accountData.videos.map(v => v.views).filter(v => v > 0);
-    const allLikes = accountData.videos.map(v => v.likes).filter(v => v > 0);
+    const allViews = AppState.accountData.videos.map(v => v.views).filter(v => v > 0);
+    const allLikes = AppState.accountData.videos.map(v => v.likes).filter(v => v > 0);
     const dataRangeX = {
       min: Math.min(...allViews),
       max: Math.max(...allViews)
@@ -742,12 +742,12 @@ function renderDashboard() {
       max: Math.max(...allLikes)
     };
 
-    chartInstances['correlation'] = new Chart(ctx, {
+    AppState.chartInstances['correlation'] = new Chart(ctx, {
       type: 'scatter',
       data: {
         datasets: [{
           label: 'Posts',
-          data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
+          data: AppState.accountData.videos.map(v => ({ x: v.views, y: v.likes })),
           backgroundColor: 'rgba(0, 210, 211, 0.6)',
           borderColor: '#00d2d3',
           pointRadius: 6,
