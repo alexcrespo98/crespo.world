@@ -13,7 +13,6 @@ function selectPlatform(platform) {
 
 function backToStep(stepNumber) {
   document.getElementById('step1').classList.add('hidden');
-  document.getElementById('step2').classList.add('hidden');
   document.getElementById('step2_5').classList.add('hidden');
   document.getElementById('step3').classList.add('hidden');
   
@@ -22,25 +21,6 @@ function backToStep(stepNumber) {
   if (stepNumber === 0) {
     AppState.selectedPlatform = '';
     AppState.workbookData = null;
-  }
-}
-
-function nextStep(current) {
-  if (current === 1) {
-    AppState.selectedAccount = document.getElementById('accountSelect').value;
-    if (!AppState.selectedAccount) {
-      alert('pick an account first!');
-      return;
-    }
-    AppState.isMoonMediaTotal = (AppState.selectedAccount === 'MOONMEDIA_TOTAL');
-    document.getElementById('step1').classList.add('hidden');
-    document.getElementById('step2').classList.remove('hidden');
-  } else if (current === 2) {
-    document.getElementById('step2').classList.add('hidden');
-    document.getElementById('step2_5').classList.remove('hidden');
-  } else if (current === 3) {
-    document.getElementById('step2').classList.add('hidden');
-    document.getElementById('step3').classList.remove('hidden');
   }
 }
 
@@ -60,8 +40,6 @@ function selectTimeRange(days) {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('charts').classList.remove('hidden');
     
-    const platformIcon = AppState.selectedPlatform === 'instagram' ? '📸' : '🎵';
-    document.getElementById('platformIcon').textContent = platformIcon;
     document.getElementById('accountName').textContent = AppState.isMoonMediaTotal ? 'All MoonMedia' : AppState.selectedAccount;
     
     let rangeText = '';
@@ -134,8 +112,7 @@ function exportChart(chartId, title) {
   else if (AppState.selectedTimeRange === 180) rangeText = '(Last 6 Months)';
   else if (AppState.selectedTimeRange === 30) rangeText = '(Last 1 Month)';
   
-  const platformEmoji = AppState.selectedPlatform === 'instagram' ? '📸' : '🎵';
-  tempCtx.fillText(`${platformEmoji} ${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
+  tempCtx.fillText(`${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
   
   tempCtx.drawImage(canvas, 0, 80);
   
@@ -198,10 +175,10 @@ function toggleTrendline(chartId) {
   if (badge) {
     if (showTrendline) {
       badge.classList.remove('inactive');
-      badge.textContent = '📈 TREND ON';
+      badge.textContent = 'TREND ON';
     } else {
       badge.classList.add('inactive');
-      badge.textContent = '📈 TREND OFF';
+      badge.textContent = 'TREND OFF';
     }
   }
 
@@ -357,7 +334,7 @@ function createTimeBasedChart(container, title, videos, datasets, useLog, chartI
   if (includeTrendline) {
     const trendlineBadge = document.createElement('span');
     trendlineBadge.className = 'trendline-badge inactive';
-    trendlineBadge.textContent = '📈 TREND OFF';
+    trendlineBadge.textContent = 'TREND OFF';
     trendlineBadge.setAttribute('data-trendline-id', chartId);
     trendlineBadge.onclick = () => toggleTrendline(chartId);
     header.appendChild(trendlineBadge);
@@ -532,19 +509,19 @@ function renderDashboard() {
   
   let statsHTML = `
     <div class="stat-card">
-      <h4>👥 FOLLOWERS</h4>
+      <h4>FOLLOWERS</h4>
       <div class="value">${formatNumber(AppState.accountData.followers)}</div>
     </div>
     <div class="stat-card">
-      <h4>❤️ TOTAL LIKES</h4>
+      <h4>TOTAL LIKES</h4>
       <div class="value">${formatNumber(AppState.accountData.totalLikes)}</div>
     </div>
     <div class="stat-card">
-      <h4>🎬 ${contentType} TRACKED</h4>
+      <h4>${contentType} TRACKED</h4>
       <div class="value">${AppState.accountData.postsScraped}</div>
     </div>
     <div class="stat-card">
-      <h4>📈 AVG ENGAGEMENT</h4>
+      <h4>AVG ENGAGEMENT</h4>
       <div class="value">${AppState.accountData.videos.length > 0 ? (AppState.accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / AppState.accountData.videos.length).toFixed(2) : 0}%</div>
     </div>
   `;
@@ -552,15 +529,15 @@ function renderDashboard() {
   if (AppState.isMoonMediaTotal) {
     statsHTML += `
       <div class="stat-card">
-        <h4>👁️ TOTAL VIEWS</h4>
+        <h4>TOTAL VIEWS</h4>
         <div class="value">${formatNumber(AppState.accountData.totalViews)}</div>
       </div>
       <div class="stat-card">
-        <h4>⚡ VIEWS PER SECOND</h4>
+        <h4>VIEWS PER SECOND</h4>
         <div class="value">${AppState.accountData.viewsPerSecond.toFixed(2)}</div>
       </div>
       <div class="stat-card">
-        <h4>🏢 TOTAL ACCOUNTS</h4>
+        <h4>TOTAL ACCOUNTS</h4>
         <div class="value">${AppState.accountData.accountCount}</div>
       </div>
     `;
@@ -575,7 +552,7 @@ function renderDashboard() {
     const followerValues = AppState.accountData.followersHistory.map(h => h.value);
     const useLogFollowers = shouldUseLogScale(followerValues);
     
-    createLineChart(chartsContainer, '👥 Followers Per Scrape', 
+    createLineChart(chartsContainer, 'Followers Per Scrape', 
       AppState.accountData.followersHistory,
       [{
         label: 'Followers',
@@ -595,7 +572,7 @@ function renderDashboard() {
     const likesHistoryValues = AppState.accountData.totalLikesHistory.map(h => h.value);
     const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
     
-    createLineChart(chartsContainer, '❤️ Total Likes Per Scrape',
+    createLineChart(chartsContainer, 'Total Likes Per Scrape',
       AppState.accountData.totalLikesHistory,
       [{
         label: 'Total Likes',
