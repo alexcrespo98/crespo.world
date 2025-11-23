@@ -259,8 +259,8 @@
     <!-- Step 0: Platform selection -->
     <div id="step0">
       <div class="question">which platform?</div>
-      <button class="platform-btn instagram" onclick="selectPlatform('instagram')">📸 Instagram Reels</button>
-      <button class="platform-btn tiktok" onclick="selectPlatform('tiktok')">🎵 TikTok</button>
+      <button class="platform-btn instagram" onclick="selectPlatform('instagram')"> Instagram Reels</button>
+      <button class="platform-btn tiktok" onclick="selectPlatform('tiktok')"> TikTok</button>
     </div>
 
     <!-- Step 1: Select account -->
@@ -423,7 +423,7 @@
       else if (selectedTimeRange === 180) rangeText = '(Last 6 Months)';
       else if (selectedTimeRange === 30) rangeText = '(Last 1 Month)';
       
-      const platformEmoji = selectedPlatform === 'instagram' ? '📸' : '🎵';
+      const platformEmoji = selectedPlatform === 'instagram' ? '' : '';
       tempCtx.fillText(`${platformEmoji} ${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
       
       tempCtx.drawImage(canvas, 0, 80);
@@ -452,7 +452,7 @@
         }
         
         const select = document.getElementById('accountSelect');
-        const platformEmoji = selectedPlatform === 'instagram' ? '📸' : '🎵';
+        const platformEmoji = selectedPlatform === 'instagram' ? '' : '';
         select.innerHTML = '<option value="">-- select an account --</option>' +
           '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">All MoonMedia Analytics</option>' +
           accounts.map(acc => `<option value="${acc}">${platformEmoji} @${acc}</option>`).join('');
@@ -973,7 +973,7 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
         
-        const platformIcon = selectedPlatform === 'instagram' ? '📸' : '🎵';
+        const platformIcon = selectedPlatform === 'instagram' ? '' : '';
         document.getElementById('platformIcon').textContent = platformIcon;
         document.getElementById('accountName').textContent = isMoonMediaTotal ? 'All MoonMedia' : selectedAccount;
         
