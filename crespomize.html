@@ -1367,7 +1367,7 @@
         link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}_${platformSuffix}.png`;
         link.href = tempCanvas.toDataURL('image/png');
         link.click();
-      }
+      },
       // Chart creation functions continued
       createLineChart(container, title, historyData, datasets, useLog, chartId) {
         const chartDiv = document.createElement('div');
