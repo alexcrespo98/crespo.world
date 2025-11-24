@@ -301,11 +301,12 @@
     let trendlineDaysAverage = {};
 
     function selectPlatform(platform) {
-      if (!platform) return;
       selectedPlatform = platform;
-      document.getElementById('step0').classList.add('hidden');
-      document.getElementById('step1').classList.remove('hidden');
-      loadSheetData();
+      if (platform) {
+        document.getElementById('step0').classList.add('hidden');
+        document.getElementById('step1').classList.remove('hidden');
+        loadSheetData();
+      }
     }
 
     function selectAccount(account) {
