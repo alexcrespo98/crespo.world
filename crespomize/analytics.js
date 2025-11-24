@@ -103,7 +103,7 @@ function exportChart(chartId, title) {
   else if (selectedTimeRange === 180) rangeText = '(Last 6 Months)';
   else if (selectedTimeRange === 30) rangeText = '(Last 1 Month)';
   
-  const platformEmoji = selectedPlatform === 'instagram' ? '' : '';
+  const platformEmoji = selectedPlatform === 'instagram' ? '📷' : '🎵';
   tempCtx.fillText(`${platformEmoji} ${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
   
   tempCtx.drawImage(canvas, 0, 80);
@@ -133,9 +133,9 @@ async function loadSheetData() {
     }
     
     const select = document.getElementById('accountSelect');
-    const platformEmoji = selectedPlatform === 'instagram' ? '' : '';
+    const platformEmoji = selectedPlatform === 'instagram' ? '📷' : '🎵';
     select.innerHTML = '<option value="">-- select an account --</option>' +
-      '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">All MoonMedia Analytics</option>' +
+      '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">🌙 All MoonMedia Analytics</option>' +
       accounts.map(acc => `<option value="${acc}">${platformEmoji} @${acc}</option>`).join('');
     
     console.log('✅ Loaded accounts:', accounts);
@@ -654,7 +654,7 @@ function selectTimeRange(days) {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('charts').classList.remove('hidden');
     
-    const platformIcon = selectedPlatform === 'instagram' ? '' : '';
+    const platformIcon = selectedPlatform === 'instagram' ? '📷' : '🎵';
     document.getElementById('platformIcon').textContent = platformIcon;
     document.getElementById('accountName').textContent = isMoonMediaTotal ? 'All MoonMedia' : selectedAccount;
     
@@ -679,177 +679,165 @@ function formatNumber(num) {
 function formatNumberAxisSmart(value, dataRange) {
   const range = dataRange.max - dataRange.min;
   
-  if (range >= 1000000000) {
-    return (value / 1000000000).toFixed(1) + 'B';
-  } else if (range >= 1000000) {
-    return (value / 1000000).toFixed(1) + 'M';
-  } else if (range >= 10000) {
-    return (value / 1000).toFixed(0) + 'K';
-  } else if (range >= 1000) {
-    return (value / 1000).toFixed(1) + 'K';
+  if (value >= 1000000000) {
+    const val = value / 1000000000;
+    const rangeRatio = range / value;
+    if (rangeRatio < 0.01) return val.toFixed(3) + 'B';
+    if (rangeRatio < 0.1) return val.toFixed(2) + 'B';
+    return val.toFixed(1) + 'B';
+  }
+  if (value >= 1000000) {
+    const val = value / 1000000;
+    const rangeRatio = range / value;
+    if (rangeRatio < 0.01) return val.toFixed(3) + 'M';
+    if (rangeRatio < 0.1) return val.toFixed(2) + 'M';
+    return val.toFixed(1) + 'M';
+  }
+  if (value >= 1000) {
+    const val = value / 1000;
+    const rangeRatio = range / value;
+    if (rangeRatio < 0.01) return val.toFixed(2) + 'K';
+    return val.toFixed(1) + 'K';
   }
   return value.toLocaleString();
 }
 
-// Continue with renderDashboard and chart creation functions...
-// [Rest of the JavaScript code continues here - including renderDashboard(), createChart(), etc.]
-// This is too long for a single response, but you get the pattern - just continue copying
-// all the remaining JavaScript functions into this file
+function toggleLogScale(chartId) {
+  const chart = chartInstances[chartId];
+  if (!chart) return;
 
-function renderDashboard() {
-  const videos = accountData.videos || [];
-  const followersHistory = accountData.followersHistory || [];
-  const totalLikesHistory = accountData.totalLikesHistory || [];
+  const currentType = chart.options.scales.y.type;
+  const newType = currentType === 'logarithmic' ? 'linear' : 'logarithmic';
   
-  // Create summary stats
-  const statsHTML = `
-    <div class="stat-card">
-      <h4>📱 ${selectedPlatform === 'instagram' ? 'Reels' : 'Videos'} Tracked</h4>
-      <div class="value">${formatNumber(accountData.postsScraped || 0)}</div>
-    </div>
-    <div class="stat-card">
-      <h4>👥 Current Followers</h4>
-      <div class="value">${formatNumber(accountData.followers || 0)}</div>
-    </div>
-    <div class="stat-card">
-      <h4>❤️ Total Likes</h4>
-      <div class="value">${formatNumber(accountData.totalLikes || 0)}</div>
-    </div>
-    ${videos.length > 0 ? `
-    <div class="stat-card">
-      <h4>👁️ Avg Views per ${selectedPlatform === 'instagram' ? 'Reel' : 'Video'}</h4>
-      <div class="value">${formatNumber(Math.round(videos.reduce((sum, v) => sum + v.views, 0) / videos.length))}</div>
-    </div>` : ''}
-    ${isMoonMediaTotal ? `
-    <div class="stat-card">
-      <h4>🏢 Accounts Tracked</h4>
-      <div class="value">${accountData.accountCount || 0}</div>
-    </div>
-    <div class="stat-card">
-      <h4>👁️ Total Views</h4>
-      <div class="value">${formatNumber(accountData.totalViews || 0)}</div>
-    </div>` : ''}
-  `;
+  chart.options.scales.y.type = newType;
   
-  document.getElementById('statsSummary').innerHTML = statsHTML;
-  
-  // Create charts
-  const chartsContainer = document.getElementById('chartsList');
-  chartsContainer.innerHTML = '';
-  
-  // Views Over Time
-  if (videos.length > 0) {
-    createChart('views', 'Views Over Time', videos.map(v => ({
-      x: v.date,
-      y: v.views
-    })), '#00ff00', 'bar');
+  if (chart.options.scales.y1) {
+    chart.options.scales.y1.type = newType;
   }
   
-  // Engagement Rate Over Time
-  if (videos.length > 0) {
-    createChart('engagement', 'Engagement Rate Over Time (%)', videos.map(v => ({
-      x: v.date,
-      y: v.engagement
-    })), '#ff00ff', 'line');
+  if (chartId === 'correlation' && chart.options.scales.x) {
+    chart.options.scales.x.type = newType;
   }
   
-  // Followers Growth
-  if (followersHistory.length > 0) {
-    createChart('followers', 'Followers Growth', followersHistory.map(item => ({
-      x: item.date,
-      y: item.value
-    })), '#00ffff', 'line');
-  }
-  
-  // Total Likes Growth
-  if (totalLikesHistory.length > 0) {
-    createChart('totallikes', 'Total Likes Growth', totalLikesHistory.map(item => ({
-      x: item.date,
-      y: item.value
-    })), '#ffff00', 'line');
-  }
-  
-  // Likes Over Time
-  if (videos.length > 0) {
-    createChart('likes', 'Likes per Post', videos.map(v => ({
-      x: v.date,
-      y: v.likes
-    })), '#ff6b6b', 'bar');
-  }
-  
-  // Comments Over Time
-  if (videos.length > 0) {
-    createChart('comments', 'Comments per Post', videos.map(v => ({
-      x: v.date,
-      y: v.comments
-    })), '#4ecdc4', 'bar');
-  }
-  
-  // Shares Over Time (TikTok only)
-  if (selectedPlatform === 'tiktok' && videos.length > 0) {
-    createChart('shares', 'Shares per Post', videos.map(v => ({
-      x: v.date,
-      y: v.shares
-    })), '#f7b731', 'bar');
+  chart.update();
+
+  const badge = document.querySelector(`[data-chart-id="${chartId}"]`);
+  if (badge) {
+    if (newType === 'logarithmic') {
+      badge.classList.remove('inactive');
+      badge.textContent = 'LOG SCALE';
+    } else {
+      badge.classList.add('inactive');
+      badge.textContent = 'LINEAR';
+    }
   }
 }
 
-function createChart(id, title, data, color, type = 'line') {
-  if (!data || data.length === 0) return;
+function toggleTrendline(chartId) {
+  const chart = chartInstances[chartId];
+  if (!chart) return;
+
+  trendlineStates[chartId] = !trendlineStates[chartId];
+  const showTrendline = trendlineStates[chartId];
+
+  const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
+  if (trendlineDataset) {
+    trendlineDataset.hidden = !showTrendline;
+  }
+
+  if (chart.options.scales.y1) {
+    chart.options.scales.y1.display = showTrendline;
+  }
+
+  chart.update();
+
+  const badge = document.querySelector(`[data-trendline-id="${chartId}"]`);
+  if (badge) {
+    if (showTrendline) {
+      badge.classList.remove('inactive');
+      badge.textContent = '📈 TREND ON';
+    } else {
+      badge.classList.add('inactive');
+      badge.textContent = '📈 TREND OFF';
+    }
+  }
+
+  const controls = document.querySelector(`[data-smoothness-controls="${chartId}"]`);
+  if (controls) {
+    controls.style.display = showTrendline ? 'inline-block' : 'none';
+  }
+}
+
+function adjustTrendlineSmoothness(chartId, direction) {
+  const chart = chartInstances[chartId];
+  if (!chart) return;
+
+  if (trendlineDaysAverage[chartId] === undefined) {
+    trendlineDaysAverage[chartId] = 7;
+  }
+
+  trendlineDaysAverage[chartId] += direction;
+  trendlineDaysAverage[chartId] = Math.max(1, trendlineDaysAverage[chartId]);
+
+  const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
+  if (!dataDataset) return;
+
+  const trendlineData = calculateMovingAverageByDays(dataDataset.data, trendlineDaysAverage[chartId]);
+
+  const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
+  if (trendlineDataset) {
+    trendlineDataset.data = trendlineData;
+  }
+
+  chart.update();
+
+  const display = document.querySelector(`[data-days-display="${chartId}"]`);
+  if (display) {
+    display.textContent = trendlineDaysAverage[chartId];
+  }
+
+  console.log(`Trendline for ${chartId}: ${trendlineDaysAverage[chartId]} days average`);
+}
+
+function createLineChart(container, title, historyData, datasets, useLog, chartId) {
+  const chartDiv = document.createElement('div');
+  chartDiv.className = 'chart-container';
   
-  const container = document.createElement('div');
-  container.className = 'chart-container';
+  const canvas = document.createElement('canvas');
+  canvas.id = chartId;
   
-  const chartId = `chart-${id}`;
-  const useLogScale = shouldUseLogScale(data.map(d => d.y));
+  const header = document.createElement('h3');
+  header.textContent = title;
   
-  container.innerHTML = `
-    <button class="export-btn" onclick="exportChart('${chartId}', '${title}')">📥 Export</button>
-    <h3>${title} 
-      <span class="scale-badge ${useLogScale ? '' : 'inactive'}" 
-            onclick="toggleScale('${chartId}')" 
-            id="scale-${chartId}">
-        ${useLogScale ? 'LOG' : 'LINEAR'}
-      </span>
-      ${type === 'line' ? `
-        <span class="trendline-badge inactive" 
-              onclick="toggleTrendline('${chartId}')" 
-              id="trendline-${chartId}">
-          SMOOTH OFF
-        </span>
-        <span class="smoothness-controls hidden" id="smoothness-${chartId}">
-          <button class="smoothness-btn" onclick="adjustSmoothness('${chartId}', -1)">−</button>
-          <span id="smoothness-value-${chartId}" style="color: #ffff00; font-weight: bold; margin: 0 0.5em;">7d</span>
-          <button class="smoothness-btn" onclick="adjustSmoothness('${chartId}', 1)">+</button>
-        </span>
-      ` : ''}
-    </h3>
-    <canvas id="${chartId}"></canvas>
-  `;
+  const scaleBadge = document.createElement('span');
+  scaleBadge.className = 'scale-badge' + (useLog ? '' : ' inactive');
+  scaleBadge.textContent = useLog ? 'LOG SCALE' : 'LINEAR';
+  scaleBadge.setAttribute('data-chart-id', chartId);
+  scaleBadge.onclick = () => toggleLogScale(chartId);
   
-  document.getElementById('chartsList').appendChild(container);
+  header.appendChild(scaleBadge);
   
-  const ctx = document.getElementById(chartId).getContext('2d');
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'export-btn';
+  exportBtn.textContent = '💾 Export';
+  exportBtn.onclick = () => exportChart(chartId, title);
   
+  chartDiv.appendChild(header);
+  chartDiv.appendChild(exportBtn);
+  chartDiv.appendChild(canvas);
+  container.appendChild(chartDiv);
+
+  const ctx = canvas.getContext('2d');
+  
+  const allValues = datasets.flatMap(ds => ds.data.map(d => d.y)).filter(v => v > 0);
   const dataRange = {
-    min: Math.min(...data.map(d => d.y)),
-    max: Math.max(...data.map(d => d.y))
+    min: Math.min(...allValues),
+    max: Math.max(...allValues)
   };
-  
-  const chart = new Chart(ctx, {
-    type: type,
-    data: {
-      datasets: [{
-        label: title,
-        data: data,
-        borderColor: color,
-        backgroundColor: type === 'bar' ? color + '40' : 'transparent',
-        borderWidth: 2,
-        pointRadius: type === 'line' ? 3 : 0,
-        pointHoverRadius: type === 'line' ? 6 : 0,
-        tension: 0.1
-      }]
-    },
+
+  chartInstances[chartId] = new Chart(ctx, {
+    type: 'line',
+    data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: true,
@@ -860,18 +848,21 @@ function createChart(id, title, data, color, type = 'line') {
       },
       plugins: {
         legend: {
-          display: false
+          display: true,
+          labels: {
+            color: '#0f0',
+            font: { family: 'monospace', size: 12 }
+          }
         },
         tooltip: {
-          backgroundColor: 'rgba(0, 255, 0, 0.9)',
-          titleColor: '#000',
-          bodyColor: '#000',
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#0f0',
+          bodyColor: '#0f0',
           borderColor: '#0f0',
-          borderWidth: 2,
-          displayColors: false,
+          borderWidth: 1,
           callbacks: {
             label: function(context) {
-              return `${formatNumber(context.parsed.y)}`;
+              return context.dataset.label + ': ' + formatNumber(context.parsed.y);
             }
           }
         }
@@ -880,139 +871,515 @@ function createChart(id, title, data, color, type = 'line') {
         x: {
           type: 'time',
           time: {
-            tooltipFormat: 'MMM dd, yyyy'
+            unit: 'day',
+            displayFormats: { day: 'MMM d, yyyy' }
           },
-          grid: {
-            color: 'rgba(0, 255, 0, 0.1)'
-          },
-          ticks: {
-            color: '#0f0',
-            font: {
-              family: 'monospace'
-            }
-          }
+          ticks: { color: '#0f0', font: { family: 'monospace' } },
+          grid: { color: 'rgba(0, 255, 0, 0.1)' }
         },
         y: {
-          type: useLogScale ? 'logarithmic' : 'linear',
-          grid: {
-            color: 'rgba(0, 255, 0, 0.1)'
-          },
+          type: useLog ? 'logarithmic' : 'linear',
           ticks: {
             color: '#0f0',
-            font: {
-              family: 'monospace'
-            },
+            font: { family: 'monospace' },
             callback: function(value) {
               return formatNumberAxisSmart(value, dataRange);
             }
-          }
+          },
+          grid: { color: 'rgba(0, 255, 0, 0.1)' }
         }
       }
     }
   });
-  
-  chartInstances[chartId] = chart;
-  trendlineStates[chartId] = false;
-  trendlineDaysAverage[chartId] = 7;
 }
 
-function toggleScale(chartId) {
-  const chart = chartInstances[chartId];
-  if (!chart) return;
+function createTimeBasedChart(container, title, videos, datasets, useLog, chartId, includeTrendline = false) {
+  const chartDiv = document.createElement('div');
+  chartDiv.className = 'chart-container';
   
-  const currentType = chart.options.scales.y.type;
-  const newType = currentType === 'logarithmic' ? 'linear' : 'logarithmic';
+  const canvas = document.createElement('canvas');
+  canvas.id = chartId;
   
-  chart.options.scales.y.type = newType;
-  chart.update();
+  const header = document.createElement('h3');
+  header.textContent = title;
   
-  const badge = document.getElementById(`scale-${chartId}`);
-  if (newType === 'logarithmic') {
-    badge.textContent = 'LOG';
-    badge.classList.remove('inactive');
-  } else {
-    badge.textContent = 'LINEAR';
-    badge.classList.add('inactive');
+  const scaleBadge = document.createElement('span');
+  scaleBadge.className = 'scale-badge' + (useLog ? '' : ' inactive');
+  scaleBadge.textContent = useLog ? 'LOG SCALE' : 'LINEAR';
+  scaleBadge.setAttribute('data-chart-id', chartId);
+  scaleBadge.onclick = () => toggleLogScale(chartId);
+  
+  header.appendChild(scaleBadge);
+
+  if (includeTrendline) {
+    const trendlineBadge = document.createElement('span');
+    trendlineBadge.className = 'trendline-badge inactive';
+    trendlineBadge.textContent = '📈 TREND OFF';
+    trendlineBadge.setAttribute('data-trendline-id', chartId);
+    trendlineBadge.onclick = () => toggleTrendline(chartId);
+    header.appendChild(trendlineBadge);
+
+    trendlineStates[chartId] = false;
+    trendlineDaysAverage[chartId] = 7;
+
+    const smoothnessControls = document.createElement('span');
+    smoothnessControls.className = 'smoothness-controls';
+    smoothnessControls.setAttribute('data-smoothness-controls', chartId);
+    smoothnessControls.style.display = 'none';
+
+    const downBtn = document.createElement('button');
+    downBtn.className = 'smoothness-btn';
+    downBtn.textContent = '◄';
+    downBtn.onclick = () => adjustTrendlineSmoothness(chartId, -1);
+
+    const daysDisplay = document.createElement('span');
+    daysDisplay.className = 'smoothness-btn';
+    daysDisplay.textContent = '7';
+    daysDisplay.style.cursor = 'default';
+    daysDisplay.setAttribute('data-days-display', chartId);
+
+    const upBtn = document.createElement('button');
+    upBtn.className = 'smoothness-btn';
+    upBtn.textContent = '►';
+    upBtn.onclick = () => adjustTrendlineSmoothness(chartId, 1);
+
+    smoothnessControls.appendChild(downBtn);
+    smoothnessControls.appendChild(daysDisplay);
+    smoothnessControls.appendChild(upBtn);
+    
+    header.appendChild(smoothnessControls);
   }
-}
+  
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'export-btn';
+  exportBtn.textContent = '💾 Export';
+  exportBtn.onclick = () => exportChart(chartId, title);
+  
+  chartDiv.appendChild(header);
+  chartDiv.appendChild(exportBtn);
+  chartDiv.appendChild(canvas);
+  container.appendChild(chartDiv);
 
-function toggleTrendline(chartId) {
-  const chart = chartInstances[chartId];
-  if (!chart) return;
-  
-  const isActive = trendlineStates[chartId];
-  trendlineStates[chartId] = !isActive;
-  
-  const badge = document.getElementById(`trendline-${chartId}`);
-  const smoothnessControls = document.getElementById(`smoothness-${chartId}`);
-  
-  if (!isActive) {
-    // Turn on trendline
-    const originalData = chart.data.datasets[0].data;
-    const days = trendlineDaysAverage[chartId] || 7;
-    const smoothedData = calculateMovingAverageByDays(originalData, days);
+  const ctx = canvas.getContext('2d');
+
+  if (includeTrendline && datasets.length > 0) {
+    const trendlineData = calculateMovingAverageByDays(datasets[0].data, 7);
     
-    // Store original data
-    chart.data.datasets[0].originalData = originalData;
-    chart.data.datasets[0].data = smoothedData;
-    
-    badge.textContent = `SMOOTH ${days}d`;
-    badge.classList.remove('inactive');
-    smoothnessControls.classList.remove('hidden');
-  } else {
-    // Turn off trendline
-    if (chart.data.datasets[0].originalData) {
-      chart.data.datasets[0].data = chart.data.datasets[0].originalData;
-      delete chart.data.datasets[0].originalData;
+    datasets.push({
+      label: 'Trend',
+      data: trendlineData,
+      type: 'line',
+      borderColor: '#ffff00',
+      backgroundColor: 'transparent',
+      borderWidth: 3,
+      pointRadius: 0,
+      tension: 0.4,
+      yAxisID: 'y1',
+      hidden: true,
+      order: 0
+    });
+  }
+  
+  const allValues = datasets.filter(ds => ds.label !== 'Trend').flatMap(ds => ds.data.map(d => d.y)).filter(v => v > 0);
+  const dataRange = {
+    min: Math.min(...allValues),
+    max: Math.max(...allValues)
+  };
+
+  const trendlineValues = includeTrendline 
+    ? datasets.find(ds => ds.label === 'Trend').data.map(d => d.y).filter(v => v > 0)
+    : [];
+  const trendlineRange = trendlineValues.length > 0 
+    ? { min: Math.min(...trendlineValues), max: Math.max(...trendlineValues) }
+    : dataRange;
+
+  const scales = {
+    x: {
+      type: 'time',
+      time: {
+        unit: 'day',
+        displayFormats: { day: 'MMM d, yyyy' }
+      },
+      ticks: { color: '#0f0', font: { family: 'monospace' } },
+      grid: { color: 'rgba(0, 255, 0, 0.1)' }
+    },
+    y: {
+      type: useLog ? 'logarithmic' : 'linear',
+      position: 'left',
+      ticks: {
+        color: '#0f0',
+        font: { family: 'monospace' },
+        callback: function(value) {
+          return formatNumberAxisSmart(value, dataRange);
+        }
+      },
+      grid: { color: 'rgba(0, 255, 0, 0.1)' }
     }
-    
-    badge.textContent = 'SMOOTH OFF';
-    badge.classList.add('inactive');
-    smoothnessControls.classList.add('hidden');
+  };
+
+  if (includeTrendline) {
+    scales.y1 = {
+      type: useLog ? 'logarithmic' : 'linear',
+      position: 'right',
+      display: false,
+      ticks: {
+        color: '#ffff00',
+        font: { family: 'monospace' },
+        callback: function(value) {
+          return formatNumberAxisSmart(value, trendlineRange);
+        }
+      },
+      grid: {
+        drawOnChartArea: false
+      }
+    };
   }
-  
-  chart.update();
+
+  chartInstances[chartId] = new Chart(ctx, {
+    type: datasets[0].type || 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 2.5,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            color: '#0f0',
+            font: { family: 'monospace', size: 12 },
+            filter: function(item, chart) {
+              if (item.text === 'Trend') {
+                return trendlineStates[chartId] === true;
+              }
+              return true;
+            }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#0f0',
+          bodyColor: '#0f0',
+          borderColor: '#0f0',
+          borderWidth: 1,
+          callbacks: {
+            label: function(context) {
+              return context.dataset.label + ': ' + formatNumber(context.parsed.y);
+            }
+          }
+        }
+      },
+      scales: scales
+    }
+  });
 }
 
-function adjustSmoothness(chartId, delta) {
-  const chart = chartInstances[chartId];
-  if (!chart || !trendlineStates[chartId]) return;
+function renderDashboard() {
+  chartInstances = {};
+  trendlineStates = {};
+  trendlineDaysAverage = {};
+
+  const statsContainer = document.getElementById('statsSummary');
   
-  let currentDays = trendlineDaysAverage[chartId] || 7;
+  const contentType = selectedPlatform === 'instagram' ? 'REELS' : 'POSTS';
   
-  if (delta > 0) {
-    if (currentDays < 3) currentDays = 3;
-    else if (currentDays < 7) currentDays = 7;
-    else if (currentDays < 14) currentDays = 14;
-    else if (currentDays < 30) currentDays = 30;
-    else if (currentDays < 60) currentDays = 60;
-    else if (currentDays < 90) currentDays = 90;
-    else return;
-  } else {
-    if (currentDays > 90) currentDays = 90;
-    else if (currentDays > 60) currentDays = 60;
-    else if (currentDays > 30) currentDays = 30;
-    else if (currentDays > 14) currentDays = 14;
-    else if (currentDays > 7) currentDays = 7;
-    else if (currentDays > 3) currentDays = 3;
-    else if (currentDays > 1) currentDays = 1;
-    else return;
+  let statsHTML = `
+    <div class="stat-card">
+      <h4>👥 FOLLOWERS</h4>
+      <div class="value">${formatNumber(accountData.followers)}</div>
+    </div>
+    <div class="stat-card">
+      <h4>❤️ TOTAL LIKES</h4>
+      <div class="value">${formatNumber(accountData.totalLikes)}</div>
+    </div>
+    <div class="stat-card">
+      <h4>🎬 ${contentType} TRACKED</h4>
+      <div class="value">${accountData.postsScraped}</div>
+    </div>
+    <div class="stat-card">
+      <h4>📈 AVG ENGAGEMENT</h4>
+      <div class="value">${accountData.videos.length > 0 ? (accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / accountData.videos.length).toFixed(2) : 0}%</div>
+    </div>
+  `;
+
+  if (isMoonMediaTotal) {
+    statsHTML += `
+      <div class="stat-card">
+        <h4>👁️ TOTAL VIEWS</h4>
+        <div class="value">${formatNumber(accountData.totalViews)}</div>
+      </div>
+      <div class="stat-card">
+        <h4>⚡ VIEWS PER SECOND</h4>
+        <div class="value">${accountData.viewsPerSecond.toFixed(2)}</div>
+      </div>
+      <div class="stat-card">
+        <h4>🏢 TOTAL ACCOUNTS</h4>
+        <div class="value">${accountData.accountCount}</div>
+      </div>
+    `;
   }
-  
-  trendlineDaysAverage[chartId] = currentDays;
-  
-  // Update the display
-  document.getElementById(`smoothness-value-${chartId}`).textContent = `${currentDays}d`;
-  document.getElementById(`trendline-${chartId}`).textContent = `SMOOTH ${currentDays}d`;
-  
-  // Recalculate and update chart
-  const originalData = chart.data.datasets[0].originalData || chart.data.datasets[0].data;
-  const smoothedData = calculateMovingAverageByDays(originalData, currentDays);
-  
-  if (!chart.data.datasets[0].originalData) {
-    chart.data.datasets[0].originalData = originalData;
+
+  statsContainer.innerHTML = statsHTML;
+
+  const chartsContainer = document.getElementById('chartsList');
+  chartsContainer.innerHTML = '';
+
+  if (accountData.followersHistory && accountData.followersHistory.length > 0) {
+    const followerValues = accountData.followersHistory.map(h => h.value);
+    const useLogFollowers = shouldUseLogScale(followerValues);
+    
+    createLineChart(chartsContainer, '👥 Followers Per Scrape', 
+      accountData.followersHistory,
+      [{
+        label: 'Followers',
+        data: accountData.followersHistory.map(h => ({ x: h.date, y: h.value })),
+        borderColor: '#9b59b6',
+        backgroundColor: 'rgba(155, 89, 182, 0.1)',
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true
+      }],
+      useLogFollowers,
+      'followers-history'
+    );
   }
-  chart.data.datasets[0].data = smoothedData;
-  
-  chart.update();
+
+  if (accountData.totalLikesHistory && accountData.totalLikesHistory.length > 0) {
+    const likesHistoryValues = accountData.totalLikesHistory.map(h => h.value);
+    const useLogLikesHistory = shouldUseLogScale(likesHistoryValues);
+    
+    createLineChart(chartsContainer, '❤️ Total Likes Per Scrape',
+      accountData.totalLikesHistory,
+      [{
+        label: 'Total Likes',
+        data: accountData.totalLikesHistory.map(h => ({ x: h.date, y: h.value })),
+        borderColor: '#e91e63',
+        backgroundColor: 'rgba(233, 30, 99, 0.1)',
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true
+      }],
+      useLogLikesHistory,
+      'likes-history'
+    );
+  }
+
+  if (accountData.videos.length > 0) {
+    const viewsData = accountData.videos.map(v => v.views);
+    const likesData = accountData.videos.map(v => v.likes);
+    const useLogViews = shouldUseLogScale(viewsData);
+    const useLogLikes = shouldUseLogScale(likesData);
+
+    createTimeBasedChart(chartsContainer, '👁️ Views Over Time',
+      accountData.videos,
+      [{
+        label: 'Views',
+        data: accountData.videos.map(v => ({ x: v.date, y: v.views })),
+        borderColor: '#00d2d3',
+        backgroundColor: 'rgba(0, 210, 211, 0.7)',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }],
+      useLogViews,
+      'views-time',
+      true
+    );
+
+    createTimeBasedChart(chartsContainer, '❤️ Likes Over Time',
+      accountData.videos,
+      [{
+        label: 'Likes',
+        data: accountData.videos.map(v => ({ x: v.date, y: v.likes })),
+        borderColor: '#ff6b6b',
+        backgroundColor: 'rgba(255, 107, 107, 0.7)',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }],
+      useLogLikes,
+      'likes-time',
+      true
+    );
+
+    createTimeBasedChart(chartsContainer, '📈 Engagement Rate Over Time',
+      accountData.videos,
+      [{
+        label: 'Engagement %',
+        data: accountData.videos.map(v => ({ x: v.date, y: v.engagement })),
+        borderColor: '#2ecc71',
+        backgroundColor: 'rgba(46, 204, 113, 0.7)',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }],
+      false,
+      'engagement-time',
+      true
+    );
+
+    const commentsData = accountData.videos.map(v => v.comments);
+    const useLogComments = shouldUseLogScale(commentsData);
+    
+    createTimeBasedChart(chartsContainer, '💬 Comments Over Time',
+      accountData.videos,
+      [{
+        label: 'Comments',
+        data: accountData.videos.map(v => ({ x: v.date, y: v.comments })),
+        borderColor: '#1abc9c',
+        backgroundColor: 'rgba(26, 188, 156, 0.7)',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }],
+      useLogComments,
+      'comments-time',
+      true
+    );
+
+    if (selectedPlatform === 'tiktok') {
+      const sharesData = accountData.videos.map(v => v.shares);
+      const useLogShares = shouldUseLogScale(sharesData);
+      
+      createTimeBasedChart(chartsContainer, '🔄 Shares Over Time',
+        accountData.videos,
+        [{
+          label: 'Shares',
+          data: accountData.videos.map(v => ({ x: v.date, y: v.shares })),
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231, 76, 60, 0.7)',
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }],
+        useLogShares,
+        'shares-time',
+        true
+      );
+    }
+
+    // Likes vs Views Correlation Chart
+    const correlationValues = accountData.videos.map(v => v.views);
+    const useLogCorrelation = shouldUseLogScale(correlationValues);
+
+    const chartDiv = document.createElement('div');
+    chartDiv.className = 'chart-container';
+    
+    const canvas = document.createElement('canvas');
+    canvas.id = 'correlation';
+    
+    const header = document.createElement('h3');
+    header.textContent = '❤️ Likes vs Views Correlation';
+    
+    const scaleBadge = document.createElement('span');
+    scaleBadge.className = 'scale-badge' + (useLogCorrelation ? '' : ' inactive');
+    scaleBadge.textContent = useLogCorrelation ? 'LOG SCALE' : 'LINEAR';
+    scaleBadge.setAttribute('data-chart-id', 'correlation');
+    scaleBadge.onclick = () => toggleLogScale('correlation');
+    
+    header.appendChild(scaleBadge);
+    
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'export-btn';
+    exportBtn.textContent = '💾 Export';
+    exportBtn.onclick = () => exportChart('correlation', 'Likes vs Views Correlation');
+    
+    chartDiv.appendChild(header);
+    chartDiv.appendChild(exportBtn);
+    chartDiv.appendChild(canvas);
+    chartsContainer.appendChild(chartDiv);
+
+    const ctx = canvas.getContext('2d');
+    
+    const allViews = accountData.videos.map(v => v.views).filter(v => v > 0);
+    const allLikes = accountData.videos.map(v => v.likes).filter(v => v > 0);
+    const dataRangeX = {
+      min: Math.min(...allViews),
+      max: Math.max(...allViews)
+    };
+    const dataRangeY = {
+      min: Math.min(...allLikes),
+      max: Math.max(...allLikes)
+    };
+
+    chartInstances['correlation'] = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: 'Posts',
+          data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
+          backgroundColor: 'rgba(0, 210, 211, 0.6)',
+          borderColor: '#00d2d3',
+          pointRadius: 6,
+          pointHoverRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2.5,
+        plugins: {
+          legend: {
+            display: true,
+            labels: {
+              color: '#0f0',
+              font: { family: 'monospace', size: 12 }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            titleColor: '#0f0',
+            bodyColor: '#0f0',
+            borderColor: '#0f0',
+            borderWidth: 1,
+            callbacks: {
+              label: function(context) {
+                return 'Views: ' + formatNumber(context.parsed.x) + ', Likes: ' + formatNumber(context.parsed.y);
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: useLogCorrelation ? 'logarithmic' : 'linear',
+            title: {
+              display: true,
+              text: 'Views',
+              color: '#0f0',
+              font: { family: 'monospace', size: 14 }
+            },
+            ticks: {
+              color: '#0f0',
+              font: { family: 'monospace' },
+              callback: function(value) {
+                return formatNumberAxisSmart(value, dataRangeX);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          },
+          y: {
+            type: useLogCorrelation ? 'logarithmic' : 'linear',
+            title: {
+              display: true,
+              text: 'Likes',
+              color: '#0f0',
+              font: { family: 'monospace', size: 14 }
+            },
+            ticks: {
+              color: '#0f0',
+              font: { family: 'monospace' },
+              callback: function(value) {
+                return formatNumberAxisSmart(value, dataRangeY);
+              }
+            },
+            grid: { color: 'rgba(0, 255, 0, 0.1)' }
+          }
+        }
+      }
+    });
+  }
 }
+
+// Initialize when DOM is ready
+window.addEventListener('load', () => {
+  // Do nothing on load, wait for platform selection
+});
