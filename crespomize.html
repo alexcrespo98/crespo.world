@@ -133,23 +133,6 @@
       border: 3px solid #0f0;
       box-shadow: 0 0 20px #0f0;
     }
-    .platform-btn {
-      font-size: 1.1em;
-      padding: 1em 2em;
-      min-width: 200px;
-    }
-    .platform-btn.instagram {
-      background: linear-gradient(135deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
-      color: #fff;
-      border: 3px solid #e6683c;
-      box-shadow: 0 0 20px rgba(230, 104, 60, 0.5);
-    }
-    .platform-btn.tiktok {
-      background: linear-gradient(135deg, #00f2ea 0%, #ff0050 100%);
-      color: #fff;
-      border: 3px solid #00f2ea;
-      box-shadow: 0 0 20px rgba(0, 242, 234, 0.5);
-    }
     .time-range-buttons {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -259,31 +242,23 @@
     <!-- Step 0: Platform selection -->
     <div id="step0">
       <div class="question">which platform?</div>
-      <button class="platform-btn instagram" onclick="selectPlatform('instagram')"> Instagram Reels</button>
-      <button class="platform-btn tiktok" onclick="selectPlatform('tiktok')"> TikTok</button>
+      <select id="platformSelect" onchange="selectPlatform(this.value)">
+        <option value="">-- select platform --</option>
+        <option value="instagram">Instagram Reels</option>
+        <option value="tiktok">TikTok</option>
+      </select>
     </div>
 
     <!-- Step 1: Select account -->
     <div id="step1" class="hidden">
       <div class="question">pick a company:</div>
-      <select id="accountSelect">
+      <select id="accountSelect" onchange="selectAccount(this.value)">
         <option value="">loading accounts...</option>
       </select>
-      <br>
-      <button onclick="nextStep(1)">next</button>
-      <button onclick="backToStep(0)">← back</button>
     </div>
 
-    <!-- Step 2: Demo question -->
+    <!-- Step 2: Time range selection -->
     <div id="step2" class="hidden">
-      <div class="question">want demo analytics or something specific?</div>
-      <button onclick="nextStep(2)">demo analytics - show me everything</button>
-      <button onclick="nextStep(3)">something specific</button>
-      <button onclick="backToStep(1)">← back</button>
-    </div>
-
-    <!-- Step 2.5: Time range selection -->
-    <div id="step2_5" class="hidden">
       <div class="question">select time range for analysis:</div>
       <div class="time-range-buttons">
         <button onclick="selectTimeRange('all')">📅 All Time</button>
@@ -291,14 +266,6 @@
         <button onclick="selectTimeRange(180)">📆 6 Months</button>
         <button onclick="selectTimeRange(30)">📆 1 Month</button>
       </div>
-      <button onclick="backToStep(2)">← back</button>
-    </div>
-
-    <!-- Step 3: Coming soon -->
-    <div id="step3" class="hidden">
-      <div class="question">custom options coming soon! 🚀</div>
-      <button onclick="selectTimeRange('all')">just show me the demo for now</button>
-      <button onclick="backToStep(2)">← back</button>
     </div>
 
     <!-- Charts display -->
@@ -334,24 +301,19 @@
     let trendlineDaysAverage = {};
 
     function selectPlatform(platform) {
+      if (!platform) return;
       selectedPlatform = platform;
       document.getElementById('step0').classList.add('hidden');
       document.getElementById('step1').classList.remove('hidden');
       loadSheetData();
     }
 
-    function backToStep(stepNumber) {
+    function selectAccount(account) {
+      if (!account) return;
+      selectedAccount = account;
+      isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
       document.getElementById('step1').classList.add('hidden');
-      document.getElementById('step2').classList.add('hidden');
-      document.getElementById('step2_5').classList.add('hidden');
-      document.getElementById('step3').classList.add('hidden');
-      
-      document.getElementById('step' + stepNumber).classList.remove('hidden');
-      
-      if (stepNumber === 0) {
-        selectedPlatform = '';
-        workbookData = null;
-      }
+      document.getElementById('step2').classList.remove('hidden');
     }
 
     function isValidDate(date) {
@@ -423,8 +385,7 @@
       else if (selectedTimeRange === 180) rangeText = '(Last 6 Months)';
       else if (selectedTimeRange === 30) rangeText = '(Last 1 Month)';
       
-      const platformEmoji = selectedPlatform === 'instagram' ? '' : '';
-      tempCtx.fillText(`${platformEmoji} ${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
+      tempCtx.fillText(`${accountText} ${rangeText}`, tempCanvas.width / 2, 60);
       
       tempCtx.drawImage(canvas, 0, 80);
       
@@ -433,7 +394,8 @@
       link.href = tempCanvas.toDataURL('image/png');
       link.click();
     }
-        async function loadSheetData() {
+
+    async function loadSheetData() {
       try {
         document.getElementById('accountSelect').innerHTML = '<option value="">loading accounts...</option>';
         
@@ -452,10 +414,9 @@
         }
         
         const select = document.getElementById('accountSelect');
-        const platformEmoji = selectedPlatform === 'instagram' ? '' : '';
         select.innerHTML = '<option value="">-- select an account --</option>' +
           '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">All MoonMedia Analytics</option>' +
-          accounts.map(acc => `<option value="${acc}">${platformEmoji} @${acc}</option>`).join('');
+          accounts.map(acc => `<option value="${acc}">@${acc}</option>`).join('');
         
         console.log('✅ Loaded accounts:', accounts);
         
@@ -938,29 +899,9 @@
       };
     }
 
-    function nextStep(current) {
-      if (current === 1) {
-        selectedAccount = document.getElementById('accountSelect').value;
-        if (!selectedAccount) {
-          alert('pick an account first!');
-          return;
-        }
-        isMoonMediaTotal = (selectedAccount === 'MOONMEDIA_TOTAL');
-        document.getElementById('step1').classList.add('hidden');
-        document.getElementById('step2').classList.remove('hidden');
-      } else if (current === 2) {
-        document.getElementById('step2').classList.add('hidden');
-        document.getElementById('step2_5').classList.remove('hidden');
-      } else if (current === 3) {
-        document.getElementById('step2').classList.add('hidden');
-        document.getElementById('step3').classList.remove('hidden');
-      }
-    }
-
     function selectTimeRange(days) {
       selectedTimeRange = days;
-      document.getElementById('step2_5').classList.add('hidden');
-      document.getElementById('step3').classList.add('hidden');
+      document.getElementById('step2').classList.add('hidden');
       document.getElementById('loading').classList.remove('hidden');
 
       if (isMoonMediaTotal) {
@@ -973,8 +914,6 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
         
-        const platformIcon = selectedPlatform === 'instagram' ? '' : '';
-        document.getElementById('platformIcon').textContent = platformIcon;
         document.getElementById('accountName').textContent = isMoonMediaTotal ? 'All MoonMedia' : selectedAccount;
         
         let rangeText = '';
@@ -1281,6 +1220,9 @@
 
       const ctx = canvas.getContext('2d');
 
+      // Ensure the main data has order: 1 so it appears behind trendline
+      datasets[0].order = 1;
+
       if (includeTrendline && datasets.length > 0) {
         const trendlineData = calculateMovingAverageByDays(datasets[0].data, 7);
         
@@ -1295,7 +1237,7 @@
           tension: 0.4,
           yAxisID: 'y1',
           hidden: true,
-          order: 0
+          order: -1  // Changed from 0 to -1 to ensure it's on top
         });
       }
       
@@ -1599,107 +1541,3 @@
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
         exportBtn.textContent = '💾 Export';
-        exportBtn.onclick = () => exportChart('correlation', 'Likes vs Views Correlation');
-        
-        chartDiv.appendChild(header);
-        chartDiv.appendChild(exportBtn);
-        chartDiv.appendChild(canvas);
-        chartsContainer.appendChild(chartDiv);
-
-        const ctx = canvas.getContext('2d');
-        
-        const allViews = accountData.videos.map(v => v.views).filter(v => v > 0);
-        const allLikes = accountData.videos.map(v => v.likes).filter(v => v > 0);
-        const dataRangeX = {
-          min: Math.min(...allViews),
-          max: Math.max(...allViews)
-        };
-        const dataRangeY = {
-          min: Math.min(...allLikes),
-          max: Math.max(...allLikes)
-        };
-
-        chartInstances['correlation'] = new Chart(ctx, {
-          type: 'scatter',
-          data: {
-            datasets: [{
-              label: 'Posts',
-              data: accountData.videos.map(v => ({ x: v.views, y: v.likes })),
-              backgroundColor: 'rgba(0, 210, 211, 0.6)',
-              borderColor: '#00d2d3',
-              pointRadius: 6,
-              pointHoverRadius: 8
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            aspectRatio: 2.5,
-            plugins: {
-              legend: {
-                display: true,
-                labels: {
-                  color: '#0f0',
-                  font: { family: 'monospace', size: 12 }
-                }
-              },
-              tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                titleColor: '#0f0',
-                bodyColor: '#0f0',
-                borderColor: '#0f0',
-                borderWidth: 1,
-                callbacks: {
-                  label: function(context) {
-                    return 'Views: ' + formatNumber(context.parsed.x) + ', Likes: ' + formatNumber(context.parsed.y);
-                  }
-                }
-              }
-            },
-            scales: {
-              x: {
-                type: useLogCorrelation ? 'logarithmic' : 'linear',
-                title: {
-                  display: true,
-                  text: 'Views',
-                  color: '#0f0',
-                  font: { family: 'monospace', size: 14 }
-                },
-                ticks: {
-                  color: '#0f0',
-                  font: { family: 'monospace' },
-                  callback: function(value) {
-                    return formatNumberAxisSmart(value, dataRangeX);
-                  }
-                },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
-              },
-              y: {
-                type: useLogCorrelation ? 'logarithmic' : 'linear',
-                title: {
-                  display: true,
-                  text: 'Likes',
-                  color: '#0f0',
-                  font: { family: 'monospace', size: 14 }
-                },
-                ticks: {
-                  color: '#0f0',
-                  font: { family: 'monospace' },
-                  callback: function(value) {
-                    return formatNumberAxisSmart(value, dataRangeY);
-                  }
-                },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
-              }
-            }
-          }
-        });
-      }
-    }
-
-    window.addEventListener('load', () => {
-      // Do nothing on load, wait for platform selection
-    });
-  </script>
-</body>
-</html>
