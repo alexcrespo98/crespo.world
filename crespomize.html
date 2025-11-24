@@ -136,6 +136,7 @@
     }
     .moonmedia-option {
       font-weight: bold;
+      color: #ffff00;
     }
     .time-range-buttons {
       display: grid;
@@ -241,6 +242,17 @@
       margin: 2em 0;
       background: rgba(255, 255, 0, 0.05);
     }
+    .platform-stats {
+      background: #0a0a0a;
+      border: 2px solid #ffff00;
+      border-radius: 10px;
+      padding: 1.5em;
+      margin: 1.5em 0;
+    }
+    .platform-stats h3 {
+      color: #ffff00;
+      margin-bottom: 1em;
+    }
   </style>
 </head>
 <body>
@@ -250,7 +262,7 @@
     <a href="crespomize.html">crespomize</a>
   </nav>
 
-  <h1>📊 crespomize analytics</h1>
+  <h1>crespomize analytics</h1>
   
   <div class="container">
     <!-- Step 0: Platform selection -->
@@ -258,13 +270,14 @@
       <div class="question">which platform?</div>
       <select id="platformSelect">
         <option value="" disabled selected>-- select platform --</option>
+        <option value="all" class="moonmedia-option">All MoonMedia Platforms</option>
         <option value="instagram">Instagram Reels</option>
         <option value="tiktok">TikTok</option>
         <option value="youtube">YouTube Shorts</option>
       </select>
     </div>
 
-    <!-- Step 1: Select account -->
+    <!-- Step 1: Select account (for single platform) -->
     <div id="step1" class="step hidden">
       <div class="question">pick a company:</div>
       <select id="accountSelect">
@@ -276,19 +289,22 @@
     <div id="step2" class="step hidden">
       <div class="question">select time range for analysis:</div>
       <div class="time-range-buttons">
-        <button onclick="app.selectTimeRange('all')">📅 All Time</button>
-        <button onclick="app.selectTimeRange(365)">📆 1 Year</button>
-        <button onclick="app.selectTimeRange(180)">📆 6 Months</button>
-        <button onclick="app.selectTimeRange(30)">📆 1 Month</button>
+        <button onclick="app.selectTimeRange('all')">All Time</button>
+        <button onclick="app.selectTimeRange(365)">1 Year</button>
+        <button onclick="app.selectTimeRange(180)">6 Months</button>
+        <button onclick="app.selectTimeRange(30)">1 Month</button>
       </div>
     </div>
 
     <!-- Charts display -->
     <div id="charts" class="hidden">
-      <div class="question">📈 analytics for @<span id="accountName"></span> <span id="timeRangeLabel"></span></div>
+      <div class="question">analytics for <span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
       <!-- Summary stats -->
       <div class="stats-summary" id="statsSummary"></div>
+      
+      <!-- Platform breakdown for "All MoonMedia" -->
+      <div id="platformBreakdown" class="hidden"></div>
       
       <!-- Charts -->
       <div id="chartsList"></div>
@@ -306,7 +322,7 @@
       SHEET_IDS: {
         tiktok: '1FUGfhPVsVi1WOOw88BKfUKueJh4eMPj1',
         instagram: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2',
-        youtube: '1yRLZpJLdaB9oPZtjcwIeJx-6q8lGF2dO' // 
+        youtube: '1yRLZpJLdaB9oPZtjcwIeJx-6q8lGF2dO'
       },
       
       // State variables
@@ -315,10 +331,12 @@
       selectedAccount: '',
       accountData: {},
       isMoonMediaTotal: false,
+      isAllPlatforms: false,
       selectedTimeRange: 'all',
       chartInstances: {},
       trendlineStates: {},
       trendlineDaysAverage: {},
+      allPlatformsData: {},
       
       // Initialize the application
       init() {
@@ -343,9 +361,17 @@
       // Platform selection
       selectPlatform(platform) {
         this.selectedPlatform = platform;
+        this.isAllPlatforms = (platform === 'all');
+        
         document.getElementById('step0').classList.add('hidden');
-        document.getElementById('step1').classList.remove('hidden');
-        this.loadSheetData();
+        
+        if (this.isAllPlatforms) {
+          // Skip account selection for all platforms
+          document.getElementById('step2').classList.remove('hidden');
+        } else {
+          document.getElementById('step1').classList.remove('hidden');
+          this.loadSheetData();
+        }
       },
       
       // Account selection
@@ -357,42 +383,189 @@
       },
       
       // Time range selection
-      selectTimeRange(days) {
+      async selectTimeRange(days) {
         this.selectedTimeRange = days;
         document.getElementById('step2').classList.add('hidden');
         document.getElementById('loading').classList.remove('hidden');
         
-        setTimeout(() => {
-          this.processData(days);
-          document.getElementById('loading').classList.add('hidden');
-          document.getElementById('charts').classList.remove('hidden');
-          
-          // Update UI labels
-          document.getElementById('accountName').textContent = 
-            this.isMoonMediaTotal ? 'All MoonMedia' : this.selectedAccount;
-          
-          let rangeText = '';
-          if (days === 'all') rangeText = '(All Time)';
-          else if (days === 365) rangeText = '(Last 1 Year)';
-          else if (days === 180) rangeText = '(Last 6 Months)';
-          else if (days === 30) rangeText = '(Last 1 Month)';
-          document.getElementById('timeRangeLabel').textContent = rangeText;
-          
+        if (this.isAllPlatforms) {
+          await this.loadAllPlatformsData(days);
+        } else {
+          setTimeout(() => {
+            this.processData(days);
+            this.finalizeDataDisplay(days);
+          }, 1000);
+        }
+      },
+      
+      // Finalize data display
+      finalizeDataDisplay(days) {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        
+        // Update UI labels
+        let accountText = '';
+        if (this.isAllPlatforms) {
+          accountText = 'All MoonMedia Platforms';
+        } else if (this.isMoonMediaTotal) {
+          accountText = 'All MoonMedia';
+        } else {
+          accountText = '@' + this.selectedAccount;
+        }
+        
+        document.getElementById('accountName').textContent = accountText;
+        
+        let rangeText = '';
+        if (days === 'all') rangeText = '(All Time)';
+        else if (days === 365) rangeText = '(Last 1 Year)';
+        else if (days === 180) rangeText = '(Last 6 Months)';
+        else if (days === 30) rangeText = '(Last 1 Month)';
+        document.getElementById('timeRangeLabel').textContent = rangeText;
+        
+        if (this.isAllPlatforms) {
+          this.renderAllPlatformsDashboard();
+        } else {
           this.renderDashboard();
-        }, 1000);
+        }
+      },
+      
+      // Load all platforms data
+      async loadAllPlatformsData(timeRangeDays) {
+        this.allPlatformsData = {
+          instagram: null,
+          tiktok: null,
+          youtube: null,
+          combined: {
+            totalFollowers: 0,
+            totalLikes: 0,
+            totalViews: 0,
+            totalPosts: 0,
+            viewsPerSecond: 0
+          }
+        };
+        
+        // Load Instagram data
+        try {
+          const igResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.instagram}/export?format=xlsx`);
+          const igBuffer = await igResponse.arrayBuffer();
+          const igWorkbook = XLSX.read(igBuffer, { type: 'array' });
+          this.allPlatformsData.instagram = this.processWorkbookData(igWorkbook, 'instagram', timeRangeDays);
+        } catch (error) {
+          console.error('Error loading Instagram data:', error);
+        }
+        
+        // Load TikTok data
+        try {
+          const ttResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.tiktok}/export?format=xlsx`);
+          const ttBuffer = await ttResponse.arrayBuffer();
+          const ttWorkbook = XLSX.read(ttBuffer, { type: 'array' });
+          this.allPlatformsData.tiktok = this.processWorkbookData(ttWorkbook, 'tiktok', timeRangeDays);
+        } catch (error) {
+          console.error('Error loading TikTok data:', error);
+        }
+        
+        // Load YouTube data
+        try {
+          const ytResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.youtube}/export?format=xlsx`);
+          const ytBuffer = await ytResponse.arrayBuffer();
+          const ytWorkbook = XLSX.read(ytBuffer, { type: 'array' });
+          this.allPlatformsData.youtube = this.processWorkbookData(ytWorkbook, 'youtube', timeRangeDays);
+        } catch (error) {
+          console.error('Error loading YouTube data:', error);
+        }
+        
+        // Calculate combined metrics
+        this.calculateCombinedMetrics();
+        
+        this.finalizeDataDisplay(timeRangeDays);
+      },
+      
+      // Process workbook data for all platforms view
+      processWorkbookData(workbook, platform, timeRangeDays) {
+        const accounts = workbook.SheetNames;
+        let totalFollowers = 0;
+        let totalLikes = 0;
+        let totalPosts = 0;
+        let allVideos = [];
+        
+        accounts.forEach(sheetName => {
+          const data = this.parseAccountDataFromWorkbook(workbook, sheetName, platform, timeRangeDays);
+          if (data) {
+            totalFollowers += data.followers || 0;
+            totalLikes += data.totalLikes || 0;
+            totalPosts += data.postsScraped || 0;
+            if (data.videos) {
+              allVideos = allVideos.concat(data.videos);
+            }
+          }
+        });
+        
+        const totalViews = allVideos.reduce((sum, v) => sum + (v.views || 0), 0);
+        
+        return {
+          platform: platform,
+          followers: totalFollowers,
+          totalLikes: totalLikes,
+          totalViews: totalViews,
+          postsScraped: totalPosts,
+          videos: allVideos,
+          accountCount: accounts.length
+        };
+      },
+      
+      // Calculate combined metrics for all platforms
+      calculateCombinedMetrics() {
+        const platforms = ['instagram', 'tiktok', 'youtube'];
+        let totalViews = 0;
+        let allVideos = [];
+        
+        platforms.forEach(platform => {
+          if (this.allPlatformsData[platform]) {
+            const data = this.allPlatformsData[platform];
+            this.allPlatformsData.combined.totalFollowers += data.followers || 0;
+            this.allPlatformsData.combined.totalLikes += data.totalLikes || 0;
+            this.allPlatformsData.combined.totalViews += data.totalViews || 0;
+            this.allPlatformsData.combined.totalPosts += data.postsScraped || 0;
+            
+            if (data.videos) {
+              allVideos = allVideos.concat(data.videos);
+            }
+          }
+        });
+        
+        // Calculate views per second
+        allVideos.sort((a, b) => (a.date || 0) - (b.date || 0));
+        
+        if (allVideos.length >= 2) {
+          const validVideos = allVideos.filter(v => v.date && v.views);
+          if (validVideos.length >= 2) {
+            const oldestVideo = validVideos[0];
+            const newestVideo = validVideos[validVideos.length - 1];
+            const timeSpanSeconds = (newestVideo.date - oldestVideo.date) / 1000;
+            
+            if (timeSpanSeconds > 0) {
+              const totalViewsInPeriod = validVideos.reduce((sum, v) => sum + v.views, 0);
+              this.allPlatformsData.combined.viewsPerSecond = totalViewsInPeriod / timeSpanSeconds;
+            }
+          }
+        }
+      },
+      
+      // Parse account data from workbook
+      parseAccountDataFromWorkbook(workbook, sheetName, platform, timeRangeDays) {
+        if (platform === 'instagram') {
+          return this.parseInstagramDataFromWorkbook(workbook, sheetName, timeRangeDays);
+        } else if (platform === 'tiktok') {
+          return this.parseTikTokDataFromWorkbook(workbook, sheetName, timeRangeDays);
+        } else if (platform === 'youtube') {
+          return this.parseYouTubeDataFromWorkbook(workbook, sheetName, timeRangeDays);
+        }
+        return null;
       },
       
       // Load sheet data
       async loadSheetData() {
         const accountSelect = document.getElementById('accountSelect');
-        
-        // Handle YouTube Shorts placeholder
-        if (this.selectedPlatform === 'youtube') {
-          accountSelect.innerHTML = 
-            '<option value="" disabled selected>-- select an account --</option>' +
-            '<option value="DEMO">Demo YouTube Account (Coming Soon)</option>';
-          return;
-        }
         
         try {
           accountSelect.innerHTML = '<option value="" disabled>loading accounts...</option>';
@@ -413,10 +586,10 @@
           
           accountSelect.innerHTML = 
             '<option value="" disabled selected>-- select an account --</option>' +
-            '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">🌙 All MoonMedia Analytics</option>' +
+            '<option value="MOONMEDIA_TOTAL" class="moonmedia-option">All MoonMedia Analytics</option>' +
             accounts.map(acc => `<option value="${acc}">@${acc}</option>`).join('');
           
-          console.log('✅ Loaded accounts:', accounts);
+          console.log('Loaded accounts:', accounts);
           
         } catch (error) {
           console.error('Error loading data:', error);
@@ -426,81 +599,11 @@
       
       // Process data based on platform and account
       processData(timeRangeDays) {
-        // Handle YouTube demo
-        if (this.selectedPlatform === 'youtube') {
-          this.accountData = this.generateYouTubeDemoData(timeRangeDays);
-          return;
-        }
-        
         if (this.isMoonMediaTotal) {
           this.accountData = this.parseMoonMediaTotal(timeRangeDays);
         } else {
           this.accountData = this.parseAccountData(this.selectedAccount, timeRangeDays);
         }
-      },
-      
-      // Generate demo data for YouTube Shorts
-      generateYouTubeDemoData(timeRangeDays) {
-        const now = new Date();
-        const daysToGenerate = timeRangeDays === 'all' ? 365 : timeRangeDays;
-        const videos = [];
-        const followersHistory = [];
-        const totalLikesHistory = [];
-        
-        // Generate synthetic data
-        let baseFollowers = 50000;
-        let baseLikes = 100000;
-        
-        for (let i = daysToGenerate; i >= 0; i -= 7) {
-          const date = new Date(now);
-          date.setDate(date.getDate() - i);
-          
-          // Followers growth
-          baseFollowers += Math.floor(Math.random() * 5000) + 1000;
-          followersHistory.push({
-            date: new Date(date),
-            value: baseFollowers
-          });
-          
-          // Likes growth
-          baseLikes += Math.floor(Math.random() * 10000) + 2000;
-          totalLikesHistory.push({
-            date: new Date(date),
-            value: baseLikes
-          });
-          
-          // Generate 2-3 videos per week
-          const videosThisWeek = Math.floor(Math.random() * 2) + 1;
-          for (let v = 0; v < videosThisWeek; v++) {
-            const videoDate = new Date(date);
-            videoDate.setDate(videoDate.getDate() + Math.floor(Math.random() * 7));
-            
-            const views = Math.floor(Math.random() * 500000) + 10000;
-            const likes = Math.floor(views * (Math.random() * 0.1 + 0.05));
-            const comments = Math.floor(likes * (Math.random() * 0.05 + 0.01));
-            
-            videos.push({
-              date: videoDate,
-              views: views,
-              likes: likes,
-              comments: comments,
-              shares: Math.floor(likes * 0.1),
-              engagement: ((likes + comments) / views * 100)
-            });
-          }
-        }
-        
-        videos.sort((a, b) => a.date - b.date);
-        
-        return {
-          followers: baseFollowers,
-          totalLikes: baseLikes,
-          postsScraped: videos.length,
-          videos: videos,
-          followersHistory: followersHistory,
-          totalLikesHistory: totalLikesHistory,
-          platform: 'youtube'
-        };
       },
       
       // Parse account data
@@ -509,12 +612,128 @@
           return this.parseInstagramData(sheetName, timeRangeDays);
         } else if (this.selectedPlatform === 'tiktok') {
           return this.parseTikTokData(sheetName, timeRangeDays);
+        } else if (this.selectedPlatform === 'youtube') {
+          return this.parseYouTubeData(sheetName, timeRangeDays);
         }
       },
       
+      // Parse YouTube data from sheet
+      parseYouTubeData(sheetName, timeRangeDays) {
+        return this.parseYouTubeDataFromWorkbook(this.workbookData, sheetName, timeRangeDays);
+      },
+      
+      // Parse YouTube data from workbook
+      parseYouTubeDataFromWorkbook(workbook, sheetName, timeRangeDays) {
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) return null;
+        
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        const headers = jsonData[0].slice(1);
+        let followersHistory = [];
+        let totalLikesHistory = [];
+        let followers = null;
+        let totalLikes = null;
+        
+        const allVideosMap = new Map();
+        const allUniqueVideoIds = new Set();
+        
+        // Parse YouTube data similar to TikTok structure
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          const rowName = row[0];
+          
+          if (!rowName) continue;
+          
+          if (rowName === 'subscribers' || rowName === 'followers') {
+            followersHistory = row.slice(1).map((val, idx) => ({
+              date: new Date(headers[idx]),
+              value: parseInt(val) || 0
+            })).filter(item => this.isValidDate(item.date));
+            
+            followers = followersHistory.length > 0 ? 
+              followersHistory[followersHistory.length - 1].value : 0;
+              
+          } else if (rowName === 'total_likes') {
+            totalLikesHistory = row.slice(1).map((val, idx) => ({
+              date: new Date(headers[idx]),
+              value: parseInt(val) || 0
+            })).filter(item => this.isValidDate(item.date));
+            
+            totalLikes = totalLikesHistory.length > 0 ? 
+              totalLikesHistory[totalLikesHistory.length - 1].value : 0;
+              
+          } else if (rowName.startsWith('video_') || rowName.startsWith('short_')) {
+            const parts = rowName.split('_');
+            const metric = parts[parts.length - 1];
+            const videoId = parts.slice(1, -1).join('_');
+            
+            if (metric === 'Date' || metric === 'date') {
+              allUniqueVideoIds.add(videoId);
+            }
+            
+            for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
+              const cellValue = row[colIdx];
+              
+              if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+                if (!allVideosMap.has(videoId)) {
+                  allVideosMap.set(videoId, { id: videoId });
+                }
+                
+                const video = allVideosMap.get(videoId);
+                if (video[metric] === undefined) {
+                  video[metric] = cellValue;
+                }
+                break;
+              }
+            }
+          }
+        }
+        
+        // Process and clean data
+        followersHistory = this.interpolateHistoricalData(followersHistory);
+        totalLikesHistory = this.interpolateHistoricalData(totalLikesHistory);
+        
+        const videosData = Array.from(allVideosMap.values());
+        let cleanVideos = videosData.filter(v => v.Date || v.date).map(v => {
+          const dateObj = new Date(v.Date || v.date);
+          
+          if (!this.isValidDate(dateObj)) {
+            return null;
+          }
+          
+          return {
+            date: dateObj,
+            views: parseInt(v.Views || v.views) || 0,
+            likes: parseInt(v.Likes || v.likes) || 0,
+            comments: parseInt(v.Comments || v.comments) || 0,
+            shares: parseInt(v.Shares || v.shares) || 0,
+            engagement: parseFloat(v.EngagementRate || v.engagement) || 0
+          };
+        }).filter(v => v !== null).sort((a, b) => a.date - b.date);
+        
+        cleanVideos = this.filterDataByTimeRange(cleanVideos, timeRangeDays);
+        
+        return {
+          followers: parseInt(followers) || 0,
+          totalLikes: parseInt(totalLikes) || 0,
+          postsScraped: allUniqueVideoIds.size,
+          videos: cleanVideos,
+          followersHistory: followersHistory.filter(item => item.value > 0),
+          totalLikesHistory: totalLikesHistory.filter(item => item.value > 0),
+          platform: 'youtube'
+        };
+      },
       // Parse TikTok data
       parseTikTokData(sheetName, timeRangeDays) {
-        const sheet = this.workbookData.Sheets[sheetName];
+        return this.parseTikTokDataFromWorkbook(this.workbookData, sheetName, timeRangeDays);
+      },
+      
+      // Parse TikTok data from workbook
+      parseTikTokDataFromWorkbook(workbook, sheetName, timeRangeDays) {
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) return null;
+        
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
         
         const headers = jsonData[0].slice(1);
@@ -613,7 +832,14 @@
       
       // Parse Instagram data
       parseInstagramData(sheetName, timeRangeDays) {
-        const sheet = this.workbookData.Sheets[sheetName];
+        return this.parseInstagramDataFromWorkbook(this.workbookData, sheetName, timeRangeDays);
+      },
+      
+      // Parse Instagram data from workbook
+      parseInstagramDataFromWorkbook(workbook, sheetName, timeRangeDays) {
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) return null;
+        
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
         
         const headers = jsonData[0].slice(1);
@@ -1053,10 +1279,10 @@
         if (badge) {
           if (showTrendline) {
             badge.classList.remove('inactive');
-            badge.textContent = '📈 TREND ON';
+            badge.textContent = 'TREND ON';
           } else {
             badge.classList.add('inactive');
-            badge.textContent = '📈 TREND OFF';
+            badge.textContent = 'TREND OFF';
           }
         }
         
@@ -1117,7 +1343,15 @@
         tempCtx.fillText(title, tempCanvas.width / 2, 35);
         
         tempCtx.font = '16px monospace';
-        const accountText = this.isMoonMediaTotal ? 'All MoonMedia' : '@' + this.selectedAccount;
+        let accountText = '';
+        if (this.isAllPlatforms) {
+          accountText = 'All MoonMedia Platforms';
+        } else if (this.isMoonMediaTotal) {
+          accountText = 'All MoonMedia';
+        } else {
+          accountText = '@' + this.selectedAccount;
+        }
+        
         let rangeText = '';
         if (this.selectedTimeRange === 'all') rangeText = '(All Time)';
         else if (this.selectedTimeRange === 365) rangeText = '(Last 1 Year)';
@@ -1129,12 +1363,12 @@
         tempCtx.drawImage(canvas, 0, 80);
         
         const link = document.createElement('a');
-        link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}_${this.selectedPlatform}.png`;
+        const platformSuffix = this.isAllPlatforms ? 'all_platforms' : this.selectedPlatform;
+        link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}_${platformSuffix}.png`;
         link.href = tempCanvas.toDataURL('image/png');
         link.click();
-      },
-      
-      // Chart creation functions
+      }
+      // Chart creation functions continued
       createLineChart(container, title, historyData, datasets, useLog, chartId) {
         const chartDiv = document.createElement('div');
         chartDiv.className = 'chart-container';
@@ -1155,7 +1389,7 @@
         
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
-        exportBtn.textContent = '💾 Export';
+        exportBtn.textContent = 'Export';
         exportBtn.onclick = () => this.exportChart(chartId, title);
         
         chartDiv.appendChild(header);
@@ -1250,7 +1484,7 @@
         if (includeTrendline) {
           const trendlineBadge = document.createElement('span');
           trendlineBadge.className = 'trendline-badge inactive';
-          trendlineBadge.textContent = '📈 TREND OFF';
+          trendlineBadge.textContent = 'TREND OFF';
           trendlineBadge.setAttribute('data-trendline-id', chartId);
           trendlineBadge.onclick = () => this.toggleTrendline(chartId);
           header.appendChild(trendlineBadge);
@@ -1288,7 +1522,7 @@
         
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
-        exportBtn.textContent = '💾 Export';
+        exportBtn.textContent = 'Export';
         exportBtn.onclick = () => this.exportChart(chartId, title);
         
         chartDiv.appendChild(header);
@@ -1434,7 +1668,7 @@
         
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
-        exportBtn.textContent = '💾 Export';
+        exportBtn.textContent = 'Export';
         exportBtn.onclick = () => this.exportChart('correlation', 'Likes vs Views Correlation');
         
         chartDiv.appendChild(header);
@@ -1544,17 +1778,6 @@
         const chartsContainer = document.getElementById('chartsList');
         chartsContainer.innerHTML = '';
         
-        // Handle YouTube demo message
-        if (this.accountData.platform === 'youtube') {
-          chartsContainer.innerHTML = `
-            <div class="no-data-message">
-              ⚠️ YouTube Shorts Analytics Coming Soon!<br><br>
-              This is demo data to preview the analytics interface.<br>
-              Real YouTube data integration will be available once you add your YouTube Shorts sheet ID.
-            </div>
-          `;
-        }
-        
         // Determine content type based on platform
         let contentType = 'POSTS';
         if (this.selectedPlatform === 'instagram') contentType = 'REELS';
@@ -1563,21 +1786,19 @@
         // Render summary statistics
         let statsHTML = `
           <div class="stat-card">
-            <h4>👥 FOLLOWERS</h4>
+            <h4>FOLLOWERS</h4>
             <div class="value">${this.formatNumber(this.accountData.followers)}</div>
           </div>
           <div class="stat-card">
-            <h4>❤️ TOTAL LIKES</h4>
+            <h4>TOTAL LIKES</h4>
             <div class="value">${this.formatNumber(this.accountData.totalLikes)}</div>
           </div>
           <div class="stat-card">
-            <h4>🎬 ${contentType} TRACKED</h4>
+            <h4>${contentType} TRACKED</h4>
             <div class="value">${this.accountData.postsScraped}</div>
           </div>
           <div class="stat-card">
-            <h4>📈 
-
-AVG ENGAGEMENT</h4>
+            <h4>AVG ENGAGEMENT</h4>
             <div class="value">${this.accountData.videos.length > 0 ? 
               (this.accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / 
                this.accountData.videos.length).toFixed(2) : 0}%</div>
@@ -1587,15 +1808,15 @@ AVG ENGAGEMENT</h4>
         if (this.isMoonMediaTotal) {
           statsHTML += `
             <div class="stat-card">
-              <h4>👁️ TOTAL VIEWS</h4>
+              <h4>TOTAL VIEWS</h4>
               <div class="value">${this.formatNumber(this.accountData.totalViews)}</div>
             </div>
             <div class="stat-card">
-              <h4>⚡ VIEWS PER SECOND</h4>
+              <h4>VIEWS PER SECOND</h4>
               <div class="value">${this.accountData.viewsPerSecond.toFixed(2)}</div>
             </div>
             <div class="stat-card">
-              <h4>🏢 TOTAL ACCOUNTS</h4>
+              <h4>TOTAL ACCOUNTS</h4>
               <div class="value">${this.accountData.accountCount}</div>
             </div>
           `;
@@ -1608,7 +1829,7 @@ AVG ENGAGEMENT</h4>
           const followerValues = this.accountData.followersHistory.map(h => h.value);
           const useLogFollowers = this.shouldUseLogScale(followerValues);
           
-          this.createLineChart(chartsContainer, '👥 Followers Growth', 
+          this.createLineChart(chartsContainer, 'Followers Growth', 
             this.accountData.followersHistory,
             [{
               label: 'Followers',
@@ -1628,7 +1849,7 @@ AVG ENGAGEMENT</h4>
           const likesHistoryValues = this.accountData.totalLikesHistory.map(h => h.value);
           const useLogLikesHistory = this.shouldUseLogScale(likesHistoryValues);
           
-          this.createLineChart(chartsContainer, '❤️ Total Likes Growth',
+          this.createLineChart(chartsContainer, 'Total Likes Growth',
             this.accountData.totalLikesHistory,
             [{
               label: 'Total Likes',
@@ -1736,6 +1957,189 @@ AVG ENGAGEMENT</h4>
           // Create correlation chart
           this.createCorrelationChart(chartsContainer);
         }
+      },
+      
+      // Render all platforms dashboard
+      renderAllPlatformsDashboard() {
+        // Reset chart instances
+        this.chartInstances = {};
+        this.trendlineStates = {};
+        this.trendlineDaysAverage = {};
+        
+        const statsContainer = document.getElementById('statsSummary');
+        const platformBreakdown = document.getElementById('platformBreakdown');
+        const chartsContainer = document.getElementById('chartsList');
+        
+        platformBreakdown.classList.remove('hidden');
+        chartsContainer.innerHTML = '';
+        
+        // Combined statistics
+        const combined = this.allPlatformsData.combined;
+        statsContainer.innerHTML = `
+          <div class="stat-card">
+            <h4>TOTAL FOLLOWERS</h4>
+            <div class="value">${this.formatNumber(combined.totalFollowers)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL LIKES</h4>
+            <div class="value">${this.formatNumber(combined.totalLikes)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL VIEWS</h4>
+            <div class="value">${this.formatNumber(combined.totalViews)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL POSTS</h4>
+            <div class="value">${combined.totalPosts}</div>
+          </div>
+          <div class="stat-card">
+            <h4>VIEWS PER SECOND</h4>
+            <div class="value">${combined.viewsPerSecond.toFixed(2)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>AVG VIEWS/SEC</h4>
+            <div class="value">${combined.viewsPerSecond > 0 ? 
+              combined.viewsPerSecond.toFixed(2) : 'N/A'}</div>
+          </div>
+        `;
+        
+        // Platform breakdown
+        let breakdownHTML = '<h3 style="color: #ffff00;">Platform Breakdown</h3><div class="stats-summary">';
+        
+        const platforms = [
+          { key: 'instagram', name: 'Instagram' },
+          { key: 'tiktok', name: 'TikTok' },
+          { key: 'youtube', name: 'YouTube' }
+        ];
+        
+        platforms.forEach(platform => {
+          const data = this.allPlatformsData[platform.key];
+          if (data) {
+            breakdownHTML += `
+              <div class="platform-stats">
+                <h3>${platform.name}</h3>
+                <div>Followers: ${this.formatNumber(data.followers)}</div>
+                <div>Likes: ${this.formatNumber(data.totalLikes)}</div>
+                <div>Views: ${this.formatNumber(data.totalViews)}</div>
+                <div>Posts: ${data.postsScraped}</div>
+                <div>Accounts: ${data.accountCount}</div>
+              </div>
+            `;
+          }
+        });
+        
+        breakdownHTML += '</div>';
+        platformBreakdown.innerHTML = breakdownHTML;
+        
+        // Create combined charts
+        this.createCombinedPlatformCharts(chartsContainer);
+      },
+      
+      // Create combined platform charts
+      createCombinedPlatformCharts(container) {
+        // Views by platform comparison
+        const platformNames = [];
+        const platformViews = [];
+        const platformLikes = [];
+        const platformFollowers = [];
+        
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          if (this.allPlatformsData[platform]) {
+            platformNames.push(platform.charAt(0).toUpperCase() + platform.slice(1));
+            platformViews.push(this.allPlatformsData[platform].totalViews);
+            platformLikes.push(this.allPlatformsData[platform].totalLikes);
+            platformFollowers.push(this.allPlatformsData[platform].followers);
+          }
+        });
+        
+        // Platform comparison chart
+        const comparisonDiv = document.createElement('div');
+        comparisonDiv.className = 'chart-container';
+        
+        const comparisonCanvas = document.createElement('canvas');
+        comparisonCanvas.id = 'platform-comparison';
+        
+        const comparisonHeader = document.createElement('h3');
+        comparisonHeader.textContent = 'Platform Comparison';
+        
+        comparisonDiv.appendChild(comparisonHeader);
+        comparisonDiv.appendChild(comparisonCanvas);
+        container.appendChild(comparisonDiv);
+        
+        const comparisonCtx = comparisonCanvas.getContext('2d');
+        
+        new Chart(comparisonCtx, {
+          type: 'bar',
+          data: {
+            labels: platformNames,
+            datasets: [
+              {
+                label: 'Views',
+                data: platformViews,
+                backgroundColor: '#00d2d3',
+                borderColor: '#00d2d3',
+                borderWidth: 2
+              },
+              {
+                label: 'Likes',
+                data: platformLikes,
+                backgroundColor: '#ff6b6b',
+                borderColor: '#ff6b6b',
+                borderWidth: 2
+              },
+              {
+                label: 'Followers',
+                data: platformFollowers,
+                backgroundColor: '#9b59b6',
+                borderColor: '#9b59b6',
+                borderWidth: 2
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { color: '#0f0', font: { family: 'monospace' } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                type: 'logarithmic',
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => {
+                    return this.formatNumber(value);
+                  }
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
       }
     };
     
