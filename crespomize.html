@@ -1411,6 +1411,128 @@
         });
       },
       
+      createCorrelationChart(container) {
+        const correlationValues = this.accountData.videos.map(v => v.views);
+        const useLogCorrelation = this.shouldUseLogScale(correlationValues);
+        
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'correlation';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Likes vs Views Correlation';
+        
+        const scaleBadge = document.createElement('span');
+        scaleBadge.className = 'scale-badge' + (useLogCorrelation ? '' : ' inactive');
+        scaleBadge.textContent = useLogCorrelation ? 'LOG SCALE' : 'LINEAR';
+        scaleBadge.setAttribute('data-chart-id', 'correlation');
+        scaleBadge.onclick = () => this.toggleLogScale('correlation');
+        
+        header.appendChild(scaleBadge);
+        
+        const exportBtn = document.createElement('button');
+        exportBtn.className = 'export-btn';
+        exportBtn.textContent = '💾 Export';
+        exportBtn.onclick = () => this.exportChart('correlation', 'Likes vs Views Correlation');
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(exportBtn);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        const allViews = this.accountData.videos.map(v => v.views).filter(v => v > 0);
+        const allLikes = this.accountData.videos.map(v => v.likes).filter(v => v > 0);
+        const dataRangeX = {
+          min: Math.min(...allViews),
+          max: Math.max(...allViews)
+        };
+        const dataRangeY = {
+          min: Math.min(...allLikes),
+          max: Math.max(...allLikes)
+        };
+        
+        this.chartInstances['correlation'] = new Chart(ctx, {
+          type: 'scatter',
+          data: {
+            datasets: [{
+              label: 'Posts',
+              data: this.accountData.videos.map(v => ({ x: v.views, y: v.likes })),
+              backgroundColor: 'rgba(0, 210, 211, 0.6)',
+              borderColor: '#00d2d3',
+              pointRadius: 6,
+              pointHoverRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    return 'Views: ' + this.formatNumber(context.parsed.x) + 
+                           ', Likes: ' + this.formatNumber(context.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                type: useLogCorrelation ? 'logarithmic' : 'linear',
+                title: {
+                  display: true,
+                  text: 'Views',
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 14 }
+                },
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => {
+                    return this.formatNumberAxisSmart(value, dataRangeX);
+                  }
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                type: useLogCorrelation ? 'logarithmic' : 'linear',
+                title: {
+                  display: true,
+                  text: 'Likes',
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 14 }
+                },
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => {
+                    return this.formatNumberAxisSmart(value, dataRangeY);
+                  }
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+      },
+      
       // Main dashboard rendering
       renderDashboard() {
         // Reset chart instances
@@ -1453,7 +1575,9 @@
             <div class="value">${this.accountData.postsScraped}</div>
           </div>
           <div class="stat-card">
-            <h4>📈 AVG ENGAGEMENT</h4>
+            <h4>📈 
+
+AVG ENGAGEMENT</h4>
             <div class="value">${this.accountData.videos.length > 0 ? 
               (this.accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / 
                this.accountData.videos.length).toFixed(2) : 0}%</div>
@@ -1560,4 +1684,65 @@
             this.accountData.videos,
             [{
               label: 'Engagement %',
-              data: this.accountData.
+              data: this.accountData.videos.map(v => ({ x: v.date, y: v.engagement })),
+              borderColor: '#2ecc71',
+              backgroundColor: 'rgba(46, 204, 113, 0.7)',
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }],
+            false,
+            'engagement-time',
+            true
+          );
+          
+          const commentsData = this.accountData.videos.map(v => v.comments);
+          const useLogComments = this.shouldUseLogScale(commentsData);
+          
+          this.createTimeBasedChart(chartsContainer, 'Comments Over Time',
+            this.accountData.videos,
+            [{
+              label: 'Comments',
+              data: this.accountData.videos.map(v => ({ x: v.date, y: v.comments })),
+              borderColor: '#1abc9c',
+              backgroundColor: 'rgba(26, 188, 156, 0.7)',
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }],
+            useLogComments,
+            'comments-time',
+            true
+          );
+          
+          if (this.selectedPlatform === 'tiktok') {
+            const sharesData = this.accountData.videos.map(v => v.shares);
+            const useLogShares = this.shouldUseLogScale(sharesData);
+            
+            this.createTimeBasedChart(chartsContainer, 'Shares Over Time',
+              this.accountData.videos,
+              [{
+                label: 'Shares',
+                data: this.accountData.videos.map(v => ({ x: v.date, y: v.shares })),
+                borderColor: '#e74c3c',
+                backgroundColor: 'rgba(231, 76, 60, 0.7)',
+                pointRadius: 4,
+                pointHoverRadius: 6
+              }],
+              useLogShares,
+              'shares-time',
+              true
+            );
+          }
+          
+          // Create correlation chart
+          this.createCorrelationChart(chartsContainer);
+        }
+      }
+    };
+    
+    // Initialize the app when the page loads
+    window.addEventListener('DOMContentLoaded', () => {
+      app.init();
+    });
+  </script>
+</body>
+</html>
