@@ -663,7 +663,7 @@
             totalLikes = totalLikesHistory.length > 0 ? 
               totalLikesHistory[totalLikesHistory.length - 1].value : 0;
               
-          } else if (rowName.startsWith('video_') || rowName.startsWith('short_')) {
+          } else if (rowName.startsWith('post_') || rowName.startsWith('video_') || rowName.startsWith('short_')) {
             const parts = rowName.split('_');
             const metric = parts[parts.length - 1];
             const videoId = parts.slice(1, -1).join('_');
