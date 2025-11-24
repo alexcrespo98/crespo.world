@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""
+Linktree Social Media Link Extractor
+Extracts all social media platform links from a Linktree profile
+"""
+
+import requests
+from bs4 import BeautifulSoup
+import re
+from urllib.parse import urlparse, unquote
+import time
+
+def get_linktree_links(linktree_url):
+    """
+    Scrapes a Linktree page and extracts all social media links
+    """
+    
+    # Common social media domains to identify
+    social_platforms = {
+        'instagram.com': 'Instagram',
+        'facebook.com': 'Facebook', 
+        'twitter.com': 'Twitter',
+        'x.com': 'X (Twitter)',
+        'youtube.com': 'YouTube',
+        'tiktok.com': 'TikTok',
+        'linkedin.com': 'LinkedIn',
+        'pinterest.com': 'Pinterest',
+        'snapchat.com': 'Snapchat',
+        'discord.gg': 'Discord',
+        'discord.com': 'Discord',
+        'twitch.tv': 'Twitch',
+        'spotify.com': 'Spotify',
+        'soundcloud.com': 'SoundCloud',
+        'patreon.com': 'Patreon',
+        'onlyfans.com': 'OnlyFans',
+        'reddit.com': 'Reddit',
+        'telegram.org': 'Telegram',
+        't.me': 'Telegram',
+        'whatsapp.com': 'WhatsApp',
+        'wa.me': 'WhatsApp',
+        'github.com': 'GitHub',
+        'behance.net': 'Behance',
+        'dribbble.com': 'Dribbble',
+        'vimeo.com': 'Vimeo',
+        'medium.com': 'Medium',
+        'tumblr.com': 'Tumblr',
+        'clubhouse.com': 'Clubhouse',
+        'threads.net': 'Threads'
+    }
+    
+    print(f"🔍 Fetching links from: {linktree_url}\n")
+    
+    try:
+        # Send request with headers to avoid being blocked
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        
+        response = requests.get(linktree_url, headers=headers)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Find all links on the page
+        all_links = soup.find_all('a', href=True)
+        
+        found_platforms = {}
+        other_links = []
+        
+        for link in all_links:
+            href = link.get('href', '')
+            
+            # Skip internal Linktree links
+            if 'linktr.ee' in href or href.startswith('/'):
+                continue
+                
+            # Handle redirect links (Linktree often uses these)
+            if 'link.gallery' in href or 'l.linklyhq.com' in href:
+                # Try to extract the actual URL from redirect
+                try:
+                    # Sometimes the actual URL is in a query parameter
+                    if '?to=' in href:
+                        href = unquote(href.split('?to=')[1].split('&')[0])
+                    elif 'url=' in href:
+                        href = unquote(href.split('url=')[1].split('&')[0])
+                except:
+                    pass
+            
+            # Parse the URL
+            try:
+                parsed = urlparse(href)
+                domain = parsed.netloc.lower().replace('www.', '')
+                
+                # Check if it's a social media platform
+                platform_found = False
+                for platform_domain, platform_name in social_platforms.items():
+                    if platform_domain in domain:
+                        if platform_name not in found_platforms:
+                            found_platforms[platform_name] = []
+                        
+                        # Clean up the URL
+                        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip('/')
+                        if clean_url not in found_platforms[platform_name]:
+                            found_platforms[platform_name].append(clean_url)
+                        platform_found = True
+                        break
+                
+                # If not a recognized social platform, add to other links
+                if not platform_found and domain and not domain.startswith('linktr'):
+                    clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip('/')
+                    if clean_url not in other_links and len(clean_url) > 10:
+                        other_links.append(clean_url)
+                        
+            except Exception as e:
+                continue
+        
+        # Print results
+        print("="*60)
+        print("📱 SOCIAL MEDIA PLATFORMS FOUND:")
+        print("="*60)
+        
+        if found_platforms:
+            for platform, urls in sorted(found_platforms.items()):
+                print(f"\n✅ {platform}:")
+                for url in urls:
+                    print(f"   → {url}")
+        else:
+            print("\n❌ No social media platforms detected")
+        
+        if other_links:
+            print("\n" + "="*60)
+            print("🔗 OTHER LINKS FOUND:")
+            print("="*60)
+            for link in other_links[:10]:  # Limit to first 10
+                print(f"   → {link}")
+                
+        print("\n" + "="*60)
+        print(f"📊 SUMMARY: Found {len(found_platforms)} social platforms and {len(other_links)} other links")
+        print("="*60)
+        
+        return found_platforms, other_links
+        
+    except requests.RequestException as e:
+        print(f"❌ Error fetching the page: {e}")
+        return {}, []
+    except Exception as e:
+        print(f"❌ Error parsing the page: {e}")
+        return {}, []
+
+def main():
+    # The Linktree URL to scrape
+    linktree_url = "https://linktr.ee/moonmediateam"
+    
+    print("\n🚀 Linktree Social Media Link Extractor")
+    print("="*60)
+    
+    # Get the links
+    social_platforms, other_links = get_linktree_links(linktree_url)
+    
+    # Optional: Save results to a file
+    save_to_file = input("\n💾 Save results to file? (y/n): ").strip().lower()
+    if save_to_file == 'y':
+        filename = "linktree_links.txt"
+        with open(filename, 'w') as f:
+            f.write(f"Linktree Profile: {linktree_url}\n")
+            f.write(f"Scraped on: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            
+            f.write("SOCIAL MEDIA PLATFORMS:\n")
+            f.write("="*40 + "\n")
+            for platform, urls in sorted(social_platforms.items()):
+                f.write(f"\n{platform}:\n")
+                for url in urls:
+                    f.write(f"  - {url}\n")
+            
+            f.write("\n\nOTHER LINKS:\n")
+            f.write("="*40 + "\n")
+            for link in other_links:
+                f.write(f"  - {link}\n")
+        
+        print(f"\n✅ Results saved to {filename}")
+
+if __name__ == "__main__":
+    # Install required packages if needed
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+    except ImportError:
+        print("Installing required packages...")
+        import subprocess
+        import sys
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "beautifulsoup4"])
+        print("Packages installed! Please run the script again.")
+        sys.exit(0)
+    
+    main()
