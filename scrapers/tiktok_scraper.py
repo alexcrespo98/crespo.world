@@ -524,6 +524,47 @@ class TikTokScraper:
         except Exception as e:
             print(f"  ⚠️ Could not display summary: {e}")
 
+    def display_test_results(self, videos_data, followers, total_likes):
+        """Display test mode results in terminal only"""
+        print("\n" + "="*70)
+        print("🧪 TEST MODE RESULTS")
+        print("="*70)
+        
+        print(f"\n📊 Account Summary:")
+        print(f"   👤 Account: @popdartsgame")
+        print(f"   👥 Followers: {followers:,}" if followers else "   👥 Followers: N/A")
+        print(f"   ❤️  Total Likes: {total_likes:,}" if total_likes else "   ❤️  Total Likes: N/A")
+        print(f"   🎬 Videos scraped: {len(videos_data)}")
+        
+        if videos_data:
+            print(f"\n📹 Individual Post Metrics:")
+            print("-" * 70)
+            
+            for i, video in enumerate(videos_data, 1):
+                print(f"\nPost #{i}:")
+                print(f"  📅 Date: {video['Date']}")
+                print(f"  👁️  Views: {video['Views']:,}")
+                print(f"  ❤️  Likes: {video['Likes']:,}")
+                print(f"  💬 Comments: {video['Comments']:,}")
+                print(f"  🔄 Shares: {video['Shares']:,}")
+                print(f"  📈 Engagement Rate: {video['EngagementRate']}%")
+                print(f"  🔗 Video ID: {video['VideoID']}")
+            
+            # Calculate and show averages
+            avg_views = sum(v['Views'] for v in videos_data) / len(videos_data)
+            avg_likes = sum(v['Likes'] for v in videos_data) / len(videos_data)
+            avg_engagement = sum(v['EngagementRate'] for v in videos_data) / len(videos_data)
+            
+            print("\n" + "="*70)
+            print("📊 AVERAGE METRICS:")
+            print(f"   Avg Views: {avg_views:,.0f}")
+            print(f"   Avg Likes: {avg_likes:,.0f}")
+            print(f"   Avg Engagement: {avg_engagement:.2f}%")
+        
+        print("\n" + "="*70)
+        print("✅ TEST COMPLETE - No files were updated")
+        print("="*70)
+
     def get_scrape_config(self):
         """Ask user for scrape configuration at the start"""
         print("\n" + "="*70)
@@ -531,31 +572,40 @@ class TikTokScraper:
         print("="*70)
         
         while True:
-            print("\nHow many posts would you like to scrape per account?")
-            print("  • Enter a number (default: 100)")
-            print("  • Type 'deep' for maximum scrape (all available)")
-            print("  • Type 'test' for test mode (10 posts)")
+            print("\nSelect scraping option:")
+            print("  1. Custom number of posts (default: 100)")
+            print("  2. Deep scrape (back 2 years or to beginning of account)")
+            print("  3. Test mode (15 reels on @popdartsgame, displays all 15)")
             
-            user_input = input("\n📊 Posts to scrape [100]: ").strip().lower()
+            user_input = input("\nEnter your choice (1, 2, or 3): ").strip()
             
-            if user_input == "":
-                return 100, False
-            elif user_input == "deep":
+            if user_input == "1" or user_input == "":
+                # Ask for custom number
+                num_input = input("📊 How many posts per account? [100]: ").strip()
+                if num_input == "":
+                    print("\n✅ Will scrape 100 posts per account")
+                    return 100, False
+                else:
+                    try:
+                        num_posts = int(num_input)
+                        if num_posts > 0:
+                            print(f"\n✅ Will scrape {num_posts} posts per account")
+                            return num_posts, False
+                        else:
+                            print("❌ Please enter a positive number")
+                    except ValueError:
+                        print("❌ Invalid input. Please enter a number")
+            
+            elif user_input == "2":
                 print("\n🔥 Deep scrape selected - will scrape ALL available posts!")
                 return 9999999, False
-            elif user_input == "test":
-                print("\n🧪 Test mode selected - will scrape 10 posts")
-                return 10, True
+            
+            elif user_input == "3":
+                print("\n🧪 Test mode selected - will scrape 15 posts from @popdartsgame")
+                return 15, True
+            
             else:
-                try:
-                    num_posts = int(user_input)
-                    if num_posts > 0:
-                        print(f"\n✅ Will scrape {num_posts} posts per account")
-                        return num_posts, False
-                    else:
-                        print("❌ Please enter a positive number")
-                except ValueError:
-                    print("❌ Invalid input. Please enter a number, 'deep', or 'test'")
+                print("❌ Invalid choice. Please enter 1, 2, or 3")
 
     def retry_failed_scrapes(self, failed_accounts):
         """Retry screenshot scraping for accounts that returned N/A"""
@@ -642,23 +692,49 @@ class TikTokScraper:
         print("🎯 TikTok Analytics Tracker v2.0")
         print("="*70)
         
-        # Auto-detect accounts from Excel file or use defaults
-        accounts_to_scrape = self.get_accounts_from_excel()
-        
-        if not accounts_to_scrape:
-            print("\n❌ Could not detect accounts. Make sure the Excel file exists!")
-            return
-        
         # Get scrape configuration if not provided
         test_mode = False
         if max_posts is None:
             max_posts, test_mode = self.get_scrape_config()
         
         if test_mode:
-            print("\n🧪 TEST MODE ACTIVATED")
-            print(f"   Account: @{accounts_to_scrape[0]}")
-            print(f"   Posts: 10")
-            accounts_to_scrape = [accounts_to_scrape[0]]
+            # TEST MODE - Only scrape @popdartsgame and display in terminal
+            print("\n" + "="*70)
+            print("🧪 TEST MODE ACTIVATED")
+            print("="*70)
+            print(f"   Account: @popdartsgame")
+            print(f"   Posts to scrape: 15")
+            
+            try:
+                # Get TokCount stats
+                print("\nFetching account stats...")
+                tokcount_followers, tokcount_likes = self.get_tokcount_stats("popdartsgame")
+                
+                # Get detailed post metrics - FIX: use max_videos instead of max_posts
+                print("\nScraping posts...")
+                videos_data, ytdlp_followers, ytdlp_likes = self.scrape_tiktok_profile(
+                    "popdartsgame", max_videos=15  # Changed from max_posts to max_videos
+                )
+                
+                # Use best available data
+                followers = tokcount_followers if tokcount_followers else ytdlp_followers
+                total_likes = tokcount_likes if tokcount_likes else ytdlp_likes
+                
+                # Display results in terminal only
+                self.display_test_results(videos_data, followers, total_likes)
+                
+            except Exception as e:
+                print(f"\n❌ Test mode error: {e}")
+                traceback.print_exc()
+            
+            return  # Exit after test mode
+        
+        # NORMAL MODE - Auto-detect accounts and update Excel
+        accounts_to_scrape = self.get_accounts_from_excel()
+        
+        if not accounts_to_scrape:
+            print("\n❌ Could not detect accounts. Make sure the Excel file exists!")
+            return
         
         scrape_type = "ALL posts" if max_posts == 9999999 else f"{max_posts} posts"
         print(f"\n📊 Scraping {scrape_type} per account")
@@ -674,10 +750,7 @@ class TikTokScraper:
             # Scrape each account
             for idx, username in enumerate(accounts_to_scrape, 1):
                 print("\n" + "="*70)
-                if test_mode:
-                    print(f"🧪 TEST SCRAPE: @{username}")
-                else:
-                    print(f"📱 [{idx}/{len(accounts_to_scrape)}] Processing @{username}")
+                print(f"📱 [{idx}/{len(accounts_to_scrape)}] Processing @{username}")
                 print("="*70)
                 
                 try:
@@ -708,16 +781,6 @@ class TikTokScraper:
                     # Show summary
                     self.show_account_summary(username, df)
                     
-                    if test_mode:
-                        print("\n" + "="*70)
-                        print("✅ TEST COMPLETE!")
-                        print("="*70)
-                        print(f"\n📊 Summary:")
-                        print(f"   Account: @{username}")
-                        print(f"   Followers: {followers:,}" if followers else "   Followers: N/A")
-                        print(f"   Videos scraped: {len(videos_data)}")
-                        print(f"   Total likes: {total_likes:,}" if total_likes else "   Total likes: N/A")
-                    
                 except Exception as e:
                     print(f"\n  ❌ Error with @{username}: {e}")
                     traceback.print_exc()
@@ -737,17 +800,16 @@ class TikTokScraper:
                         all_account_data[username] = df
             
             # Save to Excel
-            if not test_mode:
-                print("\n" + "="*70)
+            print("\n" + "="*70)
+            self.save_to_excel(all_account_data)
+            self.upload_to_google_drive()
+            
+            # Handle early terminations
+            if self.early_terminations:
+                self.handle_early_terminations(all_account_data, timestamp_col)
+                # Save updated results
                 self.save_to_excel(all_account_data)
                 self.upload_to_google_drive()
-                
-                # Handle early terminations
-                if self.early_terminations:
-                    self.handle_early_terminations(all_account_data, timestamp_col)
-                    # Save updated results
-                    self.save_to_excel(all_account_data)
-                    self.upload_to_google_drive()
             
             print("\n✅ All accounts scraped successfully!")
             print(f"📁 Updated: '{OUTPUT_EXCEL}'")
