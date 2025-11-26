@@ -189,8 +189,8 @@ class MasterScraper:
             else:
                 print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} reels per account")
             
-            # The Instagram scraper has its own run() method which handles everything
-            # But for master scraper integration, we'll call it directly
+            # Note: The Instagram scraper has its own run() method which prompts for mode
+            # For master scraper integration, we call run() and let user interact with it
             scraper.run()
             
             return True
@@ -216,7 +216,8 @@ class MasterScraper:
             else:
                 print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} videos per channel")
             
-            # The YouTube scraper has its own run() method
+            # Note: The YouTube scraper has its own run() method which prompts for mode
+            # For master scraper integration, we call run() and let user interact
             scraper.run()
             
             return True
@@ -236,7 +237,7 @@ class MasterScraper:
             scraper = TikTokScraper()
             
             if config['test_mode']:
-                print(f"\n🧪 TEST MODE: Scraping 15 videos from @popdartsgame")
+                print(f"\n🧪 TEST MODE: Scraping 15 videos from @{self.DEFAULT_TEST_ACCOUNT}")
             elif config['deep_scrape']:
                 print("\n🔥 DEEP MODE: Scraping ALL available videos")
             else:
