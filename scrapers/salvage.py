@@ -469,6 +469,132 @@ class InstagramSalvage:
             print(f"    ❌ Error: {str(e)}")
             return None, False
 
+    def arrow_scrape_dates(self, driver, username, reel_ids):
+        """
+        Arrow scrape method - click first reel and use arrow keys to navigate.
+        More reliable than visiting individual URLs (avoids 429 rate limits).
+        
+        Args:
+            driver: Selenium driver
+            username: Instagram username  
+            reel_ids: List of reel IDs to find dates for
+            
+        Returns:
+            dict: {reel_id: {'date': ..., 'date_display': ...}}
+        """
+        from selenium.webdriver.common.keys import Keys
+        
+        print(f"\n  ➡️ Arrow scrape for {len(reel_ids)} missing dates...")
+        
+        reel_ids_needed = set(reel_ids)
+        arrow_data = {}  # reel_id -> date data
+        
+        # Try /reels/ page first, then main profile as fallback
+        pages_to_try = [
+            f"https://www.instagram.com/{username}/reels/",
+            f"https://www.instagram.com/{username}/"
+        ]
+        
+        for page_url in pages_to_try:
+            if len(arrow_data) >= len(reel_ids_needed):
+                break
+            
+            page_type = "reels" if "/reels/" in page_url else "main"
+            print(f"    📄 Trying {page_type} page...")
+            
+            try:
+                driver.get(page_url)
+                self.add_jitter(3, 1)
+                
+                # Dismiss any modals
+                self.dismiss_modal(driver)
+                
+                # Find first clickable post/reel
+                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+                
+                if not post_links:
+                    print(f"    ⚠️ No posts found on {page_type} page")
+                    continue
+                
+                # Click the first post
+                first_post = post_links[0]
+                print(f"    🖱️ Clicking first post...")
+                
+                try:
+                    first_post.click()
+                except:
+                    driver.execute_script("arguments[0].click();", first_post)
+                
+                self.add_jitter(2, 1)
+                
+                # Navigate through posts using arrow keys
+                body = driver.find_element(By.TAG_NAME, "body")
+                posts_processed = 0
+                consecutive_misses = 0
+                max_consecutive_misses = 15
+                max_posts = len(reel_ids) + 100
+                
+                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+                    current_url = driver.current_url
+                    current_reel_id = None
+                    
+                    if '/reel/' in current_url:
+                        current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                    elif '/p/' in current_url:
+                        # Regular post, skip
+                        body.send_keys(Keys.ARROW_RIGHT)
+                        self.add_jitter(0.5, 0.3)
+                        posts_processed += 1
+                        continue
+                    
+                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
+                        # Extract date
+                        date_info = self.extract_date_from_view(driver)
+                        
+                        if date_info.get('date'):
+                            arrow_data[current_reel_id] = date_info
+                            consecutive_misses = 0
+                            print(f"    [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
+                        else:
+                            consecutive_misses += 1
+                    else:
+                        consecutive_misses += 1
+                    
+                    body.send_keys(Keys.ARROW_RIGHT)
+                    self.add_jitter(0.8, 0.5)
+                    posts_processed += 1
+                    
+                    if len(arrow_data) >= len(reel_ids_needed):
+                        print(f"    ✅ Found all {len(arrow_data)} dates!")
+                        break
+                
+                # Close modal
+                body.send_keys(Keys.ESCAPE)
+                self.add_jitter(1, 0.5)
+                
+                print(f"    📊 Found {len(arrow_data)} dates from {page_type} page")
+                
+            except Exception as e:
+                print(f"    ❌ Error on {page_type} page: {str(e)}")
+                continue
+        
+        return arrow_data
+
+    def extract_date_from_view(self, driver):
+        """Extract date from currently displayed reel"""
+        data = {'date': None, 'date_display': None}
+        
+        try:
+            time_elements = driver.find_elements(By.TAG_NAME, "time")
+            if time_elements:
+                time_elem = time_elements[0]
+                data['date'] = time_elem.get_attribute('datetime')
+                data['date_display'] = time_elem.text
+        except:
+            pass
+        
+        return data
+
     def switch_to_incognito(self):
         """Switch to incognito mode when rate limited"""
         print("\n  🔄 Switching to incognito mode...")
@@ -572,7 +698,7 @@ class InstagramSalvage:
         return excel_data, missing_dates
 
     def salvage_dates(self, excel_path):
-        """Main function to salvage missing dates"""
+        """Main function to salvage missing dates using arrow scrape method"""
         self.ensure_packages()
         
         print("\n" + "="*70)
@@ -606,47 +732,80 @@ class InstagramSalvage:
         
         try:
             for sheet_name, reel_ids in missing_dates.items():
-                print(f"\n📊 Processing sheet: {sheet_name}")
+                print(f"\n📊 Processing sheet: {sheet_name} ({len(reel_ids)} missing dates)")
                 df = excel_data[sheet_name]
                 latest_col = df.columns[-1]
                 
-                for idx, reel_id in enumerate(reel_ids):
-                    print(f"  [{idx+1}/{len(reel_ids)}] Scraping {reel_id}...", end=" ")
-                    
-                    data, rate_limited = self.scrape_single_url(current_driver, reel_id)
-                    
-                    # Handle rate limiting
-                    if rate_limited:
-                        print("⚠️ Rate limited!")
-                        self.consecutive_failures += 1
-                        
-                        if self.consecutive_failures >= self.max_consecutive_failures:
-                            print("\n  🔄 Too many failures, switching to incognito...")
-                            current_driver = self.switch_to_incognito()
-                            self.consecutive_failures = 0
-                            
-                            # Retry with incognito
-                            data, rate_limited = self.scrape_single_url(current_driver, reel_id)
-                    
-                    if data and data.get('date'):
-                        # Update the dataframe
+                # Use arrow scrape first (more reliable, avoids rate limits)
+                print(f"\n  🎯 Using arrow scrape method for {sheet_name}...")
+                arrow_results = self.arrow_scrape_dates(current_driver, sheet_name, reel_ids)
+                
+                # Apply arrow scrape results
+                arrow_found = 0
+                remaining_ids = []
+                
+                for reel_id in reel_ids:
+                    if reel_id in arrow_results and arrow_results[reel_id].get('date'):
                         date_row = f"reel_{reel_id}_date"
                         date_display_row = f"reel_{reel_id}_date_display"
                         
-                        df.loc[date_row, latest_col] = data['date']
+                        df.loc[date_row, latest_col] = arrow_results[reel_id]['date']
                         if date_display_row in df.index:
-                            df.loc[date_display_row, latest_col] = data['date_display']
+                            df.loc[date_display_row, latest_col] = arrow_results[reel_id]['date_display']
                         
-                        print(f"✅ {data.get('date_display', 'N/A')}")
                         salvaged_count += 1
-                        self.consecutive_failures = 0
+                        arrow_found += 1
                     else:
-                        print("❌ Failed")
-                        failed_count += 1
-                        self.consecutive_failures += 1
+                        remaining_ids.append(reel_id)
+                
+                print(f"  ✅ Arrow scrape found {arrow_found}/{len(reel_ids)} dates")
+                
+                # Fall back to individual URL scrape for remaining IDs
+                if remaining_ids:
+                    print(f"\n  🔄 Falling back to individual URL scrape for {len(remaining_ids)} remaining...")
                     
-                    # Add extra jitter between requests
-                    self.add_jitter(1.5, 2.0)
+                    for idx, reel_id in enumerate(remaining_ids):
+                        print(f"    [{idx+1}/{len(remaining_ids)}] Scraping {reel_id}...", end=" ")
+                        
+                        data, rate_limited = self.scrape_single_url(current_driver, reel_id)
+                        
+                        # Handle rate limiting
+                        if rate_limited:
+                            print("⚠️ Rate limited!")
+                            self.consecutive_failures += 1
+                            
+                            if self.consecutive_failures >= self.max_consecutive_failures:
+                                print("\n    🔄 Too many failures, switching to incognito...")
+                                current_driver = self.switch_to_incognito()
+                                
+                                if current_driver is None:
+                                    print("    ❌ Could not recover, skipping remaining...")
+                                    failed_count += len(remaining_ids) - idx
+                                    break
+                                
+                                self.consecutive_failures = 0
+                                
+                                # Retry with incognito
+                                data, rate_limited = self.scrape_single_url(current_driver, reel_id)
+                        
+                        if data and data.get('date'):
+                            date_row = f"reel_{reel_id}_date"
+                            date_display_row = f"reel_{reel_id}_date_display"
+                            
+                            df.loc[date_row, latest_col] = data['date']
+                            if date_display_row in df.index:
+                                df.loc[date_display_row, latest_col] = data['date_display']
+                            
+                            print(f"✅ {data.get('date_display', 'N/A')}")
+                            salvaged_count += 1
+                            self.consecutive_failures = 0
+                        else:
+                            print("❌ Failed")
+                            failed_count += 1
+                            self.consecutive_failures += 1
+                        
+                        # Add jitter between requests
+                        self.add_jitter(1.5, 2.0)
                 
                 # Update the excel_data with modified df
                 excel_data[sheet_name] = df
