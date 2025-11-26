@@ -693,22 +693,25 @@ class InstagramScraper:
         log_a, log_b = None, None
         if len(valid_pairs) >= 3:
             try:
-                log_views = [math.log(v) for v, l in valid_pairs]
-                log_likes = [math.log(l) for v, l in valid_pairs]
-                
-                n = len(valid_pairs)
-                sum_x = sum(log_views)
-                sum_y = sum(log_likes)
-                sum_xy = sum(x * y for x, y in zip(log_views, log_likes))
-                sum_xx = sum(x * x for x in log_views)
-                
-                denominator = n * sum_xx - sum_x * sum_x
-                if denominator != 0:
-                    log_a = (n * sum_xy - sum_x * sum_y) / denominator
-                    log_b = (sum_y - log_a * sum_x) / n
+                # Filter to ensure all values are > 0 for logarithm
+                safe_pairs = [(v, l) for v, l in valid_pairs if v > 0 and l > 0]
+                if len(safe_pairs) >= 3:
+                    log_views = [math.log(v) for v, l in safe_pairs]
+                    log_likes = [math.log(l) for v, l in safe_pairs]
                     
-                    if test_mode:
-                        print(f"  📈 Logarithmic correlation: log(likes) = {log_a:.3f} * log(views) + {log_b:.3f}")
+                    n = len(safe_pairs)
+                    sum_x = sum(log_views)
+                    sum_y = sum(log_likes)
+                    sum_xy = sum(x * y for x, y in zip(log_views, log_likes))
+                    sum_xx = sum(x * x for x in log_views)
+                    
+                    denominator = n * sum_xx - sum_x * sum_x
+                    if denominator != 0:
+                        log_a = (n * sum_xy - sum_x * sum_y) / denominator
+                        log_b = (sum_y - log_a * sum_x) / n
+                        
+                        if test_mode:
+                            print(f"  📈 Logarithmic correlation: log(likes) = {log_a:.3f} * log(views) + {log_b:.3f}")
             except Exception as e:
                 if test_mode:
                     print(f"  ⚠️  Could not calculate log correlation: {e}")
@@ -752,23 +755,31 @@ class InstagramScraper:
                 selection_reason = ""
                 
                 if log_a is not None and log_b is not None and views is not None and views > 0:
-                    # Predict expected likes from views using log correlation
-                    expected_log_likes = log_a * math.log(views) + log_b
-                    expected_likes = math.exp(expected_log_likes)
-                    
-                    # Calculate how far each value is from expected
-                    hover_distance = abs(math.log(hover_val) - expected_log_likes) if hover_val and hover_val > 0 else float('inf')
-                    url_distance = abs(math.log(url_val) - expected_log_likes) if url_val and url_val > 0 else float('inf')
-                    
-                    if hover_distance < url_distance:
-                        best_value = hover_val
-                        selection_reason = f"closer to expected ({int(expected_likes):,})"
-                    else:
-                        best_value = url_val
-                        selection_reason = f"closer to expected ({int(expected_likes):,})"
+                    try:
+                        # Predict expected likes from views using log correlation
+                        expected_log_likes = log_a * math.log(views) + log_b
+                        # Prevent overflow for very large expected values
+                        if expected_log_likes > 100:  # exp(100) is astronomical
+                            expected_log_likes = 100
+                        expected_likes = math.exp(expected_log_likes)
+                        
+                        # Calculate how far each value is from expected (safe logarithm)
+                        hover_distance = abs(math.log(max(hover_val, 1)) - expected_log_likes) if hover_val is not None else float('inf')
+                        url_distance = abs(math.log(max(url_val, 1)) - expected_log_likes) if url_val is not None else float('inf')
+                        
+                        if hover_distance < url_distance:
+                            best_value = hover_val
+                            selection_reason = f"closer to expected ({int(expected_likes):,})"
+                        else:
+                            best_value = url_val
+                            selection_reason = f"closer to expected ({int(expected_likes):,})"
+                    except (ValueError, OverflowError):
+                        # Fallback on math errors
+                        best_value = max(hover_val, url_val) if hover_val and url_val else (hover_val or url_val)
+                        selection_reason = "higher value (math error fallback)"
                 else:
                     # Fallback: use the higher value (usually more accurate)
-                    best_value = max(hover_val, url_val)
+                    best_value = max(hover_val, url_val) if hover_val and url_val else (hover_val or url_val)
                     selection_reason = "higher value (fallback)"
                 
                 outliers.append({
@@ -784,7 +795,7 @@ class InstagramScraper:
         for reel_id, hover_val, url_val, diff_pct, metric_type, views in comments_diffs:
             if diff_pct > self.OUTLIER_THRESHOLD_PCT:
                 # For comments, use the higher value as they're less predictable
-                best_value = max(hover_val, url_val)
+                best_value = max(hover_val, url_val) if hover_val and url_val else (hover_val or url_val)
                 selection_reason = "higher value"
                 
                 outliers.append({
