@@ -49,17 +49,25 @@ ACCOUNTS_TO_TRACK = [
 ]
 
 INSTAGRAM_COOKIES = [
-    {'name': 'sessionid',  'value': '8438482535%3AH01dy1dQG6nQnk%3A17%3AAYiGfiuNFMl1AOwws5VAC0ljZQuYn4BgQEzQdwhKeg', 'domain': '.instagram.com'},
-    {'name': 'csrftoken',  'value': 'j9vt2Y4yXJ2j1OfxN1fe1Fj47ZEHUZgX', 'domain': '.instagram.com'},
+    {'name': 'sessionid',  'value': '8438482535%3AtJJKyFeKZxhWBS%3A9%3AAYhH86t38bPrK0FngCdM1ZBRQzDTR_x-opvU37WfkA', 'domain': '.instagram.com'},
+    {'name': 'csrftoken',  'value': 'OXAlPc0rRh5bMebjElbOOZxKODDOTYJ3', 'domain': '.instagram.com'},
     {'name': 'ds_user_id', 'value': '8438482535', 'domain': '.instagram.com'},
     {'name': 'mid',        'value': 'aRqN7gALAAFE_ZLG2YR4s_jAJbWN', 'domain': '.instagram.com'},
     {'name': 'ig_did',     'value': 'C4BB1B54-EE7F-44CE-839C-A6522013D97A', 'domain': '.instagram.com'},
     {'name': 'datr',       'value': '7Y0aabbcI4vK3rldO6uL60Mr', 'domain': '.instagram.com'},
-    {'name': 'rur',        'value': '"RVA\0548438482535\0541795498046:01fea08331d20cd7101847a41e2bda4ddefaac288d49493694a6b359884fa576c75219f0"', 'domain': '.instagram.com'},
+    {'name': 'rur',        'value': '"RVA\0548438482535\0541795661826:01fec330dbfed5a347ef1b62d27185c54698b9e86a2014a737fc2da80a84551e86f04b7f"', 'domain': '.instagram.com'},
     {'name': 'ig_nrcb',    'value': '1', 'domain': '.instagram.com'},
     {'name': 'wd',         'value': '879x639', 'domain': '.instagram.com'},
     {'name': 'dpr',        'value': '1.5', 'domain': '.instagram.com'},
+    {'name': 'ps_n',       'value': '1', 'domain': '.instagram.com'},
+    {'name': 'ps_l',       'value': '1', 'domain': '.instagram.com'},
 ]
+
+# Login credentials for Instagram
+INSTAGRAM_USERNAME = "crespoworld"
+INSTAGRAM_PASSWORD = "deleteme"
+
+import random
 
 class InstagramScraper:
     # Cross-validation outlier threshold (percentage difference to flag as outlier)
@@ -67,8 +75,15 @@ class InstagramScraper:
     
     def __init__(self):
         self.driver = None
+        self.incognito_driver = None  # For fallback on rate limiting
         self.interrupted = False
         self.current_data = {}
+        self.early_terminations = {}  # Track any early terminations
+        self.partial_scrape_data = {}  # Store partial data during scraping for backup
+        self.current_username = None  # Track which account is being scraped
+        self.rate_limited = False  # Track if we've hit rate limits
+        self.consecutive_failures = 0  # Track consecutive failures for fallback
+        self.max_consecutive_failures = 5  # Threshold for switching to incognito
         
         # Set up signal handler for interrupts
         signal.signal(signal.SIGINT, self.handle_interrupt)
@@ -80,9 +95,8 @@ class InstagramScraper:
         print("="*70)
         self.interrupted = True
         
-        # Save backup of current data
-        if self.current_data:
-            self.save_backup()
+        # Save backup of current data (including partial data)
+        self.save_backup()
         
         # Clean up driver
         if self.driver:
@@ -95,24 +109,47 @@ class InstagramScraper:
         sys.exit(0)
     
     def save_backup(self):
-        """Save backup file with current progress"""
+        """Save backup file with current progress including partial scrape data"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"instagram_backup_{timestamp}.xlsx"
         
         try:
             import pandas as pd
+            
+            has_data = False
+            
             with pd.ExcelWriter(backup_name, engine='openpyxl') as writer:
+                # Save completed account data
                 for username, df in self.current_data.items():
                     sheet_name = username[:31]
                     df.to_excel(writer, sheet_name=sheet_name)
+                    has_data = True
+                
+                # Save partial scrape data for current account (if any)
+                if self.partial_scrape_data and self.current_username:
+                    partial_df = pd.DataFrame(self.partial_scrape_data.get('hover_data', []))
+                    if not partial_df.empty:
+                        sheet_name = f"{self.current_username[:25]}_PARTIAL"
+                        partial_df.to_excel(writer, sheet_name=sheet_name)
+                        has_data = True
+                        print(f"  📊 Saved {len(partial_df)} partial reels for @{self.current_username}")
             
-            print(f"💾 Backup saved: {backup_name}")
+            if has_data:
+                print(f"💾 Backup saved: {backup_name}")
+            else:
+                # Remove empty file
+                import os
+                os.remove(backup_name)
+                print("ℹ️  No data to backup yet (scraping hadn't collected any data)")
+                return
             
             # Also save state file for resuming
             state = {
                 'timestamp': timestamp,
                 'accounts_completed': list(self.current_data.keys()),
-                'early_terminations': self.early_terminations
+                'early_terminations': self.early_terminations,
+                'current_username': self.current_username,
+                'partial_data_count': len(self.partial_scrape_data.get('hover_data', [])) if self.partial_scrape_data else 0
             }
             
             state_file = f"instagram_state_{timestamp}.json"
@@ -123,6 +160,239 @@ class InstagramScraper:
             
         except Exception as e:
             print(f"❌ Error saving backup: {e}")
+
+    def add_jitter(self, base_delay=1.0, max_jitter=2.0):
+        """Add random jitter to delays to avoid rate limiting"""
+        jitter = random.uniform(0, max_jitter)
+        total_delay = base_delay + jitter
+        time.sleep(total_delay)
+        return total_delay
+
+    def check_for_rate_limit(self, driver):
+        """Check if we've hit a 429 rate limit"""
+        try:
+            page_source = driver.page_source.lower()
+            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+            
+            rate_limit_indicators = [
+                "rate limit",
+                "too many requests",
+                "please wait",
+                "try again later",
+                "something went wrong"
+            ]
+            
+            for indicator in rate_limit_indicators:
+                if indicator in page_source or indicator in body_text:
+                    return True
+            
+            # Check for 429 in network (if visible in page)
+            if "429" in page_source:
+                return True
+                
+        except:
+            pass
+        
+        return False
+
+    def setup_incognito_driver(self):
+        """Set up Chrome in incognito mode for rate limit fallback"""
+        from webdriver_manager.chrome import ChromeDriverManager
+        
+        print("\n  🔄 Setting up incognito browser for fallback...")
+        
+        chrome_options = ChromeOptions()
+        chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--incognito")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+        chrome_options.add_argument("--log-level=3")
+        chrome_options.add_argument("--disable-logging")
+        
+        service = ChromeService(ChromeDriverManager().install())
+        service.log_path = os.devnull
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        print("  🌐 Loading Instagram in incognito...")
+        driver.get("https://www.instagram.com")
+        self.add_jitter(3, 1)
+        
+        # Try to log in
+        if self.login_to_instagram(driver):
+            print("  ✅ Incognito browser ready!")
+        else:
+            print("  ⚠️ Incognito login failed, continuing anyway...")
+        
+        self.incognito_driver = driver
+        return driver
+
+    def parse_firefox_cookies(self, cookie_text):
+        """
+        Parse Firefox/Netscape cookie format into Selenium cookie format.
+        
+        Firefox format (tab-separated):
+        # domain  hostOnly  path  secure  expiry  name  value
+        .instagram.com	TRUE	/	TRUE	1798685826	csrftoken	OXAlPc0rRh5bMebjElbOOZxKODDOTYJ3
+        """
+        cookies = []
+        lines = cookie_text.strip().split('\n')
+        
+        for line in lines:
+            # Skip comments and empty lines
+            line = line.strip()
+            if not line or line.startswith('#'):
+                # But still check if it's a comment with actual cookie data (HttpOnly cookies)
+                if line.startswith('#HttpOnly_'):
+                    line = line.replace('#HttpOnly_', '')
+                else:
+                    continue
+            
+            parts = line.split('\t')
+            if len(parts) >= 7:
+                domain = parts[0]
+                # hostOnly = parts[1]  # Not used in Selenium
+                # path = parts[2]
+                # secure = parts[3]
+                # expiry = parts[4]
+                name = parts[5]
+                value = parts[6]
+                
+                # Only include Instagram cookies
+                if 'instagram.com' in domain:
+                    cookie = {
+                        'name': name,
+                        'value': value,
+                        'domain': '.instagram.com'  # Normalize domain
+                    }
+                    cookies.append(cookie)
+        
+        return cookies
+
+    def prompt_for_new_cookies(self):
+        """
+        Prompt user to paste new Firefox cookies when authentication fails.
+        Returns the parsed cookies or None if cancelled.
+        """
+        print("\n" + "="*70)
+        print("🍪 COOKIE UPDATE REQUIRED")
+        print("="*70)
+        print("\nYour session cookies may have expired. Please provide new cookies.")
+        print("\nTo get cookies from Firefox:")
+        print("  1. Install 'Cookie-Editor' browser extension")
+        print("  2. Go to instagram.com and make sure you're logged in")
+        print("  3. Click Cookie-Editor icon → Export → Netscape format")
+        print("  4. Paste the cookies below (they look like this):")
+        print()
+        print("  # Netscape HTTP Cookie File")
+        print("  .instagram.com	TRUE	/	TRUE	1798685826	csrftoken	ABC123...")
+        print("  #HttpOnly_.instagram.com	TRUE	/	TRUE	1795657411	sessionid	123%3Axyz...")
+        print()
+        
+        choice = input("Would you like to paste new cookies? (y/n): ").strip().lower()
+        if choice != 'y':
+            return None
+        
+        print("\nPaste your Firefox cookies below.")
+        print("When done, press Enter twice (empty line) to finish:\n")
+        
+        lines = []
+        empty_line_count = 0
+        
+        while True:
+            try:
+                line = input()
+                if line == '':
+                    empty_line_count += 1
+                    if empty_line_count >= 1:  # One empty line to finish
+                        break
+                else:
+                    empty_line_count = 0
+                    lines.append(line)
+            except EOFError:
+                break
+        
+        if not lines:
+            print("❌ No cookies provided")
+            return None
+        
+        cookie_text = '\n'.join(lines)
+        cookies = self.parse_firefox_cookies(cookie_text)
+        
+        if not cookies:
+            print("❌ Could not parse any valid Instagram cookies")
+            return None
+        
+        # Check for essential cookies
+        cookie_names = [c['name'] for c in cookies]
+        essential = ['sessionid', 'csrftoken', 'ds_user_id']
+        missing = [e for e in essential if e not in cookie_names]
+        
+        if missing:
+            print(f"⚠️ Missing essential cookies: {', '.join(missing)}")
+            print("The cookies may not work properly.")
+        
+        print(f"\n✅ Parsed {len(cookies)} Instagram cookies:")
+        for cookie in cookies:
+            print(f"   • {cookie['name']}: {cookie['value'][:20]}...")
+        
+        return cookies
+
+    def restart_with_new_cookies(self, driver=None):
+        """
+        Prompt for new cookies, update the driver, and return success status.
+        """
+        new_cookies = self.prompt_for_new_cookies()
+        
+        if not new_cookies:
+            return False, driver
+        
+        # Update the global cookies list
+        global INSTAGRAM_COOKIES
+        INSTAGRAM_COOKIES.clear()
+        INSTAGRAM_COOKIES.extend(new_cookies)
+        
+        # If we have an existing driver, try to update it
+        if driver:
+            try:
+                print("\n🔄 Applying new cookies...")
+                driver.get("https://www.instagram.com")
+                time.sleep(2)
+                
+                # Clear existing cookies and add new ones
+                driver.delete_all_cookies()
+                for cookie in new_cookies:
+                    try:
+                        driver.add_cookie(cookie)
+                    except Exception as e:
+                        print(f"  ⚠️ Could not add cookie {cookie['name']}: {e}")
+                
+                driver.refresh()
+                time.sleep(3)
+                
+                # Check if we're logged in now
+                self.dismiss_modal(driver, max_attempts=2)
+                
+                print("✅ New cookies applied! Checking login status...")
+                
+                # Verify login
+                try:
+                    profile_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/direct/') or contains(@href, '/accounts/')]")
+                    if profile_links:
+                        print("✅ Successfully logged in with new cookies!")
+                        return True, driver
+                except:
+                    pass
+                
+                print("⚠️ Could not verify login, but cookies were applied")
+                return True, driver
+                
+            except Exception as e:
+                print(f"❌ Error applying cookies: {e}")
+                return False, driver
+        
+        return True, driver
 
     def install_package(self, package):
         subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
@@ -146,6 +416,155 @@ class InstagramScraper:
             for p in packages_needed:
                 self.install_package(p)
             print("✅ All packages installed!")
+
+    def dismiss_modal(self, driver, max_attempts=3):
+        """
+        Dismiss Instagram login/signup modal by clicking X button.
+        Returns True if modal was dismissed, False otherwise.
+        """
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.common.exceptions import TimeoutException, NoSuchElementException
+        
+        print("  🔍 Checking for login modal...")
+        
+        for attempt in range(max_attempts):
+            try:
+                # Common selectors for the X/close button on Instagram modals
+                close_button_selectors = [
+                    # SVG close button (most common)
+                    "//div[@role='dialog']//button[contains(@class, 'xqui')]//*[name()='svg']/..",
+                    "//div[@role='dialog']//button/*[name()='svg' and @aria-label='Close']/..",
+                    # Close button with aria-label
+                    "//button[@aria-label='Close']",
+                    "//div[@role='button' and @aria-label='Close']",
+                    # Generic close button in dialog
+                    "//div[@role='dialog']//div[@role='button'][1]",
+                    "//div[@role='dialog']//button[1]",
+                    # Not now button (alternative to close)
+                    "//button[contains(text(), 'Not Now')]",
+                    "//button[contains(text(), 'Not now')]",
+                    "//div[contains(text(), 'Not Now')]",
+                    "//div[contains(text(), 'Not now')]",
+                ]
+                
+                for selector in close_button_selectors:
+                    try:
+                        close_btn = driver.find_element(By.XPATH, selector)
+                        if close_btn.is_displayed():
+                            close_btn.click()
+                            print(f"  ✅ Modal dismissed (attempt {attempt + 1})")
+                            time.sleep(1.5)
+                            return True
+                    except (NoSuchElementException, Exception):
+                        continue
+                
+                # If no button found, check if dialog still exists
+                try:
+                    dialog = driver.find_element(By.XPATH, "//div[@role='dialog']")
+                    if dialog.is_displayed():
+                        # Try pressing Escape key
+                        from selenium.webdriver.common.keys import Keys
+                        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                        print(f"  ✅ Modal dismissed with Escape key (attempt {attempt + 1})")
+                        time.sleep(1.5)
+                        return True
+                except NoSuchElementException:
+                    # No dialog found, we're good
+                    print("  ✅ No modal present")
+                    return True
+                
+                time.sleep(1)
+                
+            except Exception as e:
+                print(f"  ⚠️ Error dismissing modal (attempt {attempt + 1}): {e}")
+                time.sleep(1)
+        
+        print("  ⚠️ Could not dismiss modal after all attempts")
+        return False
+
+    def login_to_instagram(self, driver):
+        """
+        Log in to Instagram using credentials.
+        Returns True if login successful, False otherwise.
+        """
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.common.exceptions import TimeoutException, NoSuchElementException
+        
+        print("  🔐 Attempting to log in to Instagram...")
+        
+        try:
+            # Navigate to login page
+            driver.get("https://www.instagram.com/accounts/login/")
+            time.sleep(3)
+            
+            # Dismiss any cookie consent dialogs
+            try:
+                cookie_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Allow') or contains(text(), 'Accept')]")
+                for btn in cookie_buttons:
+                    if btn.is_displayed():
+                        btn.click()
+                        time.sleep(1)
+                        break
+            except:
+                pass
+            
+            # Find and fill username field
+            try:
+                username_field = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.NAME, "username"))
+                )
+                username_field.clear()
+                username_field.send_keys(INSTAGRAM_USERNAME)
+                time.sleep(0.5)
+            except TimeoutException:
+                print("  ❌ Could not find username field")
+                return False
+            
+            # Find and fill password field
+            try:
+                password_field = driver.find_element(By.NAME, "password")
+                password_field.clear()
+                password_field.send_keys(INSTAGRAM_PASSWORD)
+                time.sleep(0.5)
+            except NoSuchElementException:
+                print("  ❌ Could not find password field")
+                return False
+            
+            # Click login button
+            try:
+                login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
+                login_button.click()
+                print("  ⏳ Waiting for login...")
+                time.sleep(5)
+            except NoSuchElementException:
+                print("  ❌ Could not find login button")
+                return False
+            
+            # Check if login was successful (look for profile icon or home feed)
+            try:
+                # Wait for redirect and check for logged-in elements
+                time.sleep(3)
+                
+                # Check if we're still on login page (error)
+                if "/accounts/login" in driver.current_url:
+                    print("  ❌ Login failed - still on login page")
+                    return False
+                
+                # Dismiss any "Save Login Info" or "Turn on Notifications" popups
+                self.dismiss_modal(driver, max_attempts=2)
+                
+                print("  ✅ Login successful!")
+                return True
+                
+            except Exception as e:
+                print(f"  ⚠️ Login verification error: {e}")
+                return False
+            
+        except Exception as e:
+            print(f"  ❌ Login error: {e}")
+            return False
 
     def select_browser(self):
         print("\n" + "="*70)
@@ -237,11 +656,73 @@ class InstagramScraper:
         print("  🌐 Loading Instagram...")
         driver.get("https://www.instagram.com")
         time.sleep(3)
-        print("  🍪 Loading cookies...")
-        for cookie in INSTAGRAM_COOKIES:
-            driver.add_cookie(cookie)
-        driver.refresh()
-        time.sleep(3)
+        
+        # Try to add cookies first
+        print("  🍪 Attempting to load cookies...")
+        cookies_loaded = False
+        try:
+            for cookie in INSTAGRAM_COOKIES:
+                driver.add_cookie(cookie)
+            driver.refresh()
+            time.sleep(3)
+            cookies_loaded = True
+        except Exception as e:
+            print(f"  ⚠️ Could not load cookies: {e}")
+        
+        # Dismiss any login modals that appear
+        self.dismiss_modal(driver, max_attempts=3)
+        
+        # Check if we're logged in (look for login form or profile elements)
+        logged_in = False
+        try:
+            # If we can see the login button/form, we're not logged in
+            login_elements = driver.find_elements(By.XPATH, "//button[contains(text(), 'Log in') or contains(text(), 'Log In')]")
+            if not login_elements or not any(el.is_displayed() for el in login_elements):
+                # Check for logged-in indicators
+                profile_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/direct/') or contains(@href, '/accounts/')]")
+                if profile_links:
+                    logged_in = True
+                    print("  ✅ Already logged in via cookies!")
+        except:
+            pass
+        
+        # If not logged in, try to log in with credentials
+        if not logged_in:
+            print("  ⚠️ Not logged in with cookies, attempting login with credentials...")
+            if self.login_to_instagram(driver):
+                logged_in = True
+            else:
+                print("  ❌ Login failed!")
+                
+                # Offer option to provide new cookies
+                print("\n  Would you like to:")
+                print("    1. Provide new Firefox cookies")
+                print("    2. Continue anyway (limited data)")
+                print("    3. Exit")
+                
+                choice = input("\n  Enter choice (1/2/3): ").strip()
+                
+                if choice == '1':
+                    success, driver = self.restart_with_new_cookies(driver)
+                    if success:
+                        logged_in = True
+                    else:
+                        print("  ⚠️ Could not apply new cookies, continuing with limited access...")
+                elif choice == '3':
+                    print("\n  Exiting...")
+                    if driver:
+                        driver.quit()
+                    sys.exit(0)
+                else:
+                    print("  ⚠️ Continuing with limited access...")
+                
+                # Dismiss any remaining modals
+                self.dismiss_modal(driver, max_attempts=2)
+        
+        # Final modal dismissal after everything is set up
+        time.sleep(2)
+        self.dismiss_modal(driver, max_attempts=2)
+        
         return driver
 
     def extract_reel_data_from_overlay(self, driver):
@@ -419,10 +900,14 @@ class InstagramScraper:
         
         return likes, comments
 
-    def hover_scrape_reels(self, driver, username, first_reel_id=None, max_reels=100, deep_scrape=False, test_mode=False):
+    def hover_scrape_reels(self, driver, username, first_reel_id=None, max_reels=100, deep_scrape=False, deep_deep=False, test_mode=False):
         profile_url = f"https://www.instagram.com/{username}/reels/"
         driver.get(profile_url)
         time.sleep(5)
+        
+        # Dismiss any login modals that appear when navigating to the profile
+        self.dismiss_modal(driver, max_attempts=2)
+        
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(2)
         
@@ -460,7 +945,14 @@ class InstagramScraper:
                     break
         
         cutoff_date = datetime.now() - timedelta(days=730)
-        target_reels = 2000 if deep_scrape else max_reels
+        # deep_deep means no limit, deep_scrape (without deep_deep) means 2 years (~730 posts)
+        if deep_deep:
+            target_reels = 99999  # Essentially unlimited for deep deep
+        elif deep_scrape:
+            target_reels = 2000  # Cap at 2000 for 2-year deep scrape
+        else:
+            target_reels = max_reels
+        
         hover_data = []
         processed_reel_ids = set()
         fail_counter = 0
@@ -507,7 +999,8 @@ class InstagramScraper:
                     except:
                         likes, comments = None, None
                     
-                    if deep_scrape and len(hover_data) > 730:
+                    # Apply 2-year cutoff only for deep_scrape (not deep_deep)
+                    if deep_scrape and not deep_deep and len(hover_data) > 730:
                         print(f"    📅 Deep scrape reached approximate 2-year mark ({len(hover_data)} reels)")
                         reached_cutoff = True
                         break
@@ -521,6 +1014,10 @@ class InstagramScraper:
                     })
                     processed_reel_ids.add(post_id)
                     new_this_cycle = True
+                    
+                    # Store partial data for backup (every 10 reels)
+                    if len(hover_data) % 10 == 0:
+                        self.partial_scrape_data = {'hover_data': hover_data.copy()}
                     
                     if test_mode and len(hover_data) <= max_reels:
                         # Format output to distinguish N/A from 0
@@ -545,15 +1042,282 @@ class InstagramScraper:
             driver.execute_script("window.scrollBy(0, 600);")
             time.sleep(0.7)
         
+        # Store final hover data for backup
+        self.partial_scrape_data = {'hover_data': hover_data.copy()}
+        
         if test_mode:
             print(f"\n  📊 Hover scrape complete: {len(hover_data)} reels")
         
         return hover_data
 
+    def arrow_scrape_dates(self, driver, username, hover_data, test_mode=False, verbose=True):
+        """
+        Arrow scrape method - click first reel and use arrow keys to navigate.
+        More reliable than visiting individual URLs (avoids 429 rate limits).
+        
+        1. Go to /reels/ page, click first reel
+        2. Navigate through reels using right arrow key
+        3. Extract date info from each reel
+        4. If /reels/ fails, fallback to main profile page
+        """
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+        
+        if test_mode:
+            print(f"\n  🧪 STEP 2: Arrow scrape (extracting dates via navigation)...")
+        else:
+            print(f"  ➡️ Step 2: Arrow scrape for dates...")
+        
+        # Build set of reel IDs we need to find dates for
+        reel_ids_needed = {reel['reel_id'] for reel in hover_data}
+        arrow_data = {}  # reel_id -> date data
+        
+        # Try /reels/ page first, then main profile as fallback
+        pages_to_try = [
+            f"https://www.instagram.com/{username}/reels/",
+            f"https://www.instagram.com/{username}/"
+        ]
+        
+        for page_url in pages_to_try:
+            if len(arrow_data) >= len(reel_ids_needed):
+                break  # Already got all dates
+            
+            page_type = "reels" if "/reels/" in page_url else "main"
+            print(f"    📄 Trying {page_type} page...")
+            
+            try:
+                driver.get(page_url)
+                time.sleep(4)  # Wait for page to load
+                
+                # Dismiss any modals
+                self.dismiss_modal(driver, max_attempts=2)
+                
+                # Find first clickable reel
+                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+                
+                if not post_links:
+                    # Try also looking for regular posts
+                    post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+                
+                if not post_links:
+                    print(f"    ⚠️ No posts found on {page_type} page")
+                    continue
+                
+                print(f"    ✅ Found {len(post_links)} posts on page")
+                
+                # Click the first post
+                first_post = post_links[0]
+                first_post_url = first_post.get_attribute('href')
+                print(f"    🖱️ Clicking first post...")
+                
+                try:
+                    first_post.click()
+                except:
+                    # Try JavaScript click as fallback
+                    driver.execute_script("arguments[0].click();", first_post)
+                
+                time.sleep(3)  # Wait for modal to load
+                
+                # Now navigate through posts using arrow keys
+                body = driver.find_element(By.TAG_NAME, "body")
+                posts_processed = 0
+                consecutive_misses = 0
+                consecutive_no_dates = 0  # Track consecutive posts with no date found
+                max_consecutive_misses = 50  # Increased to allow more posts without matches
+                max_posts = min(len(hover_data) + 200, 2000)  # Limit to reasonable amount
+                
+                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+                    # Wait for content to load
+                    time.sleep(1.5)
+                    
+                    # Extract current reel ID from URL
+                    current_url = driver.current_url
+                    current_reel_id = None
+                    
+                    if '/reel/' in current_url:
+                        current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                    elif '/p/' in current_url:
+                        # This is a regular post, not a reel
+                        current_reel_id = None
+                    
+                    # Extract date for all posts (for debugging)
+                    date_info = self.extract_date_from_current_view(driver)
+                    
+                    # Show verbose output for debugging
+                    if verbose and posts_processed < 20:  # Show first 20 posts
+                        in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
+                        date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
+                        print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                    
+                    # If we get 3 consecutive NO DATE on reels page, break and try main page
+                    if page_type == "reels" and not date_info.get('date'):
+                        consecutive_no_dates = consecutive_no_dates + 1 if 'consecutive_no_dates' in dir() else 1
+                        if consecutive_no_dates >= 3:
+                            print(f"    ⚠️ 3 consecutive NO DATE - switching to main page...")
+                            body.send_keys(Keys.ESCAPE)
+                            time.sleep(1)
+                            break
+                    else:
+                        consecutive_no_dates = 0
+                    
+                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
+                        if date_info.get('date'):
+                            arrow_data[current_reel_id] = date_info
+                            consecutive_misses = 0
+                            
+                            if test_mode:
+                                print(f"    ✅ [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
+                            elif len(arrow_data) % 10 == 0:
+                                print(f"    Progress: {len(arrow_data)}/{len(reel_ids_needed)} dates collected...")
+                        else:
+                            consecutive_misses += 1
+                    elif current_reel_id and current_reel_id not in reel_ids_needed:
+                        # Not a match but still found a reel
+                        consecutive_misses += 1
+                    else:
+                        consecutive_misses += 1
+                    
+                    # Navigate to next post
+                    body.send_keys(Keys.ARROW_RIGHT)
+                    posts_processed += 1
+                    
+                    # Progress update every 50 posts
+                    if posts_processed % 50 == 0:
+                        print(f"    📊 Processed {posts_processed} posts, found {len(arrow_data)} matches...")
+                    
+                    # Check if we've collected all needed dates
+                    if len(arrow_data) >= len(reel_ids_needed):
+                        print(f"    ✅ Collected all {len(arrow_data)} dates!")
+                        break
+                
+                # Close the modal/overlay by pressing Escape
+                body.send_keys(Keys.ESCAPE)
+                time.sleep(1)
+                
+                print(f"    📊 Collected {len(arrow_data)} dates from {page_type} page (processed {posts_processed} posts)")
+                
+            except Exception as e:
+                import traceback
+                print(f"    ❌ Error on {page_type} page: {str(e)}")
+                if verbose:
+                    traceback.print_exc()
+                continue
+        
+        # Convert arrow_data dict to list format matching hover_data
+        url_data = []
+        for reel in hover_data:
+            reel_id = reel['reel_id']
+            if reel_id in arrow_data:
+                url_data.append({
+                    'reel_id': reel_id,
+                    'date': arrow_data[reel_id].get('date'),
+                    'date_display': arrow_data[reel_id].get('date_display'),
+                    'date_timestamp': arrow_data[reel_id].get('date_timestamp'),
+                    'likes': arrow_data[reel_id].get('likes'),
+                    'comments': arrow_data[reel_id].get('comments'),
+                })
+            else:
+                # No date found for this reel
+                url_data.append({
+                    'reel_id': reel_id,
+                    'date': None,
+                    'date_display': None,
+                    'date_timestamp': None,
+                    'likes': None,
+                    'comments': None,
+                })
+        
+        dates_found = sum(1 for d in url_data if d.get('date'))
+        print(f"  📊 Arrow scrape complete: {dates_found}/{len(hover_data)} dates found")
+        
+        return url_data
+
+    def extract_date_from_current_view(self, driver):
+        """Extract date and other info from the currently displayed reel/post using multiple methods"""
+        data = {
+            'date': None,
+            'date_display': None,
+            'date_timestamp': None,
+            'likes': None,
+            'comments': None,
+        }
+        
+        # Method 1: CSS selector for specific class (most reliable)
+        try:
+            time_elements = driver.find_elements(By.CSS_SELECTOR, "time.x1p4m5qa")
+            if time_elements:
+                time_elem = time_elements[0]
+                data['date'] = time_elem.get_attribute('datetime')
+                data['date_display'] = time_elem.text
+                data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
+        except:
+            pass
+        
+        # Method 2: Look for time element with both datetime and title attributes
+        # The post date usually has both, while comment dates may only have datetime
+        if not data['date']:
+            try:
+                time_elements = driver.find_elements(By.TAG_NAME, "time")
+                for time_elem in time_elements:
+                    datetime_attr = time_elem.get_attribute('datetime')
+                    title_attr = time_elem.get_attribute('title')
+                    if datetime_attr and title_attr:
+                        data['date'] = datetime_attr
+                        data['date_display'] = time_elem.text
+                        data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
+                        break
+            except:
+                pass
+        
+        # Method 3: Fallback to first time element with datetime
+        if not data['date']:
+            try:
+                time_elements = driver.find_elements(By.TAG_NAME, "time")
+                for time_elem in time_elements:
+                    datetime_attr = time_elem.get_attribute('datetime')
+                    if datetime_attr:
+                        data['date'] = datetime_attr
+                        data['date_display'] = time_elem.text
+                        data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
+                        break
+            except:
+                pass
+        
+        # Extract likes
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            others_match = re.search(r'and\s+([\d,.]+[KMB]?)\s+others', body_text, re.IGNORECASE)
+            if others_match:
+                data['likes'] = self.parse_number(others_match.group(1))
+            else:
+                like_match = re.search(r'([\d,.]+[KMB]?)\s+likes?', body_text, re.IGNORECASE)
+                if like_match:
+                    data['likes'] = self.parse_number(like_match.group(1))
+        except:
+            pass
+        
+        # Extract comments
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            comment_patterns = [
+                r'View all ([\d,.]+[KMB]?)\s+comments?',
+                r'([\d,.]+[KMB]?)\s+comments?'
+            ]
+            for pattern in comment_patterns:
+                comment_match = re.search(pattern, body_text, re.IGNORECASE)
+                if comment_match:
+                    data['comments'] = self.parse_number(comment_match.group(1))
+                    break
+        except:
+            pass
+        
+        return data
+
     def scrape_individual_urls(self, driver, hover_data, test_mode=False):
         """
         Visit each individual reel URL to extract date information and validate likes.
         This is used as an alternative to arrow scraping for getting dates.
+        Includes jitter, rate limit detection, and incognito fallback.
         """
         if test_mode:
             print(f"\n  🧪 STEP 2: Individual URL scrape (extracting dates from {len(hover_data)} URLs)...")
@@ -561,6 +1325,9 @@ class InstagramScraper:
             print(f"  📅 Step 2: Individual URL scraping for dates...")
         
         url_data = []
+        modal_dismissed_count = 0  # Track if we've dismissed modals for first few URLs
+        current_driver = driver  # May switch to incognito on rate limit
+        consecutive_failures = 0
         
         for idx, reel in enumerate(hover_data):
             reel_id = reel.get('reel_id')
@@ -570,8 +1337,39 @@ class InstagramScraper:
             reel_url = f"https://www.instagram.com/reel/{reel_id}/"
             
             try:
-                driver.get(reel_url)
-                time.sleep(2)
+                current_driver.get(reel_url)
+                # Add jitter to avoid rate limiting
+                self.add_jitter(1.5, 1.5)
+                
+                # Check for rate limiting
+                if self.check_for_rate_limit(current_driver):
+                    print(f"\n    ⚠️ Rate limit detected at reel {idx+1}/{len(hover_data)}")
+                    consecutive_failures += 1
+                    
+                    if consecutive_failures >= self.max_consecutive_failures:
+                        print("    🔄 Too many rate limits, switching to incognito mode...")
+                        
+                        # Set up incognito driver if not already done
+                        if not self.incognito_driver:
+                            self.setup_incognito_driver()
+                        
+                        if self.incognito_driver:
+                            current_driver = self.incognito_driver
+                            consecutive_failures = 0
+                            modal_dismissed_count = 0  # Reset modal tracking for new driver
+                            
+                            # Retry the current URL with incognito
+                            current_driver.get(reel_url)
+                            self.add_jitter(2, 1.5)
+                        else:
+                            print("    ⚠️ Could not set up incognito, waiting before retry...")
+                            self.add_jitter(10, 5)  # Longer wait
+                            continue
+                
+                # Dismiss modal for first few URLs (they typically only appear initially)
+                if modal_dismissed_count < 3:
+                    if self.dismiss_modal(current_driver, max_attempts=1):
+                        modal_dismissed_count += 1
                 
                 data = {
                     'reel_id': reel_id,
@@ -584,7 +1382,7 @@ class InstagramScraper:
                 
                 # Extract date
                 try:
-                    time_elements = driver.find_elements(By.TAG_NAME, "time")
+                    time_elements = current_driver.find_elements(By.TAG_NAME, "time")
                     if time_elements:
                         time_elem = time_elements[0]
                         data['date'] = time_elem.get_attribute('datetime')
@@ -593,9 +1391,15 @@ class InstagramScraper:
                 except Exception:
                     pass
                 
+                # Check if we got date - if not, might be rate limited
+                if data['date'] is None:
+                    consecutive_failures += 1
+                else:
+                    consecutive_failures = 0  # Reset on success
+                
                 # Extract likes for validation
                 try:
-                    body_text = driver.find_element(By.TAG_NAME, "body").text
+                    body_text = current_driver.find_element(By.TAG_NAME, "body").text
                     others_match = re.search(r'and\s+([\d,.]+[KMB]?)\s+others', body_text, re.IGNORECASE)
                     if others_match:
                         data['likes'] = self.parse_number(others_match.group(1))
@@ -608,7 +1412,7 @@ class InstagramScraper:
                 
                 # Extract comments for validation
                 try:
-                    body_text = driver.find_element(By.TAG_NAME, "body").text
+                    body_text = current_driver.find_element(By.TAG_NAME, "body").text
                     comment_patterns = [
                         r'View all ([\d,.]+[KMB]?)\s+comments?',
                         r'([\d,.]+[KMB]?)\s+comments?'
@@ -631,11 +1435,13 @@ class InstagramScraper:
                 elif (idx + 1) % 10 == 0:
                     print(f"    Progress: {idx+1}/{len(hover_data)} URLs scraped...")
                 
-                time.sleep(0.5)  # Rate limiting
+                # Add jitter between requests
+                self.add_jitter(0.5, 1.0)
                 
             except Exception as e:
                 if test_mode:
                     print(f"    ❌ Error scraping URL {reel_id}: {str(e)}")
+                consecutive_failures += 1
                 url_data.append({
                     'reel_id': reel_id,
                     'date': None,
@@ -644,12 +1450,21 @@ class InstagramScraper:
                     'likes': None,
                     'comments': None,
                 })
+                
+                # If too many failures, try switching to incognito
+                if consecutive_failures >= self.max_consecutive_failures and not self.incognito_driver:
+                    print("    🔄 Multiple failures detected, attempting incognito fallback...")
+                    if self.setup_incognito_driver():
+                        current_driver = self.incognito_driver
+                        consecutive_failures = 0
+                
                 continue
         
         if test_mode:
             print(f"\n  📊 Individual URL scrape complete: {len(url_data)} URLs processed")
         
         return url_data
+
 
     def cross_validate_data(self, hover_data, url_data, test_mode=False):
         """
@@ -903,11 +1718,15 @@ class InstagramScraper:
         
         return merged
 
-    def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, test_mode=False):
+    def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, deep_deep=False, test_mode=False):
         """
         Main scraping method using hover-first approach.
-        Hover scrape first, then individual URL scraping for dates.
+        Hover scrape first, then arrow scrape for dates (more reliable than individual URLs).
         """
+        # Track current username for backup purposes
+        self.current_username = username
+        self.partial_scrape_data = {}
+        
         print(f"  👥 Getting exact follower count...")
         exact_followers = self.get_exact_follower_count(username)
         if exact_followers:
@@ -917,14 +1736,26 @@ class InstagramScraper:
         
         # Hover-first approach
         # Step 1: Hover scrape to get views, likes, comments, URLs
-        hover_data = self.hover_scrape_reels(driver, username, first_reel_id=None, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode)
+        hover_data = self.hover_scrape_reels(driver, username, first_reel_id=None, max_reels=max_reels, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=test_mode)
         
         if not hover_data:
             print(f"  ❌ Hover scrape failed - cannot proceed")
             return [], None, 0
         
-        # Step 2: Individual URL scrape to get dates
-        url_data = self.scrape_individual_urls(driver, hover_data, test_mode=test_mode)
+        # Step 2: Arrow scrape to get dates (more reliable than individual URLs)
+        # Falls back to individual URLs if arrow scrape fails
+        url_data = self.arrow_scrape_dates(driver, username, hover_data, test_mode=test_mode)
+        
+        # Check if arrow scrape got enough dates
+        dates_found = sum(1 for d in url_data if d.get('date'))
+        if dates_found < len(hover_data) * 0.5:  # Less than 50% dates found
+            print(f"  ⚠️ Arrow scrape only found {dates_found}/{len(hover_data)} dates, trying individual URL fallback...")
+            url_data_fallback = self.scrape_individual_urls(driver, hover_data, test_mode=test_mode)
+            
+            # Merge: prefer arrow scrape data, fill in missing with URL scrape
+            for i, (arrow_item, url_item) in enumerate(zip(url_data, url_data_fallback)):
+                if not arrow_item.get('date') and url_item.get('date'):
+                    url_data[i] = url_item
         
         # Step 3: Cross-validate data and identify outliers (with log correlation)
         outliers = self.cross_validate_data(hover_data, url_data, test_mode=test_mode)
@@ -1035,7 +1866,7 @@ class InstagramScraper:
         print("🎯 SELECT SCRAPE MODE")
         print("="*70)
         print("\n1. Custom scrape (default: 100 posts)")
-        print("2. Deep scrape (back 2 years or to beginning of account)")
+        print("2. Deep scrape (back 2 years)")
         print("3. Test mode (15 reels on @popdartsgame)")
         print()
         while True:
@@ -1045,20 +1876,34 @@ class InstagramScraper:
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False
+                        return num_posts, False, False, False  # Added 4th return value for deep_deep
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
                     print("Invalid input. Using default: 100")
-                    return 100, False, False
+                    return 100, False, False, False
             elif choice == '2':
-                confirm = input("\n⚠️  Deep scrape will go back 2 years or to the beginning of the account. This may take a while. Continue? (y/n): ").strip().lower()
-                if confirm == 'y':
-                    return None, True, False
+                print("\n⚠️  Deep scrape options:")
+                print("   a) 2 years back (default)")
+                print("   b) All the way back (DEEP DEEP - takes significantly longer)")
+                deep_choice = input("\nEnter 'a' for 2 years or 'b' for all the way back (default=a): ").strip().lower()
+                
+                if deep_choice == 'b':
+                    confirm = input("\n🔥 DEEP DEEP mode will scrape ALL available posts. This takes significantly longer. Continue? (y/n): ").strip().lower()
+                    if confirm == 'y':
+                        print("  ✅ Deep deep mode selected - will scrape ALL available posts!")
+                        return None, True, False, True  # deep_scrape=True, deep_deep=True
+                    else:
+                        continue
                 else:
-                    continue
+                    confirm = input("\n⚠️  Deep scrape will go back 2 years. Continue? (y/n): ").strip().lower()
+                    if confirm == 'y':
+                        print("  ✅ Deep mode selected - will scrape back 2 years")
+                        return None, True, False, False  # deep_scrape=True, deep_deep=False
+                    else:
+                        continue
             elif choice == '3':
-                return 15, False, True
+                return 15, False, True, False
             else:
                 print("Invalid choice. Please enter 1, 2, or 3.")
 
@@ -1073,7 +1918,7 @@ class InstagramScraper:
         print("="*70)
         
         browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode = self.get_scrape_mode()
+        max_reels, deep_scrape, test_mode, deep_deep = self.get_scrape_mode()
         
         if test_mode:
             print("\n🧪 TEST MODE ACTIVATED")
@@ -1092,7 +1937,10 @@ class InstagramScraper:
             print(f"\n   Browser: {browser_choice.upper()}")
             accounts = ACCOUNTS_TO_TRACK
             if deep_scrape:
-                print("\n🔍 Mode: DEEP SCRAPE (back 2 years or to beginning of account)")
+                if deep_deep:
+                    print("\n🔥 Mode: DEEP DEEP SCRAPE (ALL available posts - no limit)")
+                else:
+                    print("\n🔍 Mode: DEEP SCRAPE (back 2 years)")
                 expected_reels = None
             else:
                 print(f"\n📊 Mode: {max_reels} posts per account")
@@ -1118,7 +1966,7 @@ class InstagramScraper:
                 
                 try:
                     reels_data, followers, pinned_count = self.scrape_instagram_account(
-                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, test_mode=test_mode
+                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=test_mode
                     )
                     
                     scrape_results[username] = {
@@ -1189,6 +2037,12 @@ class InstagramScraper:
         finally:
             if self.driver:
                 self.driver.quit()
+            # Also clean up incognito driver if it was created
+            if self.incognito_driver:
+                try:
+                    self.incognito_driver.quit()
+                except:
+                    pass
 
     # Methods for master scraper integration
     def scrape_recent_posts(self, account, limit=30):
