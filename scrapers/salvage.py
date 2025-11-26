@@ -585,11 +585,21 @@ class InstagramSalvage:
         data = {'date': None, 'date_display': None}
         
         try:
-            time_elements = driver.find_elements(By.TAG_NAME, "time")
+            # Look for the specific <time> element with class x1p4m5qa (post date, not comment dates)
+            time_elements = driver.find_elements(By.CSS_SELECTOR, "time.x1p4m5qa")
             if time_elements:
                 time_elem = time_elements[0]
                 data['date'] = time_elem.get_attribute('datetime')
                 data['date_display'] = time_elem.text
+            else:
+                # Fallback: look for any time element with a datetime attribute
+                time_elements = driver.find_elements(By.TAG_NAME, "time")
+                for time_elem in time_elements:
+                    datetime_attr = time_elem.get_attribute('datetime')
+                    if datetime_attr:
+                        data['date'] = datetime_attr
+                        data['date_display'] = time_elem.text
+                        break
         except:
             pass
         
