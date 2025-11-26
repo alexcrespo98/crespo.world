@@ -228,6 +228,172 @@ class InstagramScraper:
         self.incognito_driver = driver
         return driver
 
+    def parse_firefox_cookies(self, cookie_text):
+        """
+        Parse Firefox/Netscape cookie format into Selenium cookie format.
+        
+        Firefox format (tab-separated):
+        # domain  hostOnly  path  secure  expiry  name  value
+        .instagram.com	TRUE	/	TRUE	1798685826	csrftoken	OXAlPc0rRh5bMebjElbOOZxKODDOTYJ3
+        """
+        cookies = []
+        lines = cookie_text.strip().split('\n')
+        
+        for line in lines:
+            # Skip comments and empty lines
+            line = line.strip()
+            if not line or line.startswith('#'):
+                # But still check if it's a comment with actual cookie data (HttpOnly cookies)
+                if line.startswith('#HttpOnly_'):
+                    line = line.replace('#HttpOnly_', '')
+                else:
+                    continue
+            
+            parts = line.split('\t')
+            if len(parts) >= 7:
+                domain = parts[0]
+                # hostOnly = parts[1]  # Not used in Selenium
+                # path = parts[2]
+                # secure = parts[3]
+                # expiry = parts[4]
+                name = parts[5]
+                value = parts[6]
+                
+                # Only include Instagram cookies
+                if 'instagram.com' in domain:
+                    cookie = {
+                        'name': name,
+                        'value': value,
+                        'domain': '.instagram.com'  # Normalize domain
+                    }
+                    cookies.append(cookie)
+        
+        return cookies
+
+    def prompt_for_new_cookies(self):
+        """
+        Prompt user to paste new Firefox cookies when authentication fails.
+        Returns the parsed cookies or None if cancelled.
+        """
+        print("\n" + "="*70)
+        print("🍪 COOKIE UPDATE REQUIRED")
+        print("="*70)
+        print("\nYour session cookies may have expired. Please provide new cookies.")
+        print("\nTo get cookies from Firefox:")
+        print("  1. Install 'Cookie-Editor' browser extension")
+        print("  2. Go to instagram.com and make sure you're logged in")
+        print("  3. Click Cookie-Editor icon → Export → Netscape format")
+        print("  4. Paste the cookies below (they look like this):")
+        print()
+        print("  # Netscape HTTP Cookie File")
+        print("  .instagram.com	TRUE	/	TRUE	1798685826	csrftoken	ABC123...")
+        print("  #HttpOnly_.instagram.com	TRUE	/	TRUE	1795657411	sessionid	123%3Axyz...")
+        print()
+        
+        choice = input("Would you like to paste new cookies? (y/n): ").strip().lower()
+        if choice != 'y':
+            return None
+        
+        print("\nPaste your Firefox cookies below.")
+        print("When done, press Enter twice (empty line) to finish:\n")
+        
+        lines = []
+        empty_line_count = 0
+        
+        while True:
+            try:
+                line = input()
+                if line == '':
+                    empty_line_count += 1
+                    if empty_line_count >= 1:  # One empty line to finish
+                        break
+                else:
+                    empty_line_count = 0
+                    lines.append(line)
+            except EOFError:
+                break
+        
+        if not lines:
+            print("❌ No cookies provided")
+            return None
+        
+        cookie_text = '\n'.join(lines)
+        cookies = self.parse_firefox_cookies(cookie_text)
+        
+        if not cookies:
+            print("❌ Could not parse any valid Instagram cookies")
+            return None
+        
+        # Check for essential cookies
+        cookie_names = [c['name'] for c in cookies]
+        essential = ['sessionid', 'csrftoken', 'ds_user_id']
+        missing = [e for e in essential if e not in cookie_names]
+        
+        if missing:
+            print(f"⚠️ Missing essential cookies: {', '.join(missing)}")
+            print("The cookies may not work properly.")
+        
+        print(f"\n✅ Parsed {len(cookies)} Instagram cookies:")
+        for cookie in cookies:
+            print(f"   • {cookie['name']}: {cookie['value'][:20]}...")
+        
+        return cookies
+
+    def restart_with_new_cookies(self, driver=None):
+        """
+        Prompt for new cookies, update the driver, and return success status.
+        """
+        new_cookies = self.prompt_for_new_cookies()
+        
+        if not new_cookies:
+            return False, driver
+        
+        # Update the global cookies list
+        global INSTAGRAM_COOKIES
+        INSTAGRAM_COOKIES.clear()
+        INSTAGRAM_COOKIES.extend(new_cookies)
+        
+        # If we have an existing driver, try to update it
+        if driver:
+            try:
+                print("\n🔄 Applying new cookies...")
+                driver.get("https://www.instagram.com")
+                time.sleep(2)
+                
+                # Clear existing cookies and add new ones
+                driver.delete_all_cookies()
+                for cookie in new_cookies:
+                    try:
+                        driver.add_cookie(cookie)
+                    except Exception as e:
+                        print(f"  ⚠️ Could not add cookie {cookie['name']}: {e}")
+                
+                driver.refresh()
+                time.sleep(3)
+                
+                # Check if we're logged in now
+                self.dismiss_modal(driver, max_attempts=2)
+                
+                print("✅ New cookies applied! Checking login status...")
+                
+                # Verify login
+                try:
+                    profile_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/direct/') or contains(@href, '/accounts/')]")
+                    if profile_links:
+                        print("✅ Successfully logged in with new cookies!")
+                        return True, driver
+                except:
+                    pass
+                
+                print("⚠️ Could not verify login, but cookies were applied")
+                return True, driver
+                
+            except Exception as e:
+                print(f"❌ Error applying cookies: {e}")
+                return False, driver
+        
+        return True, driver
+
     def install_package(self, package):
         subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
 
@@ -526,7 +692,30 @@ class InstagramScraper:
             if self.login_to_instagram(driver):
                 logged_in = True
             else:
-                print("  ⚠️ Login failed, will try to scrape as guest (limited data)")
+                print("  ❌ Login failed!")
+                
+                # Offer option to provide new cookies
+                print("\n  Would you like to:")
+                print("    1. Provide new Firefox cookies")
+                print("    2. Continue anyway (limited data)")
+                print("    3. Exit")
+                
+                choice = input("\n  Enter choice (1/2/3): ").strip()
+                
+                if choice == '1':
+                    success, driver = self.restart_with_new_cookies(driver)
+                    if success:
+                        logged_in = True
+                    else:
+                        print("  ⚠️ Could not apply new cookies, continuing with limited access...")
+                elif choice == '3':
+                    print("\n  Exiting...")
+                    if driver:
+                        driver.quit()
+                    sys.exit(0)
+                else:
+                    print("  ⚠️ Continuing with limited access...")
+                
                 # Dismiss any remaining modals
                 self.dismiss_modal(driver, max_attempts=2)
         

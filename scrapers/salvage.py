@@ -71,9 +71,93 @@ class InstagramSalvage:
         time.sleep(total_delay)
         return total_delay
 
+    def parse_firefox_cookies(self, cookie_text):
+        """
+        Parse Firefox/Netscape cookie format into Selenium cookie format.
+        """
+        cookies = []
+        lines = cookie_text.strip().split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                if line.startswith('#HttpOnly_'):
+                    line = line.replace('#HttpOnly_', '')
+                else:
+                    continue
+            
+            parts = line.split('\t')
+            if len(parts) >= 7:
+                domain = parts[0]
+                name = parts[5]
+                value = parts[6]
+                
+                if 'instagram.com' in domain:
+                    cookie = {
+                        'name': name,
+                        'value': value,
+                        'domain': '.instagram.com'
+                    }
+                    cookies.append(cookie)
+        
+        return cookies
+
+    def prompt_for_new_cookies(self):
+        """
+        Prompt user to paste new Firefox cookies when authentication fails.
+        """
+        print("\n" + "="*70)
+        print("🍪 COOKIE UPDATE REQUIRED")
+        print("="*70)
+        print("\nYour session cookies may have expired. Please provide new cookies.")
+        print("\nTo get cookies from Firefox:")
+        print("  1. Install 'Cookie-Editor' browser extension")
+        print("  2. Go to instagram.com and make sure you're logged in")
+        print("  3. Click Cookie-Editor icon → Export → Netscape format")
+        print("  4. Paste the cookies below")
+        print()
+        
+        choice = input("Would you like to paste new cookies? (y/n): ").strip().lower()
+        if choice != 'y':
+            return None
+        
+        print("\nPaste your Firefox cookies below.")
+        print("When done, press Enter twice (empty line) to finish:\n")
+        
+        lines = []
+        empty_line_count = 0
+        
+        while True:
+            try:
+                line = input()
+                if line == '':
+                    empty_line_count += 1
+                    if empty_line_count >= 1:
+                        break
+                else:
+                    empty_line_count = 0
+                    lines.append(line)
+            except EOFError:
+                break
+        
+        if not lines:
+            print("❌ No cookies provided")
+            return None
+        
+        cookie_text = '\n'.join(lines)
+        cookies = self.parse_firefox_cookies(cookie_text)
+        
+        if not cookies:
+            print("❌ Could not parse any valid Instagram cookies")
+            return None
+        
+        print(f"\n✅ Parsed {len(cookies)} Instagram cookies")
+        return cookies
+
     def setup_driver(self, incognito=False):
         """Set up Chrome driver, optionally in incognito mode"""
         from webdriver_manager.chrome import ChromeDriverManager
+        global INSTAGRAM_COOKIES
         
         mode_str = "incognito" if incognito else "normal"
         print(f"  🌐 Setting up Chrome driver ({mode_str} mode)...")
@@ -98,6 +182,8 @@ class InstagramSalvage:
         driver.get("https://www.instagram.com")
         self.add_jitter(3, 1)
         
+        logged_in = False
+        
         if not incognito and INSTAGRAM_COOKIES:
             print("  🍪 Loading cookies...")
             try:
@@ -106,11 +192,53 @@ class InstagramSalvage:
                 driver.refresh()
                 self.add_jitter(3, 1)
                 print("  ✅ Cookies loaded!")
+                
+                # Check if actually logged in
+                self.dismiss_modal(driver)
+                profile_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/direct/') or contains(@href, '/accounts/')]")
+                if profile_links:
+                    logged_in = True
+                    print("  ✅ Already logged in via cookies!")
             except Exception as e:
                 print(f"  ⚠️ Could not load cookies: {e}")
         
-        # If incognito or cookies failed, try to log in
-        if incognito or not INSTAGRAM_COOKIES:
+        # If not logged in, try credentials
+        if not logged_in and not incognito:
+            print("  ⚠️ Cookies didn't work, attempting login with credentials...")
+            if self.login_to_instagram(driver):
+                logged_in = True
+        
+        # If still not logged in, offer to paste new cookies
+        if not logged_in and not incognito:
+            print("  ❌ Login failed!")
+            print("\n  Would you like to:")
+            print("    1. Provide new Firefox cookies")
+            print("    2. Continue anyway (limited data)")
+            print("    3. Exit")
+            
+            choice = input("\n  Enter choice (1/2/3): ").strip()
+            
+            if choice == '1':
+                new_cookies = self.prompt_for_new_cookies()
+                if new_cookies:
+                    INSTAGRAM_COOKIES = new_cookies
+                    driver.delete_all_cookies()
+                    for cookie in new_cookies:
+                        try:
+                            driver.add_cookie(cookie)
+                        except:
+                            pass
+                    driver.refresh()
+                    self.add_jitter(3, 1)
+                    self.dismiss_modal(driver)
+                    print("  ✅ New cookies applied!")
+            elif choice == '3':
+                print("\n  Exiting...")
+                driver.quit()
+                sys.exit(0)
+        
+        # For incognito, always try to log in
+        if incognito:
             self.login_to_instagram(driver)
         
         return driver
