@@ -581,27 +581,47 @@ class InstagramSalvage:
         return arrow_data
 
     def extract_date_from_view(self, driver):
-        """Extract date from currently displayed reel"""
+        """Extract date from currently displayed reel using multiple methods"""
         data = {'date': None, 'date_display': None}
         
+        # Method 1: CSS selector for specific class (most reliable)
         try:
-            # Look for the specific <time> element with class x1p4m5qa (post date, not comment dates)
             time_elements = driver.find_elements(By.CSS_SELECTOR, "time.x1p4m5qa")
             if time_elements:
                 time_elem = time_elements[0]
                 data['date'] = time_elem.get_attribute('datetime')
                 data['date_display'] = time_elem.text
-            else:
-                # Fallback: look for any time element with a datetime attribute
+                return data
+        except:
+            pass
+        
+        # Method 2: Look for time element with both datetime and title attributes
+        # The post date usually has both, while comment dates may only have datetime
+        if not data['date']:
+            try:
+                time_elements = driver.find_elements(By.TAG_NAME, "time")
+                for time_elem in time_elements:
+                    datetime_attr = time_elem.get_attribute('datetime')
+                    title_attr = time_elem.get_attribute('title')
+                    if datetime_attr and title_attr:
+                        data['date'] = datetime_attr
+                        data['date_display'] = time_elem.text
+                        return data
+            except:
+                pass
+        
+        # Method 3: Fallback to first time element with datetime
+        if not data['date']:
+            try:
                 time_elements = driver.find_elements(By.TAG_NAME, "time")
                 for time_elem in time_elements:
                     datetime_attr = time_elem.get_attribute('datetime')
                     if datetime_attr:
                         data['date'] = datetime_attr
                         data['date_display'] = time_elem.text
-                        break
-        except:
-            pass
+                        return data
+            except:
+                pass
         
         return data
 
