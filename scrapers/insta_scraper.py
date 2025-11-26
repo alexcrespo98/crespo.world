@@ -1115,8 +1115,11 @@ class InstagramScraper:
                 body = driver.find_element(By.TAG_NAME, "body")
                 posts_processed = 0
                 consecutive_no_dates = 0
-                # Collect enough posts to match hover_data + some buffer for outliers
-                max_posts = len(hover_data) + 50
+                # Collect enough posts to match hover_data + small buffer for outliers
+                # Buffer is 10% of hover_data size, minimum 5, maximum 15
+                buffer_size = max(5, min(15, len(hover_data) // 10))
+                max_posts = len(hover_data) + buffer_size + 30  # Extra room to navigate
+                target_posts = len(hover_data) + buffer_size
                 
                 while posts_processed < max_posts:
                     # Wait for content to load
@@ -1129,12 +1132,15 @@ class InstagramScraper:
                     current_url = driver.current_url
                     url_type = "REEL" if '/reel/' in current_url else "POST"
                     
-                    # Show verbose output
-                    if verbose and posts_processed < 20:
+                    # Show verbose output (first 20 detailed, then summary every 10)
+                    if verbose:
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
                         likes_val = date_info.get('likes')
                         likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) and likes_val is not None else 'N/A'
-                        print(f"      [{posts_processed+1}] {url_type} → {date_str} | Likes: {likes_str}")
+                        if posts_processed < 20:
+                            print(f"      [{posts_processed+1}] {url_type} → {date_str} | Likes: {likes_str}")
+                        elif posts_processed == 20:
+                            print(f"      ... (showing progress every 10 posts)")
                     
                     # If we get 3 consecutive NO DATE on reels page, break and try main page
                     if page_type == "reels" and not date_info.get('date'):
@@ -1155,13 +1161,13 @@ class InstagramScraper:
                     body.send_keys(Keys.ARROW_RIGHT)
                     posts_processed += 1
                     
-                    # Progress update every 20 posts
-                    if posts_processed % 20 == 0:
+                    # Progress update every 10 posts
+                    if posts_processed > 0 and posts_processed % 10 == 0:
                         print(f"    📊 Collected {len(arrow_posts)} posts with dates (processed {posts_processed})...")
                     
                     # Stop if we have enough posts
-                    if len(arrow_posts) >= len(hover_data) + 20:
-                        print(f"    ✅ Collected enough posts: {len(arrow_posts)}")
+                    if len(arrow_posts) >= target_posts:
+                        print(f"    ✅ Collected enough posts: {len(arrow_posts)} (target: {len(hover_data)})")
                         break
                 
                 # Close the modal/overlay
@@ -1190,16 +1196,28 @@ class InstagramScraper:
     def align_posts_linearly(self, hover_data, arrow_posts, verbose=True, test_mode=False):
         """
         Align arrow_posts with hover_data linearly.
-        Both lists should be in chronological order (newest first).
         
         Strategy:
-        1. Try 1:1 linear alignment first
-        2. If likes don't match within tolerance, identify outliers
-        3. Remove outliers from arrow_posts and re-align
+        1. Try different starting offsets (arrow might have pinned posts at start)
+        2. Find the offset that gives best alignment
+        3. Then try removing individual outliers to improve further
         """
-        TOLERANCE_PCT = 10.0  # Allow 10% difference in likes
+        TOLERANCE_PCT = 15.0  # Allow 15% difference in likes
+        RECENT_TOLERANCE_PCT = 35.0  # Allow 35% for recent posts (likes change rapidly)
         
-        def likes_match(hover_likes, arrow_likes):
+        def is_recent_post(date_display):
+            """Check if a post is recent (within ~1 day) based on date display text"""
+            if not date_display:
+                return False
+            date_lower = date_display.lower()
+            recent_keywords = ['hour', 'minute', 'second', 'just now']
+            if any(kw in date_lower for kw in recent_keywords):
+                return True
+            if 'day ago' in date_lower or '1 day' in date_lower:
+                return True
+            return False
+        
+        def likes_match(hover_likes, arrow_likes, arrow_date_display=None):
             """Check if two like counts match within tolerance"""
             if hover_likes is None or arrow_likes is None:
                 return True  # Can't compare, assume match
@@ -1209,66 +1227,98 @@ class InstagramScraper:
             if max_val == 0:
                 return hover_likes == arrow_likes
             diff_pct = abs(hover_likes - arrow_likes) / max_val * 100
-            return diff_pct <= TOLERANCE_PCT
+            tolerance = RECENT_TOLERANCE_PCT if is_recent_post(arrow_date_display) else TOLERANCE_PCT
+            return diff_pct <= tolerance
         
-        def count_matches(hover_list, arrow_list, skip_indices=None):
-            """Count how many posts align when skipping certain arrow indices"""
+        def count_matches_at_offset(hover_list, arrow_list, offset, skip_indices=None):
+            """Count matches starting arrow_list at given offset"""
             skip_indices = skip_indices or set()
-            filtered_arrow = [p for i, p in enumerate(arrow_list) if i not in skip_indices]
+            # Get arrow posts starting at offset, skipping specified indices
+            arrow_subset = []
+            for i in range(offset, len(arrow_list)):
+                if i not in skip_indices:
+                    arrow_subset.append(arrow_list[i])
+            
             matches = 0
             for i, hover_reel in enumerate(hover_list):
-                if i >= len(filtered_arrow):
+                if i >= len(arrow_subset):
                     break
-                if likes_match(hover_reel.get('likes'), filtered_arrow[i].get('likes')):
+                arrow_date = arrow_subset[i].get('date_display')
+                if likes_match(hover_reel.get('likes'), arrow_subset[i].get('likes'), arrow_date):
                     matches += 1
             return matches
         
-        # First, try direct 1:1 alignment
-        initial_matches = count_matches(hover_data, arrow_posts)
-        print(f"    📊 Initial linear alignment: {initial_matches}/{len(hover_data)} matches")
+        # First, find the best starting offset (handles pinned posts at beginning)
+        best_offset = 0
+        best_matches = 0
         
-        # If most align, we're good
-        if initial_matches >= len(hover_data) * 0.8:
-            print(f"    ✅ Good alignment ({initial_matches}/{len(hover_data)}), using direct mapping")
-            return self.map_aligned_posts(hover_data, arrow_posts, set())
+        print(f"    🔍 Finding best alignment offset...")
+        for offset in range(min(10, len(arrow_posts))):  # Try offsets 0-9
+            matches = count_matches_at_offset(hover_data, arrow_posts, offset)
+            if verbose and matches > 0:
+                print(f"      Offset {offset}: {matches}/{len(hover_data)} matches")
+            if matches > best_matches:
+                best_matches = matches
+                best_offset = offset
         
-        # Otherwise, try to find outliers to remove from arrow_posts
-        best_skip = set()
-        best_matches = initial_matches
+        print(f"    📊 Best offset: {best_offset} with {best_matches}/{len(hover_data)} matches")
         
-        # Try removing each post one at a time to see which improves alignment
-        print(f"    🔍 Looking for outlier posts to remove...")
+        # If good alignment found, use it
+        if best_matches >= len(hover_data) * 0.7:
+            print(f"    ✅ Good alignment at offset {best_offset}")
+            # Create skip set for posts before the offset
+            skip_before = set(range(best_offset))
+            return self.map_aligned_posts(hover_data, arrow_posts, skip_before)
         
-        for i in range(min(len(arrow_posts), len(hover_data) + 20)):
-            skip = {i}
-            matches = count_matches(hover_data, arrow_posts, skip)
+        # Otherwise, try to find additional outliers to remove
+        print(f"    🔍 Looking for additional outliers to remove...")
+        skip_before = set(range(best_offset))
+        best_skip = skip_before.copy()
+        
+        # Try removing each post after offset one at a time
+        for i in range(best_offset, min(len(arrow_posts), best_offset + len(hover_data) + 10)):
+            if i in skip_before:
+                continue
+            skip = skip_before | {i}
+            matches = count_matches_at_offset(hover_data, arrow_posts, 0, skip)
             if matches > best_matches:
                 best_matches = matches
                 best_skip = skip
                 if verbose:
                     likes_val = arrow_posts[i].get('likes')
                     likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) else 'N/A'
-                    print(f"    📍 Removing post {i+1} (likes: {likes_str}) improves alignment to {matches}")
+                    date_str = arrow_posts[i].get('date_display', 'N/A')
+                    print(f"    📍 Removing post {i+1} (likes: {likes_str}, date: {date_str}) → {matches} matches")
         
-        # Try removing combinations of 2 posts
-        if best_matches < len(hover_data) * 0.9 and len(arrow_posts) > len(hover_data):
-            for i in range(min(len(arrow_posts), len(hover_data) + 10)):
-                for j in range(i + 1, min(len(arrow_posts), len(hover_data) + 10)):
-                    skip = {i, j}
-                    matches = count_matches(hover_data, arrow_posts, skip)
+        # Try removing combinations of 2 additional posts
+        if best_matches < len(hover_data) * 0.85:
+            for i in range(best_offset, min(len(arrow_posts), best_offset + len(hover_data) + 5)):
+                if i in skip_before:
+                    continue
+                for j in range(i + 1, min(len(arrow_posts), best_offset + len(hover_data) + 5)):
+                    if j in skip_before:
+                        continue
+                    skip = skip_before | {i, j}
+                    matches = count_matches_at_offset(hover_data, arrow_posts, 0, skip)
                     if matches > best_matches:
                         best_matches = matches
                         best_skip = skip
         
-        if best_skip:
+        # Report what we're removing
+        extra_skips = best_skip - skip_before
+        if extra_skips:
             removed_info = []
-            for idx in sorted(best_skip):
+            for idx in sorted(extra_skips):
                 if idx < len(arrow_posts):
                     likes_val = arrow_posts[idx].get('likes')
                     likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) else 'N/A'
                     removed_info.append(f"post {idx+1} (likes: {likes_str})")
-            print(f"    🗑️ Removing {len(best_skip)} outlier(s): {', '.join(removed_info)}")
-            print(f"    ✅ Alignment after removal: {best_matches}/{len(hover_data)} matches")
+            print(f"    🗑️ Removing {len(extra_skips)} outlier(s): {', '.join(removed_info)}")
+        
+        if best_offset > 0:
+            print(f"    ℹ️ Skipping first {best_offset} posts (likely pinned/featured)")
+        
+        print(f"    ✅ Final alignment: {best_matches}/{len(hover_data)} matches")
         
         return self.map_aligned_posts(hover_data, arrow_posts, best_skip)
     
