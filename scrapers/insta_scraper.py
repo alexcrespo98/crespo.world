@@ -67,17 +67,23 @@ INSTAGRAM_COOKIES = [
 INSTAGRAM_USERNAME = "crespoworld"
 INSTAGRAM_PASSWORD = "deleteme"
 
+import random
+
 class InstagramScraper:
     # Cross-validation outlier threshold (percentage difference to flag as outlier)
     OUTLIER_THRESHOLD_PCT = 20.0
     
     def __init__(self):
         self.driver = None
+        self.incognito_driver = None  # For fallback on rate limiting
         self.interrupted = False
         self.current_data = {}
         self.early_terminations = {}  # Track any early terminations
         self.partial_scrape_data = {}  # Store partial data during scraping for backup
         self.current_username = None  # Track which account is being scraped
+        self.rate_limited = False  # Track if we've hit rate limits
+        self.consecutive_failures = 0  # Track consecutive failures for fallback
+        self.max_consecutive_failures = 5  # Threshold for switching to incognito
         
         # Set up signal handler for interrupts
         signal.signal(signal.SIGINT, self.handle_interrupt)
@@ -154,6 +160,73 @@ class InstagramScraper:
             
         except Exception as e:
             print(f"❌ Error saving backup: {e}")
+
+    def add_jitter(self, base_delay=1.0, max_jitter=2.0):
+        """Add random jitter to delays to avoid rate limiting"""
+        jitter = random.uniform(0, max_jitter)
+        total_delay = base_delay + jitter
+        time.sleep(total_delay)
+        return total_delay
+
+    def check_for_rate_limit(self, driver):
+        """Check if we've hit a 429 rate limit"""
+        try:
+            page_source = driver.page_source.lower()
+            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+            
+            rate_limit_indicators = [
+                "rate limit",
+                "too many requests",
+                "please wait",
+                "try again later",
+                "something went wrong"
+            ]
+            
+            for indicator in rate_limit_indicators:
+                if indicator in page_source or indicator in body_text:
+                    return True
+            
+            # Check for 429 in network (if visible in page)
+            if "429" in page_source:
+                return True
+                
+        except:
+            pass
+        
+        return False
+
+    def setup_incognito_driver(self):
+        """Set up Chrome in incognito mode for rate limit fallback"""
+        from webdriver_manager.chrome import ChromeDriverManager
+        
+        print("\n  🔄 Setting up incognito browser for fallback...")
+        
+        chrome_options = ChromeOptions()
+        chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--incognito")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+        chrome_options.add_argument("--log-level=3")
+        chrome_options.add_argument("--disable-logging")
+        
+        service = ChromeService(ChromeDriverManager().install())
+        service.log_path = os.devnull
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        print("  🌐 Loading Instagram in incognito...")
+        driver.get("https://www.instagram.com")
+        self.add_jitter(3, 1)
+        
+        # Try to log in
+        if self.login_to_instagram(driver):
+            print("  ✅ Incognito browser ready!")
+        else:
+            print("  ⚠️ Incognito login failed, continuing anyway...")
+        
+        self.incognito_driver = driver
+        return driver
 
     def install_package(self, package):
         subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
@@ -792,6 +865,7 @@ class InstagramScraper:
         """
         Visit each individual reel URL to extract date information and validate likes.
         This is used as an alternative to arrow scraping for getting dates.
+        Includes jitter, rate limit detection, and incognito fallback.
         """
         if test_mode:
             print(f"\n  🧪 STEP 2: Individual URL scrape (extracting dates from {len(hover_data)} URLs)...")
@@ -800,6 +874,8 @@ class InstagramScraper:
         
         url_data = []
         modal_dismissed_count = 0  # Track if we've dismissed modals for first few URLs
+        current_driver = driver  # May switch to incognito on rate limit
+        consecutive_failures = 0
         
         for idx, reel in enumerate(hover_data):
             reel_id = reel.get('reel_id')
@@ -809,12 +885,38 @@ class InstagramScraper:
             reel_url = f"https://www.instagram.com/reel/{reel_id}/"
             
             try:
-                driver.get(reel_url)
-                time.sleep(2)
+                current_driver.get(reel_url)
+                # Add jitter to avoid rate limiting
+                self.add_jitter(1.5, 1.5)
+                
+                # Check for rate limiting
+                if self.check_for_rate_limit(current_driver):
+                    print(f"\n    ⚠️ Rate limit detected at reel {idx+1}/{len(hover_data)}")
+                    consecutive_failures += 1
+                    
+                    if consecutive_failures >= self.max_consecutive_failures:
+                        print("    🔄 Too many rate limits, switching to incognito mode...")
+                        
+                        # Set up incognito driver if not already done
+                        if not self.incognito_driver:
+                            self.setup_incognito_driver()
+                        
+                        if self.incognito_driver:
+                            current_driver = self.incognito_driver
+                            consecutive_failures = 0
+                            modal_dismissed_count = 0  # Reset modal tracking for new driver
+                            
+                            # Retry the current URL with incognito
+                            current_driver.get(reel_url)
+                            self.add_jitter(2, 1.5)
+                        else:
+                            print("    ⚠️ Could not set up incognito, waiting before retry...")
+                            self.add_jitter(10, 5)  # Longer wait
+                            continue
                 
                 # Dismiss modal for first few URLs (they typically only appear initially)
                 if modal_dismissed_count < 3:
-                    if self.dismiss_modal(driver, max_attempts=1):
+                    if self.dismiss_modal(current_driver, max_attempts=1):
                         modal_dismissed_count += 1
                 
                 data = {
@@ -828,7 +930,7 @@ class InstagramScraper:
                 
                 # Extract date
                 try:
-                    time_elements = driver.find_elements(By.TAG_NAME, "time")
+                    time_elements = current_driver.find_elements(By.TAG_NAME, "time")
                     if time_elements:
                         time_elem = time_elements[0]
                         data['date'] = time_elem.get_attribute('datetime')
@@ -837,9 +939,15 @@ class InstagramScraper:
                 except Exception:
                     pass
                 
+                # Check if we got date - if not, might be rate limited
+                if data['date'] is None:
+                    consecutive_failures += 1
+                else:
+                    consecutive_failures = 0  # Reset on success
+                
                 # Extract likes for validation
                 try:
-                    body_text = driver.find_element(By.TAG_NAME, "body").text
+                    body_text = current_driver.find_element(By.TAG_NAME, "body").text
                     others_match = re.search(r'and\s+([\d,.]+[KMB]?)\s+others', body_text, re.IGNORECASE)
                     if others_match:
                         data['likes'] = self.parse_number(others_match.group(1))
@@ -852,7 +960,7 @@ class InstagramScraper:
                 
                 # Extract comments for validation
                 try:
-                    body_text = driver.find_element(By.TAG_NAME, "body").text
+                    body_text = current_driver.find_element(By.TAG_NAME, "body").text
                     comment_patterns = [
                         r'View all ([\d,.]+[KMB]?)\s+comments?',
                         r'([\d,.]+[KMB]?)\s+comments?'
@@ -875,11 +983,13 @@ class InstagramScraper:
                 elif (idx + 1) % 10 == 0:
                     print(f"    Progress: {idx+1}/{len(hover_data)} URLs scraped...")
                 
-                time.sleep(0.5)  # Rate limiting
+                # Add jitter between requests
+                self.add_jitter(0.5, 1.0)
                 
             except Exception as e:
                 if test_mode:
                     print(f"    ❌ Error scraping URL {reel_id}: {str(e)}")
+                consecutive_failures += 1
                 url_data.append({
                     'reel_id': reel_id,
                     'date': None,
@@ -888,12 +998,21 @@ class InstagramScraper:
                     'likes': None,
                     'comments': None,
                 })
+                
+                # If too many failures, try switching to incognito
+                if consecutive_failures >= self.max_consecutive_failures and not self.incognito_driver:
+                    print("    🔄 Multiple failures detected, attempting incognito fallback...")
+                    if self.setup_incognito_driver():
+                        current_driver = self.incognito_driver
+                        consecutive_failures = 0
+                
                 continue
         
         if test_mode:
             print(f"\n  📊 Individual URL scrape complete: {len(url_data)} URLs processed")
         
         return url_data
+
 
     def cross_validate_data(self, hover_data, url_data, test_mode=False):
         """
@@ -1454,6 +1573,12 @@ class InstagramScraper:
         finally:
             if self.driver:
                 self.driver.quit()
+            # Also clean up incognito driver if it was created
+            if self.incognito_driver:
+                try:
+                    self.incognito_driver.quit()
+                except:
+                    pass
 
     # Methods for master scraper integration
     def scrape_recent_posts(self, account, limit=30):
