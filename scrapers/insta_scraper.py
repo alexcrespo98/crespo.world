@@ -1144,7 +1144,8 @@ class InstagramScraper:
                     if '/reel/' in current_url:
                         current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
                     elif '/p/' in current_url:
-                        # This is a regular post, not a reel - track it for potential skip
+                        # On main page, /p/ posts are likely reels displayed in feed view
+                        # We'll try to match them by likes since URLs won't match
                         is_photo_post = True
                         current_reel_id = None
                     
@@ -1157,7 +1158,8 @@ class InstagramScraper:
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
                         likes_val = date_info.get('likes')
                         likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) and likes_val is not None else 'N/A'
-                        post_type = "PHOTO" if is_photo_post else (current_reel_id or 'REEL')
+                        # On main page, show as "POST" since it might be a reel displayed as /p/
+                        post_type = "POST" if is_photo_post else (current_reel_id or 'REEL')
                         print(f"      [{posts_processed+1}] {post_type} [{in_list}] → {date_str} | Likes: {likes_str}")
                     
                     # If we get 3 consecutive NO DATE on reels page, break and try main page
@@ -1191,15 +1193,68 @@ class InstagramScraper:
                         if date_info.get('date') and date_info.get('likes') is not None:
                             unmatched_posts.append((date_info.get('likes'), date_info))
                         consecutive_misses += 1
+                    elif is_photo_post and page_type == "main":
+                        # On main page, /p/ posts are likely reels displayed in feed view
+                        # Try to match immediately by likes since this is our primary method here
+                        post_likes = date_info.get('likes')
+                        matched_reel_id = None
+                        
+                        if date_info.get('date') and post_likes is not None and isinstance(post_likes, (int, float)):
+                            # Find a reel from hover_data that matches by likes and isn't already matched
+                            best_match_id = None
+                            best_diff = float('inf')
+                            
+                            for reel in hover_data:
+                                reel_id = reel['reel_id']
+                                if reel_id in arrow_data:
+                                    continue  # Already matched
+                                
+                                hover_likes = reel.get('likes')
+                                if hover_likes is None or not isinstance(hover_likes, (int, float)):
+                                    continue
+                                
+                                max_likes = max(hover_likes, post_likes)
+                                if max_likes == 0:
+                                    # Both are 0, exact match is best possible
+                                    if hover_likes == post_likes:
+                                        best_match_id = reel_id
+                                        best_diff = 0
+                                        break  # Can't do better than exact match
+                                    continue
+                                
+                                diff_pct = abs(hover_likes - post_likes) / max_likes * 100
+                                
+                                # Accept matches within 5% tolerance
+                                if diff_pct <= 5.0 and diff_pct < best_diff:
+                                    best_match_id = reel_id
+                                    best_diff = diff_pct
+                                    if diff_pct == 0:
+                                        break  # Exact match found
+                            
+                            if best_match_id:
+                                arrow_data[best_match_id] = date_info
+                                matched_reel_id = best_match_id
+                                consecutive_photos = 0  # Reset since we found a match
+                                consecutive_misses = 0
+                                
+                                if verbose or test_mode:
+                                    hover_reel = next((r for r in hover_data if r['reel_id'] == best_match_id), None)
+                                    hover_likes = hover_reel.get('likes') if hover_reel else None
+                                    hover_likes_str = f"{int(hover_likes):,}" if isinstance(hover_likes, (int, float)) else 'N/A'
+                                    post_likes_str = f"{int(post_likes):,}" if isinstance(post_likes, (int, float)) else 'N/A'
+                                    print(f"    🔗 Matched {best_match_id} by likes ({hover_likes_str} ≈ {post_likes_str}): {date_info.get('date_display', 'N/A')}")
+                        
+                        if not matched_reel_id:
+                            consecutive_photos += 1
+                            # Store for later matching attempt
+                            if date_info.get('date') and post_likes is not None:
+                                unmatched_posts.append((post_likes, date_info))
                     elif is_photo_post:
                         consecutive_photos += 1  # Increment photo counter
-                        # Photo post on main page - skip but don't count as failure since we expect mixed content
-                        # Still store it in case we can match by likes
+                        # Photo post not on main page
                         if date_info.get('date') and date_info.get('likes') is not None:
                             unmatched_posts.append((date_info.get('likes'), date_info))
-                        # Don't increment consecutive_misses for photo posts on main page
-                        if page_type != "main":
-                            consecutive_misses += 1
+                        consecutive_misses += 1
                     else:
                         consecutive_misses += 1
                     
