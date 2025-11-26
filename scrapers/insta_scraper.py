@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 """
-Instagram Reels Analytics Tracker v4.0
-- Hover-first mode - hover scrape runs first, then individual URL scrape for dates
-- Cross-validation between hover and URL data with outlier detection
-- Logarithmic correlation-based outlier resolution (uses views-likes relationship)
-- Auto-detection when running out of posts (no more infinite waiting)
-- Interrupt handler (Ctrl+C saves backup file)
-- Master scraper integration support
-- Updates Excel with separate tabs per account
-- Auto-uploads to Google Drive
+Instagram Reels Scraper v5.0 (Raw Data Collection)
+- Hover scrape: collects views, likes, comments, URLs
+- Arrow scrape: collects dates and likes from posts
+- Outputs two separate Excel files for manual analysis
+- Exact follower count via API with Selenium fallback
 - Deep scrape goes back 2 years or to beginning of account
-- Better debugging for hover scrape comment extraction
 """
 
 import sys
