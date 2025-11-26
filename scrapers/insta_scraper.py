@@ -61,6 +61,10 @@ INSTAGRAM_COOKIES = [
     {'name': 'dpr',        'value': '1.5', 'domain': '.instagram.com'},
 ]
 
+# Login credentials for Instagram
+INSTAGRAM_USERNAME = "crespoworld"
+INSTAGRAM_PASSWORD = "deleteme"
+
 class InstagramScraper:
     # Cross-validation outlier threshold (percentage difference to flag as outlier)
     OUTLIER_THRESHOLD_PCT = 20.0
@@ -69,6 +73,7 @@ class InstagramScraper:
         self.driver = None
         self.interrupted = False
         self.current_data = {}
+        self.early_terminations = {}  # Track any early terminations
         
         # Set up signal handler for interrupts
         signal.signal(signal.SIGINT, self.handle_interrupt)
@@ -146,6 +151,155 @@ class InstagramScraper:
             for p in packages_needed:
                 self.install_package(p)
             print("✅ All packages installed!")
+
+    def dismiss_modal(self, driver, max_attempts=3):
+        """
+        Dismiss Instagram login/signup modal by clicking X button.
+        Returns True if modal was dismissed, False otherwise.
+        """
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.common.exceptions import TimeoutException, NoSuchElementException
+        
+        print("  🔍 Checking for login modal...")
+        
+        for attempt in range(max_attempts):
+            try:
+                # Common selectors for the X/close button on Instagram modals
+                close_button_selectors = [
+                    # SVG close button (most common)
+                    "//div[@role='dialog']//button[contains(@class, 'xqui')]//*[name()='svg']/..",
+                    "//div[@role='dialog']//button/*[name()='svg' and @aria-label='Close']/..",
+                    # Close button with aria-label
+                    "//button[@aria-label='Close']",
+                    "//div[@role='button' and @aria-label='Close']",
+                    # Generic close button in dialog
+                    "//div[@role='dialog']//div[@role='button'][1]",
+                    "//div[@role='dialog']//button[1]",
+                    # Not now button (alternative to close)
+                    "//button[contains(text(), 'Not Now')]",
+                    "//button[contains(text(), 'Not now')]",
+                    "//div[contains(text(), 'Not Now')]",
+                    "//div[contains(text(), 'Not now')]",
+                ]
+                
+                for selector in close_button_selectors:
+                    try:
+                        close_btn = driver.find_element(By.XPATH, selector)
+                        if close_btn.is_displayed():
+                            close_btn.click()
+                            print(f"  ✅ Modal dismissed (attempt {attempt + 1})")
+                            time.sleep(1.5)
+                            return True
+                    except (NoSuchElementException, Exception):
+                        continue
+                
+                # If no button found, check if dialog still exists
+                try:
+                    dialog = driver.find_element(By.XPATH, "//div[@role='dialog']")
+                    if dialog.is_displayed():
+                        # Try pressing Escape key
+                        from selenium.webdriver.common.keys import Keys
+                        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                        print(f"  ✅ Modal dismissed with Escape key (attempt {attempt + 1})")
+                        time.sleep(1.5)
+                        return True
+                except NoSuchElementException:
+                    # No dialog found, we're good
+                    print("  ✅ No modal present")
+                    return True
+                
+                time.sleep(1)
+                
+            except Exception as e:
+                print(f"  ⚠️ Error dismissing modal (attempt {attempt + 1}): {e}")
+                time.sleep(1)
+        
+        print("  ⚠️ Could not dismiss modal after all attempts")
+        return False
+
+    def login_to_instagram(self, driver):
+        """
+        Log in to Instagram using credentials.
+        Returns True if login successful, False otherwise.
+        """
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.common.exceptions import TimeoutException, NoSuchElementException
+        
+        print("  🔐 Attempting to log in to Instagram...")
+        
+        try:
+            # Navigate to login page
+            driver.get("https://www.instagram.com/accounts/login/")
+            time.sleep(3)
+            
+            # Dismiss any cookie consent dialogs
+            try:
+                cookie_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Allow') or contains(text(), 'Accept')]")
+                for btn in cookie_buttons:
+                    if btn.is_displayed():
+                        btn.click()
+                        time.sleep(1)
+                        break
+            except:
+                pass
+            
+            # Find and fill username field
+            try:
+                username_field = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.NAME, "username"))
+                )
+                username_field.clear()
+                username_field.send_keys(INSTAGRAM_USERNAME)
+                time.sleep(0.5)
+            except TimeoutException:
+                print("  ❌ Could not find username field")
+                return False
+            
+            # Find and fill password field
+            try:
+                password_field = driver.find_element(By.NAME, "password")
+                password_field.clear()
+                password_field.send_keys(INSTAGRAM_PASSWORD)
+                time.sleep(0.5)
+            except NoSuchElementException:
+                print("  ❌ Could not find password field")
+                return False
+            
+            # Click login button
+            try:
+                login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
+                login_button.click()
+                print("  ⏳ Waiting for login...")
+                time.sleep(5)
+            except NoSuchElementException:
+                print("  ❌ Could not find login button")
+                return False
+            
+            # Check if login was successful (look for profile icon or home feed)
+            try:
+                # Wait for redirect and check for logged-in elements
+                time.sleep(3)
+                
+                # Check if we're still on login page (error)
+                if "/accounts/login" in driver.current_url:
+                    print("  ❌ Login failed - still on login page")
+                    return False
+                
+                # Dismiss any "Save Login Info" or "Turn on Notifications" popups
+                self.dismiss_modal(driver, max_attempts=2)
+                
+                print("  ✅ Login successful!")
+                return True
+                
+            except Exception as e:
+                print(f"  ⚠️ Login verification error: {e}")
+                return False
+            
+        except Exception as e:
+            print(f"  ❌ Login error: {e}")
+            return False
 
     def select_browser(self):
         print("\n" + "="*70)
@@ -237,11 +391,50 @@ class InstagramScraper:
         print("  🌐 Loading Instagram...")
         driver.get("https://www.instagram.com")
         time.sleep(3)
-        print("  🍪 Loading cookies...")
-        for cookie in INSTAGRAM_COOKIES:
-            driver.add_cookie(cookie)
-        driver.refresh()
-        time.sleep(3)
+        
+        # Try to add cookies first
+        print("  🍪 Attempting to load cookies...")
+        cookies_loaded = False
+        try:
+            for cookie in INSTAGRAM_COOKIES:
+                driver.add_cookie(cookie)
+            driver.refresh()
+            time.sleep(3)
+            cookies_loaded = True
+        except Exception as e:
+            print(f"  ⚠️ Could not load cookies: {e}")
+        
+        # Dismiss any login modals that appear
+        self.dismiss_modal(driver, max_attempts=3)
+        
+        # Check if we're logged in (look for login form or profile elements)
+        logged_in = False
+        try:
+            # If we can see the login button/form, we're not logged in
+            login_elements = driver.find_elements(By.XPATH, "//button[contains(text(), 'Log in') or contains(text(), 'Log In')]")
+            if not login_elements or not any(el.is_displayed() for el in login_elements):
+                # Check for logged-in indicators
+                profile_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/direct/') or contains(@href, '/accounts/')]")
+                if profile_links:
+                    logged_in = True
+                    print("  ✅ Already logged in via cookies!")
+        except:
+            pass
+        
+        # If not logged in, try to log in with credentials
+        if not logged_in:
+            print("  ⚠️ Not logged in with cookies, attempting login with credentials...")
+            if self.login_to_instagram(driver):
+                logged_in = True
+            else:
+                print("  ⚠️ Login failed, will try to scrape as guest (limited data)")
+                # Dismiss any remaining modals
+                self.dismiss_modal(driver, max_attempts=2)
+        
+        # Final modal dismissal after everything is set up
+        time.sleep(2)
+        self.dismiss_modal(driver, max_attempts=2)
+        
         return driver
 
     def extract_reel_data_from_overlay(self, driver):
@@ -419,10 +612,14 @@ class InstagramScraper:
         
         return likes, comments
 
-    def hover_scrape_reels(self, driver, username, first_reel_id=None, max_reels=100, deep_scrape=False, test_mode=False):
+    def hover_scrape_reels(self, driver, username, first_reel_id=None, max_reels=100, deep_scrape=False, deep_deep=False, test_mode=False):
         profile_url = f"https://www.instagram.com/{username}/reels/"
         driver.get(profile_url)
         time.sleep(5)
+        
+        # Dismiss any login modals that appear when navigating to the profile
+        self.dismiss_modal(driver, max_attempts=2)
+        
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(2)
         
@@ -460,7 +657,14 @@ class InstagramScraper:
                     break
         
         cutoff_date = datetime.now() - timedelta(days=730)
-        target_reels = 2000 if deep_scrape else max_reels
+        # deep_deep means no limit, deep_scrape (without deep_deep) means 2 years (~730 posts)
+        if deep_deep:
+            target_reels = 99999  # Essentially unlimited for deep deep
+        elif deep_scrape:
+            target_reels = 2000  # Cap at 2000 for 2-year deep scrape
+        else:
+            target_reels = max_reels
+        
         hover_data = []
         processed_reel_ids = set()
         fail_counter = 0
@@ -507,7 +711,8 @@ class InstagramScraper:
                     except:
                         likes, comments = None, None
                     
-                    if deep_scrape and len(hover_data) > 730:
+                    # Apply 2-year cutoff only for deep_scrape (not deep_deep)
+                    if deep_scrape and not deep_deep and len(hover_data) > 730:
                         print(f"    📅 Deep scrape reached approximate 2-year mark ({len(hover_data)} reels)")
                         reached_cutoff = True
                         break
@@ -561,6 +766,7 @@ class InstagramScraper:
             print(f"  📅 Step 2: Individual URL scraping for dates...")
         
         url_data = []
+        modal_dismissed_count = 0  # Track if we've dismissed modals for first few URLs
         
         for idx, reel in enumerate(hover_data):
             reel_id = reel.get('reel_id')
@@ -572,6 +778,11 @@ class InstagramScraper:
             try:
                 driver.get(reel_url)
                 time.sleep(2)
+                
+                # Dismiss modal for first few URLs (they typically only appear initially)
+                if modal_dismissed_count < 3:
+                    if self.dismiss_modal(driver, max_attempts=1):
+                        modal_dismissed_count += 1
                 
                 data = {
                     'reel_id': reel_id,
@@ -903,7 +1114,7 @@ class InstagramScraper:
         
         return merged
 
-    def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, test_mode=False):
+    def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, deep_deep=False, test_mode=False):
         """
         Main scraping method using hover-first approach.
         Hover scrape first, then individual URL scraping for dates.
@@ -917,7 +1128,7 @@ class InstagramScraper:
         
         # Hover-first approach
         # Step 1: Hover scrape to get views, likes, comments, URLs
-        hover_data = self.hover_scrape_reels(driver, username, first_reel_id=None, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode)
+        hover_data = self.hover_scrape_reels(driver, username, first_reel_id=None, max_reels=max_reels, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=test_mode)
         
         if not hover_data:
             print(f"  ❌ Hover scrape failed - cannot proceed")
@@ -1035,7 +1246,7 @@ class InstagramScraper:
         print("🎯 SELECT SCRAPE MODE")
         print("="*70)
         print("\n1. Custom scrape (default: 100 posts)")
-        print("2. Deep scrape (back 2 years or to beginning of account)")
+        print("2. Deep scrape (back 2 years)")
         print("3. Test mode (15 reels on @popdartsgame)")
         print()
         while True:
@@ -1045,20 +1256,34 @@ class InstagramScraper:
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False
+                        return num_posts, False, False, False  # Added 4th return value for deep_deep
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
                     print("Invalid input. Using default: 100")
-                    return 100, False, False
+                    return 100, False, False, False
             elif choice == '2':
-                confirm = input("\n⚠️  Deep scrape will go back 2 years or to the beginning of the account. This may take a while. Continue? (y/n): ").strip().lower()
-                if confirm == 'y':
-                    return None, True, False
+                print("\n⚠️  Deep scrape options:")
+                print("   a) 2 years back (default)")
+                print("   b) All the way back (DEEP DEEP - takes significantly longer)")
+                deep_choice = input("\nEnter 'a' for 2 years or 'b' for all the way back (default=a): ").strip().lower()
+                
+                if deep_choice == 'b':
+                    confirm = input("\n🔥 DEEP DEEP mode will scrape ALL available posts. This takes significantly longer. Continue? (y/n): ").strip().lower()
+                    if confirm == 'y':
+                        print("  ✅ Deep deep mode selected - will scrape ALL available posts!")
+                        return None, True, False, True  # deep_scrape=True, deep_deep=True
+                    else:
+                        continue
                 else:
-                    continue
+                    confirm = input("\n⚠️  Deep scrape will go back 2 years. Continue? (y/n): ").strip().lower()
+                    if confirm == 'y':
+                        print("  ✅ Deep mode selected - will scrape back 2 years")
+                        return None, True, False, False  # deep_scrape=True, deep_deep=False
+                    else:
+                        continue
             elif choice == '3':
-                return 15, False, True
+                return 15, False, True, False
             else:
                 print("Invalid choice. Please enter 1, 2, or 3.")
 
@@ -1073,7 +1298,7 @@ class InstagramScraper:
         print("="*70)
         
         browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode = self.get_scrape_mode()
+        max_reels, deep_scrape, test_mode, deep_deep = self.get_scrape_mode()
         
         if test_mode:
             print("\n🧪 TEST MODE ACTIVATED")
@@ -1092,7 +1317,10 @@ class InstagramScraper:
             print(f"\n   Browser: {browser_choice.upper()}")
             accounts = ACCOUNTS_TO_TRACK
             if deep_scrape:
-                print("\n🔍 Mode: DEEP SCRAPE (back 2 years or to beginning of account)")
+                if deep_deep:
+                    print("\n🔥 Mode: DEEP DEEP SCRAPE (ALL available posts - no limit)")
+                else:
+                    print("\n🔍 Mode: DEEP SCRAPE (back 2 years)")
                 expected_reels = None
             else:
                 print(f"\n📊 Mode: {max_reels} posts per account")
@@ -1118,7 +1346,7 @@ class InstagramScraper:
                 
                 try:
                     reels_data, followers, pinned_count = self.scrape_instagram_account(
-                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, test_mode=test_mode
+                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=test_mode
                     )
                     
                     scrape_results[username] = {
