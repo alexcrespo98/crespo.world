@@ -36,6 +36,8 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
 
 OUTPUT_EXCEL = "instagram_reels_analytics_tracker.xlsx"
+OUTPUT_HOVER_EXCEL = "instagram_hover_scrape.xlsx"
+OUTPUT_ARROW_EXCEL = "instagram_arrow_scrape.xlsx"
 
 # Accounts to track
 ACCOUNTS_TO_TRACK = [
@@ -1820,6 +1822,8 @@ class InstagramScraper:
         """
         Main scraping method using hover-first approach.
         Hover scrape first, then arrow scrape for dates (more reliable than individual URLs).
+        
+        Returns: (final_data, followers, pinned_count, hover_data, arrow_data)
         """
         # Track current username for backup purposes
         self.current_username = username
@@ -1838,34 +1842,34 @@ class InstagramScraper:
         
         if not hover_data:
             print(f"  ❌ Hover scrape failed - cannot proceed")
-            return [], None, 0
+            return [], None, 0, [], []
         
         # Step 2: Arrow scrape to get dates (more reliable than individual URLs)
         # Falls back to individual URLs if arrow scrape fails
-        url_data = self.arrow_scrape_dates(driver, username, hover_data, test_mode=test_mode)
+        arrow_data = self.arrow_scrape_dates(driver, username, hover_data, test_mode=test_mode)
         
         # Check if arrow scrape got enough dates
-        dates_found = sum(1 for d in url_data if d.get('date'))
+        dates_found = sum(1 for d in arrow_data if d.get('date'))
         if dates_found < len(hover_data) * 0.5:  # Less than 50% dates found
             print(f"  ⚠️ Arrow scrape only found {dates_found}/{len(hover_data)} dates, trying individual URL fallback...")
             url_data_fallback = self.scrape_individual_urls(driver, hover_data, test_mode=test_mode)
             
             # Merge: prefer arrow scrape data, fill in missing with URL scrape
-            for i, (arrow_item, url_item) in enumerate(zip(url_data, url_data_fallback)):
+            for i, (arrow_item, url_item) in enumerate(zip(arrow_data, url_data_fallback)):
                 if not arrow_item.get('date') and url_item.get('date'):
-                    url_data[i] = url_item
+                    arrow_data[i] = url_item
         
         # Step 3: Cross-validate data and identify outliers (only if enabled)
         if getattr(self, 'enable_outlier_detection', False):
             print(f"  🔍 Step 3: Cross-validating data...")
-            outliers = self.cross_validate_data(hover_data, url_data, test_mode=test_mode)
+            outliers = self.cross_validate_data(hover_data, arrow_data, test_mode=test_mode)
             # Step 4: Merge data using best values from outlier analysis
-            final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
+            final_data = self.smart_merge_data_v2(hover_data, arrow_data, outliers, test_mode=test_mode)
         else:
             print(f"  ✅ Step 3: Using arrow scrape dates directly (outlier detection disabled)")
-            # Simple merge: use hover data for views/likes/comments, url_data for dates
+            # Simple merge: use hover data for views/likes/comments, arrow_data for dates
             final_data = []
-            for hover_reel, url_item in zip(hover_data, url_data):
+            for hover_reel, url_item in zip(hover_data, arrow_data):
                 final_data.append({
                     'reel_id': hover_reel['reel_id'],
                     'views': hover_reel.get('views'),
@@ -1895,7 +1899,7 @@ class InstagramScraper:
         if test_mode:
             print(f"\n  👥 Final Followers: {followers:,}" if followers else "\n  👥 Followers: N/A")
         
-        return final_data, followers, pinned_count
+        return final_data, followers, pinned_count, hover_data, arrow_data
 
     def load_existing_excel(self):
         import pandas as pd
@@ -1937,6 +1941,77 @@ class InstagramScraper:
                 sheet_name = username[:31]
                 df.to_excel(writer, sheet_name=sheet_name)
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
+
+    def save_hover_data(self, all_hover_data, timestamp_col):
+        """Save hover scrape data to a separate Excel file with tabs for each account."""
+        import pandas as pd
+        
+        with pd.ExcelWriter(OUTPUT_HOVER_EXCEL, engine='openpyxl') as writer:
+            for username, data in all_hover_data.items():
+                hover_list, followers = data['hover_data'], data['followers']
+                
+                # Create a clean DataFrame for hover data
+                rows = []
+                for i, reel in enumerate(hover_list, 1):
+                    rows.append({
+                        'Position': i,
+                        'Reel ID': reel.get('reel_id', ''),
+                        'Views': reel.get('views', ''),
+                        'Likes': reel.get('likes', ''),
+                        'Comments': reel.get('comments', ''),
+                        'URL': f"https://www.instagram.com/reel/{reel.get('reel_id', '')}/"
+                    })
+                
+                df = pd.DataFrame(rows)
+                
+                # Add metadata at the top
+                meta_df = pd.DataFrame({
+                    'Metadata': ['Username', 'Followers', 'Scrape Time', 'Total Reels'],
+                    'Value': [f'@{username}', followers, timestamp_col, len(hover_list)]
+                })
+                
+                sheet_name = username[:31]
+                
+                # Write metadata first, then data
+                meta_df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=0)
+                df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=len(meta_df) + 2)
+        
+        print(f"💾 Hover data saved: {OUTPUT_HOVER_EXCEL}")
+
+    def save_arrow_data(self, all_arrow_data, timestamp_col):
+        """Save arrow scrape data to a separate Excel file with tabs for each account."""
+        import pandas as pd
+        
+        with pd.ExcelWriter(OUTPUT_ARROW_EXCEL, engine='openpyxl') as writer:
+            for username, data in all_arrow_data.items():
+                arrow_list, followers = data['arrow_data'], data['followers']
+                
+                # Create a clean DataFrame for arrow data
+                rows = []
+                for i, post in enumerate(arrow_list, 1):
+                    rows.append({
+                        'Position': i,
+                        'Date': post.get('date_display', ''),
+                        'Date (ISO)': post.get('date', ''),
+                        'Likes': post.get('likes', ''),
+                        'Comments': post.get('comments', ''),
+                    })
+                
+                df = pd.DataFrame(rows)
+                
+                # Add metadata at the top
+                meta_df = pd.DataFrame({
+                    'Metadata': ['Username', 'Followers', 'Scrape Time', 'Total Posts'],
+                    'Value': [f'@{username}', followers, timestamp_col, len(arrow_list)]
+                })
+                
+                sheet_name = username[:31]
+                
+                # Write metadata first, then data
+                meta_df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=0)
+                df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=len(meta_df) + 2)
+        
+        print(f"💾 Arrow data saved: {OUTPUT_ARROW_EXCEL}")
 
     def upload_to_google_drive(self):
         print("\n" + "="*70)
@@ -2076,6 +2151,8 @@ class InstagramScraper:
         existing_data = self.load_existing_excel() if not test_mode else {}
         timestamp_col = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         all_account_data = {}
+        all_hover_data = {}  # Store raw hover data for each account
+        all_arrow_data = {}  # Store raw arrow data for each account
         scrape_results = {}
         
         try:
@@ -2088,7 +2165,7 @@ class InstagramScraper:
                 print("="*70)
                 
                 try:
-                    reels_data, followers, pinned_count = self.scrape_instagram_account(
+                    reels_data, followers, pinned_count, hover_data, arrow_data = self.scrape_instagram_account(
                         self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=test_mode
                     )
                     
@@ -2098,6 +2175,10 @@ class InstagramScraper:
                         'pinned_count': pinned_count,
                         'deep_scrape': deep_scrape
                     }
+                    
+                    # Store raw hover and arrow data
+                    all_hover_data[username] = {'hover_data': hover_data, 'followers': followers}
+                    all_arrow_data[username] = {'arrow_data': arrow_data, 'followers': followers}
                     
                     # Store current data for backup
                     if not test_mode:
@@ -2147,15 +2228,35 @@ class InstagramScraper:
                     continue
             
             if not test_mode:
-                # Save results
+                # Save results - both combined and separate raw files
                 self.save_to_excel(all_account_data)
+                
+                # Save separate hover and arrow data files
+                print("\n" + "="*70)
+                print("📁 Saving raw data files...")
+                print("="*70)
+                self.save_hover_data(all_hover_data, timestamp_col)
+                self.save_arrow_data(all_arrow_data, timestamp_col)
+                
                 self.upload_to_google_drive()
                 
                 print("\n" + "="*70)
                 print("✅ All scraping complete!")
-                print(f"📁 Local file: '{OUTPUT_EXCEL}'")
+                print(f"📁 Combined data: '{OUTPUT_EXCEL}'")
+                print(f"📁 Hover scrape: '{OUTPUT_HOVER_EXCEL}'")
+                print(f"📁 Arrow scrape: '{OUTPUT_ARROW_EXCEL}'")
                 print(f"🌐 View analytics: https://crespo.world/crespomize.html")
                 print("="*70 + "\n")
+            else:
+                # In test mode, still save the raw data files for analysis
+                if all_hover_data and all_arrow_data:
+                    print("\n" + "="*70)
+                    print("📁 Saving raw data files (test mode)...")
+                    print("="*70)
+                    self.save_hover_data(all_hover_data, timestamp_col)
+                    self.save_arrow_data(all_arrow_data, timestamp_col)
+                    print(f"📁 Hover scrape: '{OUTPUT_HOVER_EXCEL}'")
+                    print(f"📁 Arrow scrape: '{OUTPUT_ARROW_EXCEL}'")
         
         finally:
             if self.driver:
