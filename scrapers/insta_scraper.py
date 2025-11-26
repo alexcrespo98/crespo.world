@@ -49,16 +49,18 @@ ACCOUNTS_TO_TRACK = [
 ]
 
 INSTAGRAM_COOKIES = [
-    {'name': 'sessionid',  'value': '8438482535%3AH01dy1dQG6nQnk%3A17%3AAYiGfiuNFMl1AOwws5VAC0ljZQuYn4BgQEzQdwhKeg', 'domain': '.instagram.com'},
-    {'name': 'csrftoken',  'value': 'j9vt2Y4yXJ2j1OfxN1fe1Fj47ZEHUZgX', 'domain': '.instagram.com'},
+    {'name': 'sessionid',  'value': '8438482535%3AtJJKyFeKZxhWBS%3A9%3AAYhH86t38bPrK0FngCdM1ZBRQzDTR_x-opvU37WfkA', 'domain': '.instagram.com'},
+    {'name': 'csrftoken',  'value': 'OXAlPc0rRh5bMebjElbOOZxKODDOTYJ3', 'domain': '.instagram.com'},
     {'name': 'ds_user_id', 'value': '8438482535', 'domain': '.instagram.com'},
     {'name': 'mid',        'value': 'aRqN7gALAAFE_ZLG2YR4s_jAJbWN', 'domain': '.instagram.com'},
     {'name': 'ig_did',     'value': 'C4BB1B54-EE7F-44CE-839C-A6522013D97A', 'domain': '.instagram.com'},
     {'name': 'datr',       'value': '7Y0aabbcI4vK3rldO6uL60Mr', 'domain': '.instagram.com'},
-    {'name': 'rur',        'value': '"RVA\0548438482535\0541795498046:01fea08331d20cd7101847a41e2bda4ddefaac288d49493694a6b359884fa576c75219f0"', 'domain': '.instagram.com'},
+    {'name': 'rur',        'value': '"RVA\0548438482535\0541795661826:01fec330dbfed5a347ef1b62d27185c54698b9e86a2014a737fc2da80a84551e86f04b7f"', 'domain': '.instagram.com'},
     {'name': 'ig_nrcb',    'value': '1', 'domain': '.instagram.com'},
     {'name': 'wd',         'value': '879x639', 'domain': '.instagram.com'},
     {'name': 'dpr',        'value': '1.5', 'domain': '.instagram.com'},
+    {'name': 'ps_n',       'value': '1', 'domain': '.instagram.com'},
+    {'name': 'ps_l',       'value': '1', 'domain': '.instagram.com'},
 ]
 
 # Login credentials for Instagram
