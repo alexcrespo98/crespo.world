@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 """
-Instagram Reels Analytics Tracker v3.1
-- NEW: Hover-first mode - hover scrape runs first, then individual URL scrape for dates
-- NEW: Cross-validation between hover and URL data with outlier detection
-- NEW: Outliers displayed in terminal with percentage differences
+Instagram Reels Analytics Tracker v4.0
+- Hover-first mode - hover scrape runs first, then individual URL scrape for dates
+- Cross-validation between hover and URL data with outlier detection
+- Logarithmic correlation-based outlier resolution (uses views-likes relationship)
 - Auto-detection when running out of posts (no more infinite waiting)
 - Interrupt handler (Ctrl+C saves backup file)
 - Master scraper integration support
-- Early termination detection with recovery option
-- Arrow scrape FIRST mode (original) to establish true order
-- Hover scrape validates starting position and scrolls up if needed
-- Includes pinned posts in final data (marked as pinned)
-- Smart cross-reference between hover (reels) and arrow (main) data
-- Hybrid method: arrow key navigation + hover scrape
 - Updates Excel with separate tabs per account
 - Auto-uploads to Google Drive
 - Deep scrape goes back 2 years or to beginning of account
@@ -31,10 +25,10 @@ import logging
 import signal
 import traceback
 import statistics
+import math
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
@@ -75,7 +69,6 @@ class InstagramScraper:
         self.driver = None
         self.interrupted = False
         self.current_data = {}
-        self.early_terminations = {}
         
         # Set up signal handler for interrupts
         signal.signal(signal.SIGINT, self.handle_interrupt)
@@ -216,21 +209,6 @@ class InstagramScraper:
             pass
         return None
 
-    def is_video_post(self, element):
-        try:
-            video_indicators = element.find_elements(By.XPATH, ".//*[name()='svg'][@aria-label='Clip'] | .//*[name()='svg'][@aria-label='Video']")
-            if video_indicators:
-                return True
-            href = element.get_attribute('href')
-            if href and '/reel/' in href:
-                return True
-            carousel_indicators = element.find_elements(By.XPATH, ".//*[name()='svg'][@aria-label='Carousel']")
-            if carousel_indicators:
-                return True
-            return False
-        except:
-            return True
-
     def setup_driver(self, browser='chrome'):
         from webdriver_manager.chrome import ChromeDriverManager
         from webdriver_manager.firefox import GeckoDriverManager
@@ -320,195 +298,6 @@ class InstagramScraper:
         except:
             pass
         return data
-
-    def detect_pinned_posts(self, initial_reels):
-        dated_reels = [(i, r) for i, r in enumerate(initial_reels) if r.get('date_timestamp')]
-        if len(dated_reels) < 2:
-            return 0
-        
-        newest_idx = 0
-        newest_date = dated_reels[0][1]['date_timestamp']
-        for i, (idx, reel) in enumerate(dated_reels):
-            if reel['date_timestamp'] > newest_date:
-                newest_date = reel['date_timestamp']
-                newest_idx = idx
-        return newest_idx
-
-    def arrow_scrape_reels(self, driver, username, max_reels=100, deep_scrape=False, test_mode=False, use_main_profile=False):
-        if use_main_profile:
-            profile_url = f"https://www.instagram.com/{username}/"
-            print(f"  🔄 Arrow scrape using MAIN PROFILE fallback...")
-        else:
-            profile_url = f"https://www.instagram.com/{username}/reels/"
-        
-        driver.get(profile_url)
-        time.sleep(5)
-        
-        if use_main_profile:
-            post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/p/') or contains(@href, '/reel/')]")
-            first_video_link = None
-            for link in post_links:
-                if self.is_video_post(link):
-                    first_video_link = link
-                    break
-            if not first_video_link:
-                print(f"  ⚠️  No videos found on main profile")
-                return [], 0, False, None
-            reel_links = [first_video_link]
-        else:
-            reel_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
-        
-        if not reel_links:
-            return [], 0, False, None
-        
-        driver.execute_script("arguments[0].click();", reel_links[0])
-        time.sleep(3)
-        
-        if test_mode:
-            print(f"\n  🧪 STEP 1: Arrow scrape from {'MAIN PROFILE' if use_main_profile else '/reels/'} (establishing order)...")
-        else:
-            print(f"  📅 Step 1: Arrow key scraping (establishing order)...")
-        
-        consecutive_failures = 0
-        FAILURE_THRESHOLD = 3
-        initial_reels = []
-        
-        # Initial scrape to detect pinned posts
-        for idx in range(min(5, max_reels)):
-            try:
-                time.sleep(1)
-                data = self.extract_reel_data_from_overlay(driver)
-                if not data.get('reel_id'):
-                    consecutive_failures += 1
-                    if consecutive_failures >= FAILURE_THRESHOLD and not use_main_profile:
-                        print(f"  ⚠️  {FAILURE_THRESHOLD} consecutive failures detected - triggering fallback!")
-                        return [], 0, True, None
-                    break
-                
-                if data.get('likes') is None and data.get('date') is None:
-                    consecutive_failures += 1
-                    if consecutive_failures >= FAILURE_THRESHOLD and not use_main_profile:
-                        print(f"  ⚠️  {FAILURE_THRESHOLD} consecutive N/A detected - triggering fallback!")
-                        return [], 0, True, None
-                else:
-                    consecutive_failures = 0
-                
-                initial_reels.append(data)
-                if idx < 4:
-                    body = driver.find_element(By.TAG_NAME, "body")
-                    body.send_keys(Keys.ARROW_RIGHT)
-                    time.sleep(1.5)
-            except:
-                break
-        
-        if len(initial_reels) == 0:
-            print(f"  ⚠️  Arrow scrape failed - no data retrieved")
-            return [], 0, False, None
-        
-        pinned_count = self.detect_pinned_posts(initial_reels)
-        if test_mode and pinned_count > 0:
-            print(f"    📌 Detected {pinned_count} pinned post(s) - will include in final data")
-        
-        # Go back to start
-        for _ in range(len(initial_reels) - 1):
-            body = driver.find_element(By.TAG_NAME, "body")
-            body.send_keys(Keys.ARROW_LEFT)
-            time.sleep(0.8)
-        
-        arrow_data = []
-        cutoff_date = datetime.now() - timedelta(days=730)  # 2 years
-        max_iterations = 2000 if deep_scrape else max_reels
-        consecutive_failures = 0
-        consecutive_old_posts = 0
-        early_termination = None
-        
-        for idx in range(max_iterations):
-            try:
-                time.sleep(1)
-                data = self.extract_reel_data_from_overlay(driver)
-                
-                # Check if we've run out of posts
-                if not data.get('reel_id'):
-                    consecutive_failures += 1
-                    if consecutive_failures >= FAILURE_THRESHOLD:
-                        if len(arrow_data) > 100:
-                            print(f"  ⚠️  Reached end of posts after {len(arrow_data)} reels")
-                            early_termination = {
-                                'reason': 'end_of_posts',
-                                'reels_scraped': len(arrow_data),
-                                'last_date': arrow_data[-1].get('date_timestamp') if arrow_data else None
-                            }
-                            break
-                        elif not use_main_profile:
-                            print(f"  ⚠️  {FAILURE_THRESHOLD} consecutive failures - triggering fallback!")
-                            return arrow_data, pinned_count, True, None
-                    if test_mode:
-                        print(f"    ⚠️  Arrow scrape stopped at {idx} - no more data")
-                    break
-                
-                if data.get('likes') is None and data.get('date') is None:
-                    consecutive_failures += 1
-                    if consecutive_failures >= FAILURE_THRESHOLD:
-                        if len(arrow_data) > 100:
-                            print(f"  ⚠️  Data quality degraded after {len(arrow_data)} reels - likely end of posts")
-                            early_termination = {
-                                'reason': 'data_quality',
-                                'reels_scraped': len(arrow_data),
-                                'last_date': arrow_data[-1].get('date_timestamp') if arrow_data else None
-                            }
-                            break
-                        elif not use_main_profile:
-                            print(f"  ⚠️  {FAILURE_THRESHOLD} consecutive N/A - triggering fallback!")
-                            return arrow_data, pinned_count, True, None
-                else:
-                    consecutive_failures = 0
-                
-                # Check if we've gone back far enough for deep scrape
-                if deep_scrape and data.get('date_timestamp'):
-                    if data['date_timestamp'] < cutoff_date:
-                        consecutive_old_posts += 1
-                        if consecutive_old_posts >= 5:
-                            print(f"    📅 Reached 2-year cutoff date ({cutoff_date.strftime('%Y-%m-%d')})")
-                            print(f"    ✅ Deep scrape complete: {len(arrow_data)} reels collected")
-                            break
-                    else:
-                        consecutive_old_posts = 0
-                
-                data['is_pinned'] = (idx < pinned_count)
-                arrow_data.append(data)
-                
-                if test_mode and idx < max_reels:
-                    reel_id = data.get('reel_id', 'N/A')
-                    date = data.get('date_display', 'N/A')
-                    likes = data.get('likes')
-                    comments = data.get('comments')
-                    
-                    # Format likes and comments to distinguish N/A from 0
-                    likes_str = 'N/A' if likes is None else str(likes)
-                    comments_str = 'N/A' if comments is None else str(comments)
-                    
-                    pinned_marker = " 📌PINNED" if data['is_pinned'] else ""
-                    print(f"    [{idx+1}] {reel_id}: {date}, likes={likes_str}, comments={comments_str}{pinned_marker}")
-                elif not test_mode and deep_scrape and idx % 25 == 0:
-                    if data.get('date_timestamp'):
-                        days_ago = (datetime.now() - data['date_timestamp']).days
-                        print(f"    Arrow progress: {idx + 1} reels... (current: ~{days_ago} days ago)")
-                    else:
-                        print(f"    Arrow progress: {idx + 1} reels...")
-                
-                if idx < max_iterations - 1:
-                    body = driver.find_element(By.TAG_NAME, "body")
-                    body.send_keys(Keys.ARROW_RIGHT)
-                    time.sleep(1.5)
-            except:
-                if test_mode:
-                    print(f"    ✅ Arrow scrape complete: {idx + 1} reels (including {pinned_count} pinned)")
-                break
-        
-        if test_mode:
-            print(f"\n  📊 Arrow scrape complete: {len(arrow_data)} reels (including {pinned_count} pinned)")
-        
-        return arrow_data, pinned_count, False, early_termination
 
     def extract_views_from_container(self, container):
         try:
@@ -866,6 +655,7 @@ class InstagramScraper:
         """
         Cross-validate data between hover scrape and individual URL scrape.
         Identifies outliers where likes or comments differ significantly.
+        Uses logarithmic correlation between views and likes to determine which value is more accurate.
         """
         if test_mode:
             print(f"\n  🔍 STEP 3: Cross-validating data...")
@@ -874,6 +664,57 @@ class InstagramScraper:
         
         url_lookup = {u['reel_id']: u for u in url_data}
         outliers = []
+        
+        # First, collect all valid views-likes pairs for correlation analysis
+        valid_pairs = []
+        for hover_reel in hover_data:
+            reel_id = hover_reel.get('reel_id')
+            url_reel = url_lookup.get(reel_id)
+            
+            views = hover_reel.get('views')
+            # Use hover_likes as the baseline since we trust hover scrape
+            hover_likes = hover_reel.get('likes')
+            url_likes = url_reel.get('likes') if url_reel else None
+            
+            # For correlation, only use pairs where hover and URL agree (not outliers)
+            if views is not None and views > 0 and hover_likes is not None and hover_likes > 0:
+                if url_likes is not None and url_likes > 0:
+                    # Check if they roughly agree (within threshold)
+                    max_likes = max(hover_likes, url_likes)
+                    diff_pct = abs(hover_likes - url_likes) / max_likes * 100
+                    if diff_pct <= self.OUTLIER_THRESHOLD_PCT:
+                        valid_pairs.append((views, hover_likes))
+                else:
+                    # If no URL likes, assume hover is correct
+                    valid_pairs.append((views, hover_likes))
+        
+        # Calculate logarithmic regression coefficients if we have enough data
+        # log(likes) = a * log(views) + b
+        log_a, log_b = None, None
+        if len(valid_pairs) >= 3:
+            try:
+                # Filter to ensure all values are > 0 for logarithm
+                safe_pairs = [(v, l) for v, l in valid_pairs if v > 0 and l > 0]
+                if len(safe_pairs) >= 3:
+                    log_views = [math.log(v) for v, l in safe_pairs]
+                    log_likes = [math.log(l) for v, l in safe_pairs]
+                    
+                    n = len(safe_pairs)
+                    sum_x = sum(log_views)
+                    sum_y = sum(log_likes)
+                    sum_xy = sum(x * y for x, y in zip(log_views, log_likes))
+                    sum_xx = sum(x * x for x in log_views)
+                    
+                    denominator = n * sum_xx - sum_x * sum_x
+                    if denominator != 0:
+                        log_a = (n * sum_xy - sum_x * sum_y) / denominator
+                        log_b = (sum_y - log_a * sum_x) / n
+                        
+                        if test_mode:
+                            print(f"  📈 Logarithmic correlation: log(likes) = {log_a:.3f} * log(views) + {log_b:.3f}")
+            except Exception as e:
+                if test_mode:
+                    print(f"  ⚠️  Could not calculate log correlation: {e}")
         
         # Collect differences for statistical analysis
         likes_diffs = []
@@ -890,6 +731,7 @@ class InstagramScraper:
             url_likes = url_reel.get('likes')
             hover_comments = hover_reel.get('comments')
             url_comments = url_reel.get('comments')
+            views = hover_reel.get('views')
             
             # Calculate differences (as percentages) when both values exist
             # Use max of both values as denominator for more robust comparison
@@ -897,33 +739,73 @@ class InstagramScraper:
                 max_likes = max(hover_likes, url_likes)
                 if max_likes > 0:
                     diff_pct = abs(hover_likes - url_likes) / max_likes * 100
-                    likes_diffs.append((reel_id, hover_likes, url_likes, diff_pct, 'likes'))
+                    likes_diffs.append((reel_id, hover_likes, url_likes, diff_pct, 'likes', views))
             
             if hover_comments is not None and url_comments is not None:
                 max_comments = max(hover_comments, url_comments)
                 if max_comments > 0:
                     diff_pct = abs(hover_comments - url_comments) / max_comments * 100
-                    comments_diffs.append((reel_id, hover_comments, url_comments, diff_pct, 'comments'))
+                    comments_diffs.append((reel_id, hover_comments, url_comments, diff_pct, 'comments', views))
         
-        # Identify outliers using class threshold constant
-        for reel_id, hover_val, url_val, diff_pct, metric_type in likes_diffs:
+        # Identify outliers using class threshold constant and resolve using log correlation
+        for reel_id, hover_val, url_val, diff_pct, metric_type, views in likes_diffs:
             if diff_pct > self.OUTLIER_THRESHOLD_PCT:
+                # Determine which value is more likely correct using logarithmic correlation
+                best_value = None
+                selection_reason = ""
+                
+                if log_a is not None and log_b is not None and views is not None and views > 0:
+                    try:
+                        # Predict expected likes from views using log correlation
+                        expected_log_likes = log_a * math.log(views) + log_b
+                        # Prevent overflow for very large expected values
+                        if expected_log_likes > 100:  # exp(100) is astronomical
+                            expected_log_likes = 100
+                        expected_likes = math.exp(expected_log_likes)
+                        
+                        # Calculate how far each value is from expected (safe logarithm)
+                        hover_distance = abs(math.log(max(hover_val, 1)) - expected_log_likes) if hover_val is not None else float('inf')
+                        url_distance = abs(math.log(max(url_val, 1)) - expected_log_likes) if url_val is not None else float('inf')
+                        
+                        if hover_distance < url_distance:
+                            best_value = hover_val
+                            selection_reason = f"closer to expected ({int(expected_likes):,})"
+                        else:
+                            best_value = url_val
+                            selection_reason = f"closer to expected ({int(expected_likes):,})"
+                    except (ValueError, OverflowError):
+                        # Fallback on math errors
+                        best_value = max(hover_val, url_val) if hover_val and url_val else (hover_val or url_val)
+                        selection_reason = "higher value (math error fallback)"
+                else:
+                    # Fallback: use the higher value (usually more accurate)
+                    best_value = max(hover_val, url_val) if hover_val and url_val else (hover_val or url_val)
+                    selection_reason = "higher value (fallback)"
+                
                 outliers.append({
                     'reel_id': reel_id,
                     'metric': metric_type,
                     'hover_value': hover_val,
                     'url_value': url_val,
-                    'diff_percent': round(diff_pct, 1)
+                    'diff_percent': round(diff_pct, 1),
+                    'best_value': best_value,
+                    'selection_reason': selection_reason
                 })
         
-        for reel_id, hover_val, url_val, diff_pct, metric_type in comments_diffs:
+        for reel_id, hover_val, url_val, diff_pct, metric_type, views in comments_diffs:
             if diff_pct > self.OUTLIER_THRESHOLD_PCT:
+                # For comments, use the higher value as they're less predictable
+                best_value = max(hover_val, url_val) if hover_val and url_val else (hover_val or url_val)
+                selection_reason = "higher value"
+                
                 outliers.append({
                     'reel_id': reel_id,
                     'metric': metric_type,
                     'hover_value': hover_val,
                     'url_value': url_val,
-                    'diff_percent': round(diff_pct, 1)
+                    'diff_percent': round(diff_pct, 1),
+                    'best_value': best_value,
+                    'selection_reason': selection_reason
                 })
         
         # Display outliers in terminal
@@ -933,8 +815,9 @@ class InstagramScraper:
             for outlier in outliers:
                 print(f"    📍 {outlier['reel_id']}")
                 print(f"       {outlier['metric'].capitalize()}: hover={outlier['hover_value']}, url={outlier['url_value']} ({outlier['diff_percent']}% diff)")
+                print(f"       → Using {outlier['best_value']:,} ({outlier['selection_reason']})")
             print("  " + "-" * 70)
-            print(f"  📊 Using individual URL values for outliers (more accurate)")
+            print(f"  📊 Outlier values resolved using logarithmic views-likes correlation")
         else:
             print(f"  ✅ No significant outliers detected - data is consistent")
         
@@ -956,26 +839,27 @@ class InstagramScraper:
     def smart_merge_data_v2(self, hover_data, url_data, outliers, test_mode=False):
         """
         Merge hover scrape and individual URL scrape data.
-        Uses URL data for dates, and prefers URL data for outliers.
+        Uses URL data for dates, and uses best_value from outlier analysis for outliers.
         """
         merged = []
         url_lookup = {u['reel_id']: u for u in url_data}
-        outlier_ids = {o['reel_id'] for o in outliers}
+        
+        # Build outlier lookup with best values
+        outlier_lookup = {}
+        for o in outliers:
+            reel_id = o['reel_id']
+            if reel_id not in outlier_lookup:
+                outlier_lookup[reel_id] = {}
+            outlier_lookup[reel_id][o['metric']] = o['best_value']
         
         for idx, hover_reel in enumerate(hover_data):
             reel_id = hover_reel.get('reel_id')
             url_reel = url_lookup.get(reel_id, {})
+            reel_outliers = outlier_lookup.get(reel_id, {})
             
-            # Determine if this reel has any outliers
-            is_outlier = reel_id in outlier_ids
-            
-            # Use URL data for likes/comments if this is an outlier, otherwise use hover data
-            if is_outlier:
-                likes = url_reel.get('likes') if url_reel.get('likes') is not None else hover_reel.get('likes')
-                comments = url_reel.get('comments') if url_reel.get('comments') is not None else hover_reel.get('comments')
-            else:
-                likes = hover_reel.get('likes')
-                comments = hover_reel.get('comments')
+            # Use outlier best_value if available, otherwise use hover data
+            likes = reel_outliers.get('likes') if 'likes' in reel_outliers else hover_reel.get('likes')
+            comments = reel_outliers.get('comments') if 'comments' in reel_outliers else hover_reel.get('comments')
             
             combined = {
                 'reel_id': reel_id,
@@ -1000,7 +884,7 @@ class InstagramScraper:
             merged.append(combined)
         
         if test_mode:
-            print(f"\n  📊 Merge complete (v2 - hover first method):")
+            print(f"\n  📊 Merge complete (hover-first method with log correlation):")
             print(f"     Total reels: {len(merged)}")
             print(f"\n  📋 Final merged reels (ALL {len(merged)} reels):")
             for i, reel in enumerate(merged, 1):
@@ -1019,63 +903,10 @@ class InstagramScraper:
         
         return merged
 
-    def smart_merge_data(self, hover_data, arrow_data, test_mode=False):
-        merged = []
-        hover_lookup = {h['reel_id']: h for h in hover_data}
-        
-        for arrow_idx, arrow_reel in enumerate(arrow_data):
-            arrow_id = arrow_reel['reel_id']
-            hover_reel = hover_lookup.get(arrow_id)
-            
-            combined = {
-                'reel_id': arrow_id,
-                'position': arrow_idx + 1,
-                'is_pinned': arrow_reel.get('is_pinned', False),
-                'date': arrow_reel.get('date'),
-                'date_display': arrow_reel.get('date_display'),
-                'views': hover_reel.get('views') if hover_reel else None,
-                'likes': hover_reel.get('likes') if hover_reel else arrow_reel.get('likes'),
-                'comments': hover_reel.get('comments') if hover_reel else arrow_reel.get('comments'),
-            }
-            
-            # Calculate engagement only if we have all required values
-            if combined['views'] is not None and combined['likes'] is not None and combined['comments'] is not None:
-                if combined['views'] > 0:  # Avoid division by zero
-                    combined['engagement'] = round(((combined['likes'] + combined['comments']) / combined['views']) * 100, 2)
-                else:
-                    combined['engagement'] = None
-            else:
-                combined['engagement'] = None
-            
-            merged.append(combined)
-        
-        if test_mode:
-            print(f"\n  📊 Merge complete:")
-            print(f"     Total reels: {len(merged)}")
-            print(f"\n  📋 Final merged reels (ALL {len(merged)} reels):")
-            for i, reel in enumerate(merged, 1):
-                pinned_marker = " 📌PINNED" if reel.get('is_pinned') else ""
-                
-                # Format values to distinguish N/A from 0
-                views_str = 'N/A' if reel['views'] is None else str(reel['views'])
-                likes_str = 'N/A' if reel['likes'] is None else str(reel['likes'])
-                comments_str = 'N/A' if reel['comments'] is None else str(reel['comments'])
-                engagement_str = 'N/A' if reel['engagement'] is None else f"{reel['engagement']}%"
-                
-                print(f"     {i}. {reel['reel_id']}{pinned_marker}")
-                print(f"        Date: {reel['date_display'] or 'N/A'}")
-                print(f"        Views: {views_str}, Likes: {likes_str}, Comments: {comments_str}")
-                print(f"        Engagement: {engagement_str}")
-        
-        return merged
-
-    def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, test_mode=False, use_hover_first=False):
+    def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, test_mode=False):
         """
-        Main scraping method with option to use hover-first approach.
-        
-        Args:
-            use_hover_first: If True, uses hover scrape first, then individual URL scraping for dates.
-                            If False (default), uses the original arrow-first approach.
+        Main scraping method using hover-first approach.
+        Hover scrape first, then individual URL scraping for dates.
         """
         print(f"  👥 Getting exact follower count...")
         exact_followers = self.get_exact_follower_count(username)
@@ -1084,48 +915,23 @@ class InstagramScraper:
         else:
             print(f"  ⚠️  Could not get exact follower count via API, will try Selenium fallback...")
         
-        if use_hover_first:
-            # NEW: Hover-first approach
-            # Step 1: Hover scrape to get views, likes, comments, URLs
-            hover_data = self.hover_scrape_reels(driver, username, first_reel_id=None, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode)
-            
-            if not hover_data:
-                print(f"  ❌ Hover scrape failed - cannot proceed")
-                return [], None, 0
-            
-            # Step 2: Individual URL scrape to get dates
-            url_data = self.scrape_individual_urls(driver, hover_data, test_mode=test_mode)
-            
-            # Step 3: Cross-validate data and identify outliers
-            outliers = self.cross_validate_data(hover_data, url_data, test_mode=test_mode)
-            
-            # Step 4: Merge data using v2 method
-            final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
-            pinned_count = 0  # Pinned detection not available in hover-first mode
-            
-        else:
-            # ORIGINAL: Arrow-first approach
-            arrow_data, pinned_count, need_fallback, early_termination = self.arrow_scrape_reels(
-                driver, username, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode, use_main_profile=False
-            )
-            
-            if need_fallback:
-                print(f"\n  🔄 SWITCHING TO MAIN PROFILE for arrow scrape...")
-                arrow_data, pinned_count, _, early_termination = self.arrow_scrape_reels(
-                    driver, username, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode, use_main_profile=True
-                )
-            
-            # Track early termination
-            if early_termination:
-                self.early_terminations[username] = early_termination
-            
-            first_reel_id = arrow_data[0]['reel_id'] if arrow_data else None
-            if not first_reel_id:
-                print(f"  ❌ Arrow scrape failed - cannot proceed")
-                return [], None, 0
-            
-            hover_data = self.hover_scrape_reels(driver, username, first_reel_id, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode)
-            final_data = self.smart_merge_data(hover_data, arrow_data, test_mode=test_mode)
+        # Hover-first approach
+        # Step 1: Hover scrape to get views, likes, comments, URLs
+        hover_data = self.hover_scrape_reels(driver, username, first_reel_id=None, max_reels=max_reels, deep_scrape=deep_scrape, test_mode=test_mode)
+        
+        if not hover_data:
+            print(f"  ❌ Hover scrape failed - cannot proceed")
+            return [], None, 0
+        
+        # Step 2: Individual URL scrape to get dates
+        url_data = self.scrape_individual_urls(driver, hover_data, test_mode=test_mode)
+        
+        # Step 3: Cross-validate data and identify outliers (with log correlation)
+        outliers = self.cross_validate_data(hover_data, url_data, test_mode=test_mode)
+        
+        # Step 4: Merge data using best values from outlier analysis
+        final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
+        pinned_count = 0  # Pinned detection not available in hover-first mode
         
         if exact_followers:
             followers = exact_followers
@@ -1224,93 +1030,37 @@ class InstagramScraper:
             print(f"❌ Upload error: {e}")
             return False
 
-    def handle_early_terminations(self, all_account_data, timestamp_col):
-        """Handle accounts that were cut off early"""
-        if not self.early_terminations:
-            return
-        
-        print("\n" + "="*70)
-        print("⚠️  EARLY TERMINATION DETECTED")
-        print("="*70)
-        
-        for username, termination_info in self.early_terminations.items():
-            print(f"\n@{username}:")
-            print(f"  Reason: {termination_info['reason'].replace('_', ' ').title()}")
-            print(f"  Reels scraped: {termination_info['reels_scraped']}")
-            
-            if termination_info.get('last_date'):
-                days_ago = (datetime.now() - termination_info['last_date']).days
-                print(f"  Went back: ~{days_ago} days")
-        
-        retry = input("\n🔄 Would you like to try to get more posts from these accounts? (y/n): ").strip().lower()
-        
-        if retry == 'y':
-            print("\n🔄 Attempting to get more posts...")
-            for username in self.early_terminations.keys():
-                print(f"\n📱 Re-attempting @{username}...")
-                try:
-                    # Try with increased timeout and different strategy
-                    reels_data, followers, pinned_count = self.scrape_instagram_account(
-                        self.driver, username, 
-                        max_reels=2000,  # Try to get more
-                        deep_scrape=True, 
-                        test_mode=False
-                    )
-                    
-                    if len(reels_data) > self.early_terminations[username]['reels_scraped']:
-                        print(f"  ✅ Got {len(reels_data) - self.early_terminations[username]['reels_scraped']} additional reels!")
-                        existing_df = all_account_data.get(username)
-                        df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
-                        all_account_data[username] = df
-                    else:
-                        print(f"  ℹ️  No additional reels found - likely reached account limit")
-                except Exception as e:
-                    print(f"  ❌ Re-attempt failed: {e}")
-
     def get_scrape_mode(self):
         print("\n" + "="*70)
         print("🎯 SELECT SCRAPE MODE")
         print("="*70)
-        print("\n1. Custom number of posts (default: 100) - Arrow scrape first")
+        print("\n1. Custom scrape (default: 100 posts)")
         print("2. Deep scrape (back 2 years or to beginning of account)")
-        print("3. Test mode (15 reels on @popdartsgame, displays all 15)")
-        print("4. Hover-first mode (hover scrape + individual URL scrape for dates)")
-        print("   - Includes cross-validation and outlier detection")
+        print("3. Test mode (15 reels on @popdartsgame)")
         print()
         while True:
-            choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
+            choice = input("Enter your choice (1, 2, or 3): ").strip()
             if choice == '1' or choice == '':
                 num_input = input("\nHow many posts per account? (default 100): ").strip()
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False, False
+                        return num_posts, False, False
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
                     print("Invalid input. Using default: 100")
-                    return 100, False, False, False
+                    return 100, False, False
             elif choice == '2':
                 confirm = input("\n⚠️  Deep scrape will go back 2 years or to the beginning of the account. This may take a while. Continue? (y/n): ").strip().lower()
                 if confirm == 'y':
-                    return None, True, False, False
+                    return None, True, False
                 else:
                     continue
             elif choice == '3':
-                return 15, False, True, False
-            elif choice == '4':
-                num_input = input("\nHow many posts per account? (default 100): ").strip()
-                try:
-                    num_posts = int(num_input) if num_input else 100
-                    if num_posts > 0:
-                        return num_posts, False, False, True
-                    else:
-                        print("Please enter a positive number.")
-                except ValueError:
-                    print("Invalid input. Using default: 100")
-                    return 100, False, False, True
+                return 15, False, True
             else:
-                print("Invalid choice. Please enter 1, 2, 3, or 4.")
+                print("Invalid choice. Please enter 1, 2, or 3.")
 
     def run(self):
         """Main execution function"""
@@ -1319,11 +1069,11 @@ class InstagramScraper:
         self.ensure_packages()
         
         print("\n" + "="*70)
-        print("📸 Instagram Reels Analytics Tracker v3.0")
+        print("📸 Instagram Reels Analytics Tracker v4.0")
         print("="*70)
         
         browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode, use_hover_first = self.get_scrape_mode()
+        max_reels, deep_scrape, test_mode = self.get_scrape_mode()
         
         if test_mode:
             print("\n🧪 TEST MODE ACTIVATED")
@@ -1331,7 +1081,7 @@ class InstagramScraper:
             print(f"   Reels: 15 (will display all 15)")
             print(f"   Browser: {browser_choice.upper()}")
             print(f"   Output: Terminal only (no Excel file)")
-            print(f"   Strategy: Arrow FIRST → Hover SECOND → Merge")
+            print(f"   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
             print(f"   Debug: Enhanced hover scrape debug info enabled")
             accounts = ["popdartsgame"]
             expected_reels = 15
@@ -1344,13 +1094,10 @@ class InstagramScraper:
             if deep_scrape:
                 print("\n🔍 Mode: DEEP SCRAPE (back 2 years or to beginning of account)")
                 expected_reels = None
-            elif use_hover_first:
-                print(f"\n📊 Mode: HOVER-FIRST ({max_reels} posts per account)")
-                print("   Strategy: Hover FIRST → Individual URL SECOND → Cross-validate → Merge")
-                expected_reels = max_reels
             else:
                 print(f"\n📊 Mode: {max_reels} posts per account")
                 expected_reels = max_reels
+            print("   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
         
         input("\n▶️  Press ENTER to start scraping...")
         
@@ -1371,7 +1118,7 @@ class InstagramScraper:
                 
                 try:
                     reels_data, followers, pinned_count = self.scrape_instagram_account(
-                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, test_mode=test_mode, use_hover_first=use_hover_first
+                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, test_mode=test_mode
                     )
                     
                     scrape_results[username] = {
@@ -1396,8 +1143,7 @@ class InstagramScraper:
                         print(f"   Account: @{username}")
                         print(f"   Browser: {browser_choice.upper()}")
                         print(f"   Followers: {followers:,}" if followers else "   Followers: N/A")
-                        print(f"   Reels scraped: {len(reels_data)} (including {pinned_count} pinned)")
-                        print(f"   Pinned posts: {pinned_count}")
+                        print(f"   Reels scraped: {len(reels_data)}")
                     else:
                         print(f"\n  ✅ @{username} complete!")
                         print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
@@ -1410,13 +1156,13 @@ class InstagramScraper:
                                         break
                                 if oldest_date:
                                     days_back = (datetime.now() - oldest_date).days
-                                    print(f"  🎬 Reels: {len(reels_data)} (spanning ~{days_back} days, {pinned_count} pinned)")
+                                    print(f"  🎬 Reels: {len(reels_data)} (spanning ~{days_back} days)")
                                 else:
-                                    print(f"  🎬 Reels: {len(reels_data)} (including {pinned_count} pinned)")
+                                    print(f"  🎬 Reels: {len(reels_data)}")
                             else:
                                 print(f"  🎬 Reels: 0")
                         else:
-                            print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'} (including {pinned_count} pinned)")
+                            print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'}")
                 
                 except Exception as e:
                     print(f"\n  ❌ Error with @{username}: {e}")
@@ -1430,28 +1176,14 @@ class InstagramScraper:
                     continue
             
             if not test_mode:
-                # Save initial results
+                # Save results
                 self.save_to_excel(all_account_data)
                 self.upload_to_google_drive()
-                
-                # Handle early terminations
-                if self.early_terminations:
-                    self.handle_early_terminations(all_account_data, timestamp_col)
-                    # Save updated results
-                    self.save_to_excel(all_account_data)
-                    self.upload_to_google_drive()
                 
                 print("\n" + "="*70)
                 print("✅ All scraping complete!")
                 print(f"📁 Local file: '{OUTPUT_EXCEL}'")
                 print(f"🌐 View analytics: https://crespo.world/crespomize.html")
-                
-                # Show early termination summary if any
-                if self.early_terminations:
-                    print("\n⚠️  Early terminations:")
-                    for username, info in self.early_terminations.items():
-                        print(f"  @{username}: Stopped at {info['reels_scraped']} reels")
-                
                 print("="*70 + "\n")
         
         finally:
@@ -1459,13 +1191,13 @@ class InstagramScraper:
                 self.driver.quit()
 
     # Methods for master scraper integration
-    def scrape_recent_posts(self, account, limit=30, use_hover_first=False):
+    def scrape_recent_posts(self, account, limit=30):
         """Scrape recent posts for master scraper (test mode)"""
         if not self.driver:
             self.driver = self.setup_driver()
         
         reels_data, followers, pinned_count = self.scrape_instagram_account(
-            self.driver, account, max_reels=limit, deep_scrape=False, test_mode=False, use_hover_first=use_hover_first
+            self.driver, account, max_reels=limit, deep_scrape=False, test_mode=False
         )
         
         # Convert to format expected by master scraper
@@ -1483,7 +1215,7 @@ class InstagramScraper:
         
         return posts
     
-    def scrape_by_date(self, account, start_date, use_hover_first=False):
+    def scrape_by_date(self, account, start_date):
         """Scrape posts from a specific date for master scraper"""
         if not self.driver:
             self.driver = self.setup_driver()
@@ -1493,7 +1225,7 @@ class InstagramScraper:
         deep_scrape = days_back > 365  # Deep scrape if more than a year
         
         reels_data, followers, pinned_count = self.scrape_instagram_account(
-            self.driver, account, max_reels=2000, deep_scrape=deep_scrape, test_mode=False, use_hover_first=use_hover_first
+            self.driver, account, max_reels=2000, deep_scrape=deep_scrape, test_mode=False
         )
         
         # Filter by date and convert to format expected by master scraper
