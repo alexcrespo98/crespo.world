@@ -1197,80 +1197,118 @@ class InstagramScraper:
         """
         Align arrow_posts with hover_data by finding the best shift.
         
-        Simple approach:
-        1. Print both raw lists for debugging
-        2. Try different shift amounts to find where likes align
-        3. Use the shift that gives the best match
+        Adaptive approach:
+        1. Find initial best shift
+        2. Go through posts one by one, tracking alignment
+        3. When alignment breaks (mismatch), try re-shifting from that point
+        4. This handles extra posts in the middle of arrow data
         """
+        TOLERANCE_PCT = 20.0  # Allow 20% difference in likes
+        
+        def likes_match(hover_likes, arrow_likes):
+            """Check if two like counts match within tolerance"""
+            if hover_likes is None or arrow_likes is None:
+                return True  # Can't compare, assume match
+            if not isinstance(hover_likes, (int, float)) or not isinstance(arrow_likes, (int, float)):
+                return True
+            max_val = max(hover_likes, arrow_likes)
+            if max_val == 0:
+                return hover_likes == arrow_likes
+            diff_pct = abs(hover_likes - arrow_likes) / max_val * 100
+            return diff_pct <= TOLERANCE_PCT
+        
         if verbose:
             print(f"\n    📋 Raw data comparison:")
             print(f"       Hover likes: {[h.get('likes') for h in hover_data[:10]]}...")
             print(f"       Arrow likes: {[a.get('likes') for a in arrow_posts[:10]]}...")
         
-        def count_matches_with_shift(hover_list, arrow_list, arrow_shift):
-            """Count how many likes match when shifting arrow list"""
+        def count_matches_with_shift(hover_list, arrow_list, arrow_shift, start_hover=0):
+            """Count matches starting from start_hover position"""
             matches = 0
-            details = []
-            for i, hover_reel in enumerate(hover_list):
+            for i in range(start_hover, len(hover_list)):
                 arrow_idx = i + arrow_shift
                 if arrow_idx < 0 or arrow_idx >= len(arrow_list):
                     continue
-                
-                hover_likes = hover_reel.get('likes')
-                arrow_likes = arrow_list[arrow_idx].get('likes')
-                
-                if hover_likes is None or arrow_likes is None:
-                    matches += 1  # Can't compare, assume match
-                    continue
-                if not isinstance(hover_likes, (int, float)) or not isinstance(arrow_likes, (int, float)):
+                if likes_match(hover_list[i].get('likes'), arrow_list[arrow_idx].get('likes')):
                     matches += 1
-                    continue
-                    
-                max_val = max(hover_likes, arrow_likes)
-                if max_val == 0:
-                    if hover_likes == arrow_likes:
-                        matches += 1
-                    continue
-                
-                diff_pct = abs(hover_likes - arrow_likes) / max_val * 100
-                # Use 20% tolerance - enough for timing differences but not for wrong posts
-                if diff_pct <= 20.0:
-                    matches += 1
-                    details.append(f"H{i}={hover_likes} ≈ A{arrow_idx}={arrow_likes}")
-            
-            return matches, details
+            return matches
         
-        # Try different shifts (-5 to +10) to find best alignment
+        # Find initial best shift
+        print(f"    🔍 Finding best alignment shift...")
         best_shift = 0
         best_matches = 0
-        best_details = []
         
-        print(f"    🔍 Finding best alignment shift...")
-        for shift in range(-5, 15):  # Try shifts from -5 to +14
-            matches, details = count_matches_with_shift(hover_data, arrow_posts, shift)
+        for shift in range(-5, 15):
+            matches = count_matches_with_shift(hover_data, arrow_posts, shift)
             if matches > 0 and verbose:
                 print(f"      Shift {shift:+d}: {matches}/{len(hover_data)} matches")
             if matches > best_matches:
                 best_matches = matches
                 best_shift = shift
-                best_details = details
         
-        print(f"    📊 Best shift: {best_shift:+d} with {best_matches}/{len(hover_data)} matches")
+        print(f"    📊 Initial best shift: {best_shift:+d} with {best_matches}/{len(hover_data)} matches")
         
-        if best_matches >= len(hover_data) * 0.7:
-            print(f"    ✅ Good alignment found!")
-        else:
-            print(f"    ⚠️ Low alignment - dates may not match correctly")
+        # Now do adaptive alignment - go through each hover post and find matching arrow post
+        # If alignment breaks, try to re-shift
+        arrow_mapping = []  # List of arrow indices for each hover post
+        current_arrow_idx = best_shift if best_shift >= 0 else 0
+        consecutive_misses = 0
+        total_matches = 0
         
-        # Show some matching examples
-        if verbose and best_details:
-            print(f"    🔗 Sample matches: {', '.join(best_details[:5])}")
+        print(f"    🔄 Adaptive alignment (will re-shift if alignment breaks)...")
         
-        # Build result by applying the shift
+        for hover_idx, hover_reel in enumerate(hover_data):
+            hover_likes = hover_reel.get('likes')
+            
+            # Try current position
+            if current_arrow_idx < len(arrow_posts):
+                arrow_likes = arrow_posts[current_arrow_idx].get('likes')
+                if likes_match(hover_likes, arrow_likes):
+                    # Good match!
+                    arrow_mapping.append(current_arrow_idx)
+                    current_arrow_idx += 1
+                    consecutive_misses = 0
+                    total_matches += 1
+                    continue
+            
+            # Mismatch - try looking ahead in arrow posts to find a match
+            found_match = False
+            for look_ahead in range(1, 4):  # Try up to 3 positions ahead
+                test_idx = current_arrow_idx + look_ahead
+                if test_idx < len(arrow_posts):
+                    test_likes = arrow_posts[test_idx].get('likes')
+                    if likes_match(hover_likes, test_likes):
+                        # Found match by skipping some arrow posts
+                        if verbose and look_ahead > 0:
+                            skipped = [arrow_posts[current_arrow_idx + i].get('likes') for i in range(look_ahead)]
+                            print(f"      ↳ H{hover_idx}: Skipping {look_ahead} arrow post(s) {skipped} to match {hover_likes}≈{test_likes}")
+                        arrow_mapping.append(test_idx)
+                        current_arrow_idx = test_idx + 1
+                        consecutive_misses = 0
+                        total_matches += 1
+                        found_match = True
+                        break
+            
+            if not found_match:
+                # Still no match - use current position anyway but note the mismatch
+                if current_arrow_idx < len(arrow_posts):
+                    arrow_mapping.append(current_arrow_idx)
+                    current_arrow_idx += 1
+                else:
+                    arrow_mapping.append(None)
+                consecutive_misses += 1
+                
+                if consecutive_misses >= 3 and verbose:
+                    print(f"      ⚠️ H{hover_idx}: 3+ consecutive mismatches, alignment may be off")
+        
+        print(f"    ✅ Adaptive alignment complete: {total_matches}/{len(hover_data)} matches")
+        
+        # Build result using the mapping
         url_data = []
-        for i, reel in enumerate(hover_data):
-            arrow_idx = i + best_shift
-            if 0 <= arrow_idx < len(arrow_posts):
+        for hover_idx, reel in enumerate(hover_data):
+            arrow_idx = arrow_mapping[hover_idx] if hover_idx < len(arrow_mapping) else None
+            
+            if arrow_idx is not None and arrow_idx < len(arrow_posts):
                 arrow_post = arrow_posts[arrow_idx]
                 url_data.append({
                     'reel_id': reel['reel_id'],
@@ -1281,7 +1319,6 @@ class InstagramScraper:
                     'comments': arrow_post.get('comments'),
                 })
             else:
-                # No matching arrow post for this position
                 url_data.append({
                     'reel_id': reel['reel_id'],
                     'date': None,
