@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Instagram Scrape Merger - Aligns hover and arrow scrape data using sequence alignment algorithms.
+Instagram Scrape Merger v2.0 - Arrow-first alignment with multiple algorithms.
+
+PRIORITY: Arrow scrape (dates) is the BASE - every arrow entry appears in output.
+Hover data is matched TO arrow data. Unmatched hover goes to orphans section.
 
 Uses like counts as the alignment signal, similar to DNA sequence alignment.
 Handles insertions/deletions (extra posts in one scrape but not the other).
@@ -9,6 +12,7 @@ Handles insertions/deletions (extra posts in one scrape but not the other).
 import pandas as pd
 import os
 from datetime import datetime
+from collections import defaultdict
 
 # Input files
 HOVER_FILE = "instagram_hover_scrape.xlsx"
@@ -220,11 +224,225 @@ def sliding_window_align(hover_likes, arrow_likes, window_size=10, tolerance=0.1
     
     return alignments
 
-def merge_account(hover_df, arrow_df, method='needleman_wunsch'):
+def arrow_first_match(hover_df, arrow_df, tolerance=0.15):
     """
-    Merge hover and arrow data for a single account using specified alignment method.
+    Arrow-first matching: Every arrow entry appears in output.
+    Hover data is matched TO arrow. Returns (arrow_to_hover_map, orphan_hover_indices).
     """
-    # Extract likes from both dataframes
+    hover_likes = [normalize_likes(x) for x in hover_df['Likes'].tolist()]
+    arrow_likes = [normalize_likes(x) for x in arrow_df['Likes'].tolist()]
+    
+    # Track which hover indices are used
+    used_hover = set()
+    arrow_to_hover = {}  # arrow_idx -> hover_idx
+    
+    # For each arrow entry, find best matching hover entry
+    for a_idx, a_like in enumerate(arrow_likes):
+        best_h_idx = None
+        best_diff = float('inf')
+        
+        for h_idx, h_like in enumerate(hover_likes):
+            if h_idx in used_hover:
+                continue
+            if likes_match(h_like, a_like, tolerance):
+                if h_like is not None and a_like is not None:
+                    diff = abs(h_like - a_like)
+                else:
+                    diff = 0
+                if diff < best_diff:
+                    best_diff = diff
+                    best_h_idx = h_idx
+        
+        if best_h_idx is not None:
+            arrow_to_hover[a_idx] = best_h_idx
+            used_hover.add(best_h_idx)
+    
+    # Orphans are hover entries not matched
+    orphan_hover = [i for i in range(len(hover_likes)) if i not in used_hover]
+    
+    return arrow_to_hover, orphan_hover
+
+def sequential_arrow_first(hover_df, arrow_df, tolerance=0.20, max_skip=5):
+    """
+    Sequential arrow-first: Try to maintain order while matching.
+    Allows skipping up to max_skip positions to find a match.
+    """
+    hover_likes = [normalize_likes(x) for x in hover_df['Likes'].tolist()]
+    arrow_likes = [normalize_likes(x) for x in arrow_df['Likes'].tolist()]
+    
+    used_hover = set()
+    arrow_to_hover = {}
+    h_idx = 0  # Current position in hover
+    
+    for a_idx, a_like in enumerate(arrow_likes):
+        # Try to find match starting from current hover position
+        found = False
+        for skip in range(max_skip + 1):
+            test_h = h_idx + skip
+            if test_h >= len(hover_likes):
+                break
+            if test_h in used_hover:
+                continue
+            
+            h_like = hover_likes[test_h]
+            if likes_match(h_like, a_like, tolerance):
+                arrow_to_hover[a_idx] = test_h
+                used_hover.add(test_h)
+                h_idx = test_h + 1
+                found = True
+                break
+        
+        if not found:
+            # Try looking backwards too
+            for back in range(1, 3):
+                test_h = h_idx - back
+                if test_h >= 0 and test_h not in used_hover:
+                    h_like = hover_likes[test_h]
+                    if likes_match(h_like, a_like, tolerance):
+                        arrow_to_hover[a_idx] = test_h
+                        used_hover.add(test_h)
+                        found = True
+                        break
+    
+    orphan_hover = [i for i in range(len(hover_likes)) if i not in used_hover]
+    return arrow_to_hover, orphan_hover
+
+def dp_arrow_first(hover_df, arrow_df, tolerance=0.15):
+    """
+    Dynamic programming arrow-first alignment.
+    Optimizes for maximum matches while respecting order.
+    """
+    hover_likes = [normalize_likes(x) for x in hover_df['Likes'].tolist()]
+    arrow_likes = [normalize_likes(x) for x in arrow_df['Likes'].tolist()]
+    
+    n_hover = len(hover_likes)
+    n_arrow = len(arrow_likes)
+    
+    # dp[a][h] = max matches using arrow[0:a] and hover[0:h]
+    dp = [[0] * (n_hover + 1) for _ in range(n_arrow + 1)]
+    
+    for a in range(1, n_arrow + 1):
+        for h in range(1, n_hover + 1):
+            # Option 1: Don't use hover[h-1] for this arrow
+            dp[a][h] = max(dp[a][h-1], dp[a-1][h])
+            
+            # Option 2: Match arrow[a-1] with hover[h-1] if they match
+            if likes_match(arrow_likes[a-1], hover_likes[h-1], tolerance):
+                dp[a][h] = max(dp[a][h], dp[a-1][h-1] + 1)
+    
+    # Traceback to find the actual matching
+    arrow_to_hover = {}
+    a, h = n_arrow, n_hover
+    
+    while a > 0 and h > 0:
+        if likes_match(arrow_likes[a-1], hover_likes[h-1], tolerance) and dp[a][h] == dp[a-1][h-1] + 1:
+            arrow_to_hover[a-1] = h-1
+            a -= 1
+            h -= 1
+        elif dp[a][h] == dp[a][h-1]:
+            h -= 1
+        else:
+            a -= 1
+    
+    used_hover = set(arrow_to_hover.values())
+    orphan_hover = [i for i in range(n_hover) if i not in used_hover]
+    
+    return arrow_to_hover, orphan_hover
+
+def multi_tolerance_match(hover_df, arrow_df):
+    """
+    Try multiple tolerance levels, starting strict and relaxing.
+    Returns best result with ranking info.
+    """
+    tolerances = [0.05, 0.10, 0.15, 0.20, 0.30]
+    results = []
+    
+    for tol in tolerances:
+        arrow_to_hover, orphans = dp_arrow_first(hover_df, arrow_df, tolerance=tol)
+        match_count = len(arrow_to_hover)
+        results.append({
+            'tolerance': tol,
+            'matches': match_count,
+            'orphans': len(orphans),
+            'mapping': arrow_to_hover,
+            'orphan_list': orphans
+        })
+    
+    return results
+
+def build_merged_df(hover_df, arrow_df, arrow_to_hover, orphan_hover):
+    """
+    Build the merged dataframe with arrow as base.
+    Every arrow entry appears. Unmatched hover goes to orphans.
+    """
+    merged_rows = []
+    
+    # Process each arrow entry
+    for a_idx in range(len(arrow_df)):
+        a_row = arrow_df.iloc[a_idx]
+        row = {
+            'Arrow Pos': a_idx + 1,
+            'Date': a_row.get('Date', ''),
+            'Date (ISO)': a_row.get('Date (ISO)', ''),
+            'Arrow Likes': a_row.get('Likes', ''),
+        }
+        
+        if a_idx in arrow_to_hover:
+            h_idx = arrow_to_hover[a_idx]
+            h_row = hover_df.iloc[h_idx]
+            row['Hover Pos'] = h_idx + 1
+            row['Reel ID'] = h_row.get('Reel ID', '')
+            row['Views'] = h_row.get('Views', '')
+            row['Hover Likes'] = h_row.get('Likes', '')
+            row['Comments'] = h_row.get('Comments', '')
+            row['URL'] = h_row.get('URL', '')
+            
+            # Check match quality
+            h_like = normalize_likes(row['Hover Likes'])
+            a_like = normalize_likes(row['Arrow Likes'])
+            if h_like and a_like:
+                diff_pct = abs(h_like - a_like) / max(h_like, a_like) * 100
+                row['Match'] = f"✓ ({diff_pct:.1f}%)"
+            else:
+                row['Match'] = '✓'
+        else:
+            row['Hover Pos'] = ''
+            row['Reel ID'] = '[NO MATCH]'
+            row['Views'] = ''
+            row['Hover Likes'] = ''
+            row['Comments'] = ''
+            row['URL'] = ''
+            row['Match'] = '✗'
+        
+        merged_rows.append(row)
+    
+    return pd.DataFrame(merged_rows)
+
+def build_orphans_df(hover_df, orphan_indices):
+    """Build dataframe for orphaned hover entries."""
+    if not orphan_indices:
+        return pd.DataFrame()
+    
+    orphan_rows = []
+    for h_idx in orphan_indices:
+        h_row = hover_df.iloc[h_idx]
+        orphan_rows.append({
+            'Hover Pos': h_idx + 1,
+            'Reel ID': h_row.get('Reel ID', ''),
+            'Views': h_row.get('Views', ''),
+            'Likes': h_row.get('Likes', ''),
+            'Comments': h_row.get('Comments', ''),
+            'URL': h_row.get('URL', ''),
+            'Status': 'No matching arrow date'
+        })
+    
+    return pd.DataFrame(orphan_rows)
+
+def merge_account_v2(hover_df, arrow_df, method='dp_arrow_first', tolerance=0.15):
+    """
+    Arrow-first merge with specified method.
+    Returns merged_df, orphans_df, and stats.
+    """
     hover_likes = [normalize_likes(x) for x in hover_df['Likes'].tolist()]
     arrow_likes = [normalize_likes(x) for x in arrow_df['Likes'].tolist()]
     
@@ -232,105 +450,74 @@ def merge_account(hover_df, arrow_df, method='needleman_wunsch'):
     print(f"    Hover likes sample: {hover_likes[:5]}")
     print(f"    Arrow likes sample: {arrow_likes[:5]}")
     
-    # Run alignment based on method
-    if method == 'needleman_wunsch':
-        alignment = needleman_wunsch_align(hover_likes, arrow_likes)
-        print(f"    Needleman-Wunsch alignment: {len(alignment)} pairs")
-    elif method == 'smith_waterman':
-        alignment, score = smith_waterman_align(hover_likes, arrow_likes)
-        print(f"    Smith-Waterman alignment: {len(alignment)} pairs (score: {score})")
-    elif method == 'greedy_chain':
-        alignment = greedy_chain_align(hover_likes, arrow_likes)
-        print(f"    Greedy chain alignment: {len(alignment)} matched pairs")
-    elif method == 'sliding_window':
-        alignment = sliding_window_align(hover_likes, arrow_likes)
-        print(f"    Sliding window alignment: {len(alignment)} pairs")
+    if method == 'dp_arrow_first':
+        arrow_to_hover, orphans = dp_arrow_first(hover_df, arrow_df, tolerance)
+        print(f"    DP Arrow-First: {len(arrow_to_hover)} matches, {len(orphans)} orphans")
+    elif method == 'sequential':
+        arrow_to_hover, orphans = sequential_arrow_first(hover_df, arrow_df, tolerance)
+        print(f"    Sequential: {len(arrow_to_hover)} matches, {len(orphans)} orphans")
+    elif method == 'greedy':
+        arrow_to_hover, orphans = arrow_first_match(hover_df, arrow_df, tolerance)
+        print(f"    Greedy: {len(arrow_to_hover)} matches, {len(orphans)} orphans")
     else:
         raise ValueError(f"Unknown method: {method}")
     
-    # Build merged dataframe
-    merged_rows = []
-    matches = 0
-    gaps_hover = 0
-    gaps_arrow = 0
+    merged_df = build_merged_df(hover_df, arrow_df, arrow_to_hover, orphans)
+    orphans_df = build_orphans_df(hover_df, orphans)
     
-    for pair in alignment:
-        h_idx, a_idx = pair
-        
-        row = {}
-        
-        if h_idx is not None:
-            h_row = hover_df.iloc[h_idx]
-            row['Position'] = h_idx + 1
-            row['Reel ID'] = h_row.get('Reel ID', '')
-            row['Views'] = h_row.get('Views', '')
-            row['Hover Likes'] = h_row.get('Likes', '')
-            row['Comments'] = h_row.get('Comments', '')
-            row['URL'] = h_row.get('URL', '')
-        else:
-            gaps_hover += 1
-            row['Position'] = ''
-            row['Reel ID'] = '[GAP - not in hover]'
-            row['Views'] = ''
-            row['Hover Likes'] = ''
-            row['Comments'] = ''
-            row['URL'] = ''
-        
-        if a_idx is not None:
-            a_row = arrow_df.iloc[a_idx]
-            row['Date'] = a_row.get('Date', '')
-            row['Date (ISO)'] = a_row.get('Date (ISO)', '')
-            row['Arrow Likes'] = a_row.get('Likes', '')
-        else:
-            gaps_arrow += 1
-            row['Date'] = '[GAP - not in arrow]'
-            row['Date (ISO)'] = ''
-            row['Arrow Likes'] = ''
-        
-        # Check if likes match
-        if h_idx is not None and a_idx is not None:
-            h_like = normalize_likes(row['Hover Likes'])
-            a_like = normalize_likes(row['Arrow Likes'])
-            if likes_match(h_like, a_like):
-                row['Match'] = '✓'
-                matches += 1
-            else:
-                row['Match'] = '✗'
-        else:
-            row['Match'] = '-'
-        
-        merged_rows.append(row)
+    stats = {
+        'total_arrow': len(arrow_df),
+        'total_hover': len(hover_df),
+        'matches': len(arrow_to_hover),
+        'orphans': len(orphans),
+        'match_rate': len(arrow_to_hover) / len(arrow_df) * 100 if len(arrow_df) > 0 else 0
+    }
     
-    print(f"    Matches: {matches}/{len(alignment)} ({100*matches/len(alignment) if alignment else 0:.1f}%)")
-    print(f"    Gaps in hover: {gaps_hover}, Gaps in arrow: {gaps_arrow}")
-    
-    return pd.DataFrame(merged_rows)
+    return merged_df, orphans_df, stats
 
-def run_all_methods(hover_df, arrow_df):
-    """Run all alignment methods and return results for comparison."""
-    methods = ['needleman_wunsch', 'greedy_chain', 'sliding_window']
-    results = {}
+def run_all_methods_v2(hover_df, arrow_df):
+    """Run all arrow-first methods with multiple tolerances and rank them."""
+    methods = ['dp_arrow_first', 'sequential', 'greedy']
+    tolerances = [0.10, 0.15, 0.20, 0.25]
+    
+    all_results = []
     
     for method in methods:
-        print(f"\n  Testing {method}...")
-        merged = merge_account(hover_df, arrow_df, method=method)
-        matches = len([r for _, r in merged.iterrows() if r.get('Match') == '✓'])
-        results[method] = {
-            'merged': merged,
-            'matches': matches,
-            'total': len(merged)
-        }
+        for tol in tolerances:
+            try:
+                merged, orphans, stats = merge_account_v2(hover_df, arrow_df, method=method, tolerance=tol)
+                all_results.append({
+                    'method': method,
+                    'tolerance': tol,
+                    'matches': stats['matches'],
+                    'orphans': stats['orphans'],
+                    'match_rate': stats['match_rate'],
+                    'merged': merged,
+                    'orphans_df': orphans
+                })
+                print(f"    {method} (tol={tol:.0%}): {stats['matches']}/{stats['total_arrow']} matches ({stats['match_rate']:.1f}%), {stats['orphans']} orphans")
+            except Exception as e:
+                print(f"    {method} (tol={tol:.0%}): ERROR - {e}")
     
-    # Find best method
-    best = max(results.items(), key=lambda x: x[1]['matches'])
-    print(f"\n  🏆 Best method: {best[0]} with {best[1]['matches']}/{best[1]['total']} matches")
+    # Rank by matches (primary), then by fewer orphans (secondary)
+    all_results.sort(key=lambda x: (-x['matches'], x['orphans']))
     
-    return results, best[0]
+    print(f"\n  📊 RANKING:")
+    for i, r in enumerate(all_results[:5], 1):
+        print(f"    #{i}: {r['method']} (tol={r['tolerance']:.0%}) - {r['matches']} matches, {r['orphans']} orphans")
+    
+    best = all_results[0] if all_results else None
+    if best:
+        print(f"\n  🏆 BEST: {best['method']} (tol={best['tolerance']:.0%}) with {best['matches']} matches")
+    
+    return all_results, best
 
 def main():
     print("="*70)
-    print("📊 Instagram Scrape Merger")
+    print("📊 Instagram Scrape Merger v2.0 (Arrow-First)")
     print("="*70)
+    print("Priority: Every arrow (date) entry appears in output")
+    print("Hover data matched TO arrow. Unmatched hover = orphans.")
     
     # Check files exist
     if not os.path.exists(HOVER_FILE):
@@ -340,29 +527,40 @@ def main():
         print(f"❌ Arrow file not found: {ARROW_FILE}")
         return
     
-    print(f"📁 Loading {HOVER_FILE} and {ARROW_FILE}...")
+    print(f"\n📁 Loading {HOVER_FILE} and {ARROW_FILE}...")
     accounts = load_scrape_data(HOVER_FILE, ARROW_FILE)
     print(f"✅ Found {len(accounts)} account(s)")
     
     # Ask for method
     print("\n🔧 Alignment methods available:")
-    print("  1. Needleman-Wunsch (global alignment - DNA-style)")
-    print("  2. Greedy Chain (find matching pairs, chain together)")
-    print("  3. Sliding Window (adaptive offset per chunk)")
-    print("  4. Try ALL methods and pick best")
+    print("  1. DP Arrow-First (dynamic programming, respects order)")
+    print("  2. Sequential (follows order with skip allowance)")
+    print("  3. Greedy (best match per arrow, any order)")
+    print("  4. Try ALL methods + tolerances, pick best (RECOMMENDED)")
     
     choice = input("\nSelect method (1-4, default=4): ").strip()
     
     methods_map = {
-        '1': 'needleman_wunsch',
-        '2': 'greedy_chain', 
-        '3': 'sliding_window',
+        '1': 'dp_arrow_first',
+        '2': 'sequential', 
+        '3': 'greedy',
         '4': 'all'
     }
     method = methods_map.get(choice, 'all')
     
+    # Ask for tolerance if not running all
+    if method != 'all':
+        tol_input = input("Tolerance % (5-30, default=15): ").strip()
+        try:
+            tolerance = int(tol_input) / 100
+        except:
+            tolerance = 0.15
+    else:
+        tolerance = 0.15
+    
     # Process each account
-    merged_accounts = {}
+    all_merged = {}
+    all_orphans = {}
     
     for account, data in accounts.items():
         print(f"\n{'='*70}")
@@ -373,20 +571,35 @@ def main():
         arrow_df = data['arrow']
         
         if method == 'all':
-            results, best_method = run_all_methods(hover_df, arrow_df)
-            merged_accounts[account] = results[best_method]['merged']
+            results, best = run_all_methods_v2(hover_df, arrow_df)
+            if best:
+                all_merged[account] = best['merged']
+                all_orphans[account] = best['orphans_df']
         else:
-            merged = merge_account(hover_df, arrow_df, method=method)
-            merged_accounts[account] = merged
+            merged, orphans, stats = merge_account_v2(hover_df, arrow_df, method=method, tolerance=tolerance)
+            all_merged[account] = merged
+            all_orphans[account] = orphans
+            print(f"\n  Match rate: {stats['match_rate']:.1f}%")
     
     # Save results
     print(f"\n💾 Saving to {OUTPUT_FILE}...")
     with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
-        for account, df in merged_accounts.items():
+        for account in all_merged:
+            # Main merged data
             sheet_name = account[:31]
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
+            all_merged[account].to_excel(writer, sheet_name=sheet_name, index=False)
+            
+            # Orphans sheet if any
+            if account in all_orphans and len(all_orphans[account]) > 0:
+                orphan_sheet = f"{account[:26]}_orph"
+                all_orphans[account].to_excel(writer, sheet_name=orphan_sheet, index=False)
     
     print(f"✅ Merged data saved to {OUTPUT_FILE}")
+    print("\nSheets created:")
+    for account in all_merged:
+        print(f"  - {account}: {len(all_merged[account])} rows")
+        if account in all_orphans and len(all_orphans[account]) > 0:
+            print(f"  - {account[:26]}_orph: {len(all_orphans[account])} orphaned hover entries")
     print("="*70)
 
 if __name__ == "__main__":
