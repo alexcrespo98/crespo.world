@@ -30,6 +30,7 @@ import json
 import logging
 import signal
 import traceback
+import statistics
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -67,6 +68,9 @@ INSTAGRAM_COOKIES = [
 ]
 
 class InstagramScraper:
+    # Cross-validation outlier threshold (percentage difference to flag as outlier)
+    OUTLIER_THRESHOLD_PCT = 20.0
+    
     def __init__(self):
         self.driver = None
         self.interrupted = False
@@ -797,7 +801,7 @@ class InstagramScraper:
                         data['date'] = time_elem.get_attribute('datetime')
                         data['date_display'] = time_elem.text
                         data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
-                except:
+                except Exception:
                     pass
                 
                 # Extract likes for validation
@@ -810,7 +814,7 @@ class InstagramScraper:
                         like_match = re.search(r'([\d,.]+[KMB]?)\s+likes?', body_text, re.IGNORECASE)
                         if like_match:
                             data['likes'] = self.parse_number(like_match.group(1))
-                except:
+                except Exception:
                     pass
                 
                 # Extract comments for validation
@@ -825,7 +829,7 @@ class InstagramScraper:
                         if comment_match:
                             data['comments'] = self.parse_number(comment_match.group(1))
                             break
-                except:
+                except Exception:
                     pass
                 
                 url_data.append(data)
@@ -863,8 +867,6 @@ class InstagramScraper:
         Cross-validate data between hover scrape and individual URL scrape.
         Identifies outliers where likes or comments differ significantly.
         """
-        import statistics
-        
         if test_mode:
             print(f"\n  🔍 STEP 3: Cross-validating data...")
         else:
@@ -898,11 +900,9 @@ class InstagramScraper:
                 diff_pct = abs(hover_comments - url_comments) / hover_comments * 100
                 comments_diffs.append((reel_id, hover_comments, url_comments, diff_pct, 'comments'))
         
-        # Identify outliers (more than 20% difference)
-        threshold_pct = 20.0
-        
+        # Identify outliers using class threshold constant
         for reel_id, hover_val, url_val, diff_pct, metric_type in likes_diffs:
-            if diff_pct > threshold_pct:
+            if diff_pct > self.OUTLIER_THRESHOLD_PCT:
                 outliers.append({
                     'reel_id': reel_id,
                     'metric': metric_type,
@@ -912,7 +912,7 @@ class InstagramScraper:
                 })
         
         for reel_id, hover_val, url_val, diff_pct, metric_type in comments_diffs:
-            if diff_pct > threshold_pct:
+            if diff_pct > self.OUTLIER_THRESHOLD_PCT:
                 outliers.append({
                     'reel_id': reel_id,
                     'metric': metric_type,
