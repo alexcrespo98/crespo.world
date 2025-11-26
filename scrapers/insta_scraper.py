@@ -892,13 +892,18 @@ class InstagramScraper:
             url_comments = url_reel.get('comments')
             
             # Calculate differences (as percentages) when both values exist
-            if hover_likes is not None and url_likes is not None and hover_likes > 0:
-                diff_pct = abs(hover_likes - url_likes) / hover_likes * 100
-                likes_diffs.append((reel_id, hover_likes, url_likes, diff_pct, 'likes'))
+            # Use max of both values as denominator for more robust comparison
+            if hover_likes is not None and url_likes is not None:
+                max_likes = max(hover_likes, url_likes)
+                if max_likes > 0:
+                    diff_pct = abs(hover_likes - url_likes) / max_likes * 100
+                    likes_diffs.append((reel_id, hover_likes, url_likes, diff_pct, 'likes'))
             
-            if hover_comments is not None and url_comments is not None and hover_comments > 0:
-                diff_pct = abs(hover_comments - url_comments) / hover_comments * 100
-                comments_diffs.append((reel_id, hover_comments, url_comments, diff_pct, 'comments'))
+            if hover_comments is not None and url_comments is not None:
+                max_comments = max(hover_comments, url_comments)
+                if max_comments > 0:
+                    diff_pct = abs(hover_comments - url_comments) / max_comments * 100
+                    comments_diffs.append((reel_id, hover_comments, url_comments, diff_pct, 'comments'))
         
         # Identify outliers using class threshold constant
         for reel_id, hover_val, url_val, diff_pct, metric_type in likes_diffs:
