@@ -469,7 +469,7 @@ class InstagramSalvage:
             print(f"    ❌ Error: {str(e)}")
             return None, False
 
-    def arrow_scrape_dates(self, driver, username, reel_ids):
+    def arrow_scrape_dates(self, driver, username, reel_ids, verbose=True):
         """
         Arrow scrape method - click first reel and use arrow keys to navigate.
         More reliable than visiting individual URLs (avoids 429 rate limits).
@@ -478,6 +478,7 @@ class InstagramSalvage:
             driver: Selenium driver
             username: Instagram username  
             reel_ids: List of reel IDs to find dates for
+            verbose: Print detailed debug info for each post
             
         Returns:
             dict: {reel_id: {'date': ..., 'date_display': ...}}
@@ -504,17 +505,23 @@ class InstagramSalvage:
             
             try:
                 driver.get(page_url)
-                self.add_jitter(3, 1)
+                time.sleep(4)  # Increased wait time
                 
                 # Dismiss any modals
                 self.dismiss_modal(driver)
                 
                 # Find first clickable post/reel
-                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+                
+                if not post_links:
+                    # Try also looking for regular posts
+                    post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
                 
                 if not post_links:
                     print(f"    ⚠️ No posts found on {page_type} page")
                     continue
+                
+                print(f"    ✅ Found {len(post_links)} posts on page")
                 
                 # Click the first post
                 first_post = post_links[0]
@@ -525,44 +532,57 @@ class InstagramSalvage:
                 except:
                     driver.execute_script("arguments[0].click();", first_post)
                 
-                self.add_jitter(2, 1)
+                time.sleep(3)  # Wait for modal to load
                 
                 # Navigate through posts using arrow keys
                 body = driver.find_element(By.TAG_NAME, "body")
                 posts_processed = 0
                 consecutive_misses = 0
-                max_consecutive_misses = 15
-                max_posts = len(reel_ids) + 100
+                max_consecutive_misses = 50  # Increased to allow more posts without matches
+                max_posts = min(len(reel_ids) + 200, 2000)  # Limit to reasonable amount
                 
                 while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+                    # Wait for content to load
+                    time.sleep(1.5)
+                    
                     current_url = driver.current_url
                     current_reel_id = None
                     
                     if '/reel/' in current_url:
                         current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
                     elif '/p/' in current_url:
-                        # Regular post, skip
-                        body.send_keys(Keys.ARROW_RIGHT)
-                        self.add_jitter(0.5, 0.3)
-                        posts_processed += 1
-                        continue
+                        # Regular post - still extract date but mark as post
+                        current_reel_id = None
                     
+                    # Extract date for ALL posts (for debugging and to catch matches)
+                    date_info = self.extract_date_from_view(driver)
+                    
+                    # Show verbose output for debugging
+                    if verbose and posts_processed < 20:  # Show first 20 posts
+                        in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
+                        date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
+                        print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                    
+                    # Check if this reel is in our needed list
                     if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
-                        # Extract date
-                        date_info = self.extract_date_from_view(driver)
-                        
                         if date_info.get('date'):
                             arrow_data[current_reel_id] = date_info
                             consecutive_misses = 0
-                            print(f"    [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
+                            print(f"    ✅ [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
                         else:
                             consecutive_misses += 1
+                    elif current_reel_id and current_reel_id not in reel_ids_needed:
+                        # Not a match but still found a reel
+                        consecutive_misses += 1
                     else:
                         consecutive_misses += 1
                     
                     body.send_keys(Keys.ARROW_RIGHT)
-                    self.add_jitter(0.8, 0.5)
                     posts_processed += 1
+                    
+                    # Progress update every 50 posts
+                    if posts_processed % 50 == 0:
+                        print(f"    📊 Processed {posts_processed} posts, found {len(arrow_data)} matches...")
                     
                     if len(arrow_data) >= len(reel_ids_needed):
                         print(f"    ✅ Found all {len(arrow_data)} dates!")
@@ -570,12 +590,15 @@ class InstagramSalvage:
                 
                 # Close modal
                 body.send_keys(Keys.ESCAPE)
-                self.add_jitter(1, 0.5)
+                time.sleep(1)
                 
-                print(f"    📊 Found {len(arrow_data)} dates from {page_type} page")
+                print(f"    📊 Found {len(arrow_data)} dates from {page_type} page (processed {posts_processed} posts)")
                 
             except Exception as e:
+                import traceback
                 print(f"    ❌ Error on {page_type} page: {str(e)}")
+                if verbose:
+                    traceback.print_exc()
                 continue
         
         return arrow_data
