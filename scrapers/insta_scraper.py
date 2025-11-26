@@ -76,6 +76,8 @@ class InstagramScraper:
         self.interrupted = False
         self.current_data = {}
         self.early_terminations = {}  # Track any early terminations
+        self.partial_scrape_data = {}  # Store partial data during scraping for backup
+        self.current_username = None  # Track which account is being scraped
         
         # Set up signal handler for interrupts
         signal.signal(signal.SIGINT, self.handle_interrupt)
@@ -87,9 +89,8 @@ class InstagramScraper:
         print("="*70)
         self.interrupted = True
         
-        # Save backup of current data
-        if self.current_data:
-            self.save_backup()
+        # Save backup of current data (including partial data)
+        self.save_backup()
         
         # Clean up driver
         if self.driver:
@@ -102,24 +103,47 @@ class InstagramScraper:
         sys.exit(0)
     
     def save_backup(self):
-        """Save backup file with current progress"""
+        """Save backup file with current progress including partial scrape data"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"instagram_backup_{timestamp}.xlsx"
         
         try:
             import pandas as pd
+            
+            has_data = False
+            
             with pd.ExcelWriter(backup_name, engine='openpyxl') as writer:
+                # Save completed account data
                 for username, df in self.current_data.items():
                     sheet_name = username[:31]
                     df.to_excel(writer, sheet_name=sheet_name)
+                    has_data = True
+                
+                # Save partial scrape data for current account (if any)
+                if self.partial_scrape_data and self.current_username:
+                    partial_df = pd.DataFrame(self.partial_scrape_data.get('hover_data', []))
+                    if not partial_df.empty:
+                        sheet_name = f"{self.current_username[:25]}_PARTIAL"
+                        partial_df.to_excel(writer, sheet_name=sheet_name)
+                        has_data = True
+                        print(f"  📊 Saved {len(partial_df)} partial reels for @{self.current_username}")
             
-            print(f"💾 Backup saved: {backup_name}")
+            if has_data:
+                print(f"💾 Backup saved: {backup_name}")
+            else:
+                # Remove empty file
+                import os
+                os.remove(backup_name)
+                print("ℹ️  No data to backup yet (scraping hadn't collected any data)")
+                return
             
             # Also save state file for resuming
             state = {
                 'timestamp': timestamp,
                 'accounts_completed': list(self.current_data.keys()),
-                'early_terminations': self.early_terminations
+                'early_terminations': self.early_terminations,
+                'current_username': self.current_username,
+                'partial_data_count': len(self.partial_scrape_data.get('hover_data', [])) if self.partial_scrape_data else 0
             }
             
             state_file = f"instagram_state_{timestamp}.json"
@@ -729,6 +753,10 @@ class InstagramScraper:
                     processed_reel_ids.add(post_id)
                     new_this_cycle = True
                     
+                    # Store partial data for backup (every 10 reels)
+                    if len(hover_data) % 10 == 0:
+                        self.partial_scrape_data = {'hover_data': hover_data.copy()}
+                    
                     if test_mode and len(hover_data) <= max_reels:
                         # Format output to distinguish N/A from 0
                         views_str = 'N/A' if views is None else str(views)
@@ -751,6 +779,9 @@ class InstagramScraper:
             
             driver.execute_script("window.scrollBy(0, 600);")
             time.sleep(0.7)
+        
+        # Store final hover data for backup
+        self.partial_scrape_data = {'hover_data': hover_data.copy()}
         
         if test_mode:
             print(f"\n  📊 Hover scrape complete: {len(hover_data)} reels")
@@ -1121,6 +1152,10 @@ class InstagramScraper:
         Main scraping method using hover-first approach.
         Hover scrape first, then individual URL scraping for dates.
         """
+        # Track current username for backup purposes
+        self.current_username = username
+        self.partial_scrape_data = {}
+        
         print(f"  👥 Getting exact follower count...")
         exact_followers = self.get_exact_follower_count(username)
         if exact_followers:
