@@ -1200,7 +1200,7 @@ class InstagramScraper:
         return url_data
 
     def extract_date_from_current_view(self, driver):
-        """Extract date and other info from the currently displayed reel/post"""
+        """Extract date and other info from the currently displayed reel/post using multiple methods"""
         data = {
             'date': None,
             'date_display': None,
@@ -1209,18 +1209,36 @@ class InstagramScraper:
             'comments': None,
         }
         
-        # Extract date - look for the specific <time> element with class x1p4m5qa
-        # This is the main post date, not comment dates
+        # Method 1: CSS selector for specific class (most reliable)
         try:
-            # First try to find the specific class that Instagram uses for post dates
             time_elements = driver.find_elements(By.CSS_SELECTOR, "time.x1p4m5qa")
             if time_elements:
                 time_elem = time_elements[0]
                 data['date'] = time_elem.get_attribute('datetime')
                 data['date_display'] = time_elem.text
                 data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
-            else:
-                # Fallback: look for any time element with a datetime attribute
+        except:
+            pass
+        
+        # Method 2: Look for time element with both datetime and title attributes
+        # The post date usually has both, while comment dates may only have datetime
+        if not data['date']:
+            try:
+                time_elements = driver.find_elements(By.TAG_NAME, "time")
+                for time_elem in time_elements:
+                    datetime_attr = time_elem.get_attribute('datetime')
+                    title_attr = time_elem.get_attribute('title')
+                    if datetime_attr and title_attr:
+                        data['date'] = datetime_attr
+                        data['date_display'] = time_elem.text
+                        data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
+                        break
+            except:
+                pass
+        
+        # Method 3: Fallback to first time element with datetime
+        if not data['date']:
+            try:
                 time_elements = driver.find_elements(By.TAG_NAME, "time")
                 for time_elem in time_elements:
                     datetime_attr = time_elem.get_attribute('datetime')
@@ -1229,8 +1247,8 @@ class InstagramScraper:
                         data['date_display'] = time_elem.text
                         data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
                         break
-        except:
-            pass
+            except:
+                pass
         
         # Extract likes
         try:
