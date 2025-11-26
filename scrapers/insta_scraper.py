@@ -1195,142 +1195,83 @@ class InstagramScraper:
     
     def align_posts_linearly(self, hover_data, arrow_posts, verbose=True, test_mode=False):
         """
-        Align arrow_posts with hover_data linearly.
+        Align arrow_posts with hover_data by finding the best shift.
         
-        Strategy:
-        1. Try different starting offsets (arrow might have pinned posts at start)
-        2. Find the offset that gives best alignment
-        3. Then try removing individual outliers to improve further
+        Simple approach:
+        1. Print both raw lists for debugging
+        2. Try different shift amounts to find where likes align
+        3. Use the shift that gives the best match
         """
-        TOLERANCE_PCT = 15.0  # Allow 15% difference in likes
-        RECENT_TOLERANCE_PCT = 35.0  # Allow 35% for recent posts (likes change rapidly)
+        if verbose:
+            print(f"\n    📋 Raw data comparison:")
+            print(f"       Hover likes: {[h.get('likes') for h in hover_data[:10]]}...")
+            print(f"       Arrow likes: {[a.get('likes') for a in arrow_posts[:10]]}...")
         
-        def is_recent_post(date_display):
-            """Check if a post is recent (within ~1 day) based on date display text"""
-            if not date_display:
-                return False
-            date_lower = date_display.lower()
-            recent_keywords = ['hour', 'minute', 'second', 'just now']
-            if any(kw in date_lower for kw in recent_keywords):
-                return True
-            if 'day ago' in date_lower or '1 day' in date_lower:
-                return True
-            return False
-        
-        def likes_match(hover_likes, arrow_likes, arrow_date_display=None):
-            """Check if two like counts match within tolerance"""
-            if hover_likes is None or arrow_likes is None:
-                return True  # Can't compare, assume match
-            if not isinstance(hover_likes, (int, float)) or not isinstance(arrow_likes, (int, float)):
-                return True
-            max_val = max(hover_likes, arrow_likes)
-            if max_val == 0:
-                return hover_likes == arrow_likes
-            diff_pct = abs(hover_likes - arrow_likes) / max_val * 100
-            tolerance = RECENT_TOLERANCE_PCT if is_recent_post(arrow_date_display) else TOLERANCE_PCT
-            return diff_pct <= tolerance
-        
-        def count_matches_at_offset(hover_list, arrow_list, offset, skip_indices=None):
-            """Count matches starting arrow_list at given offset"""
-            skip_indices = skip_indices or set()
-            # Get arrow posts starting at offset, skipping specified indices
-            arrow_subset = []
-            for i in range(offset, len(arrow_list)):
-                if i not in skip_indices:
-                    arrow_subset.append(arrow_list[i])
-            
+        def count_matches_with_shift(hover_list, arrow_list, arrow_shift):
+            """Count how many likes match when shifting arrow list"""
             matches = 0
+            details = []
             for i, hover_reel in enumerate(hover_list):
-                if i >= len(arrow_subset):
-                    break
-                arrow_date = arrow_subset[i].get('date_display')
-                if likes_match(hover_reel.get('likes'), arrow_subset[i].get('likes'), arrow_date):
-                    matches += 1
-            return matches
-        
-        # First, find the best starting offset (handles pinned posts at beginning)
-        best_offset = 0
-        best_matches = 0
-        
-        print(f"    🔍 Finding best alignment offset...")
-        for offset in range(min(10, len(arrow_posts))):  # Try offsets 0-9
-            matches = count_matches_at_offset(hover_data, arrow_posts, offset)
-            if verbose and matches > 0:
-                print(f"      Offset {offset}: {matches}/{len(hover_data)} matches")
-            if matches > best_matches:
-                best_matches = matches
-                best_offset = offset
-        
-        print(f"    📊 Best offset: {best_offset} with {best_matches}/{len(hover_data)} matches")
-        
-        # If good alignment found, use it
-        if best_matches >= len(hover_data) * 0.7:
-            print(f"    ✅ Good alignment at offset {best_offset}")
-            # Create skip set for posts before the offset
-            skip_before = set(range(best_offset))
-            return self.map_aligned_posts(hover_data, arrow_posts, skip_before)
-        
-        # Otherwise, try to find additional outliers to remove
-        print(f"    🔍 Looking for additional outliers to remove...")
-        skip_before = set(range(best_offset))
-        best_skip = skip_before.copy()
-        
-        # Try removing each post after offset one at a time
-        for i in range(best_offset, min(len(arrow_posts), best_offset + len(hover_data) + 10)):
-            if i in skip_before:
-                continue
-            skip = skip_before | {i}
-            matches = count_matches_at_offset(hover_data, arrow_posts, 0, skip)
-            if matches > best_matches:
-                best_matches = matches
-                best_skip = skip
-                if verbose:
-                    likes_val = arrow_posts[i].get('likes')
-                    likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) else 'N/A'
-                    date_str = arrow_posts[i].get('date_display', 'N/A')
-                    print(f"    📍 Removing post {i+1} (likes: {likes_str}, date: {date_str}) → {matches} matches")
-        
-        # Try removing combinations of 2 additional posts
-        if best_matches < len(hover_data) * 0.85:
-            for i in range(best_offset, min(len(arrow_posts), best_offset + len(hover_data) + 5)):
-                if i in skip_before:
+                arrow_idx = i + arrow_shift
+                if arrow_idx < 0 or arrow_idx >= len(arrow_list):
                     continue
-                for j in range(i + 1, min(len(arrow_posts), best_offset + len(hover_data) + 5)):
-                    if j in skip_before:
-                        continue
-                    skip = skip_before | {i, j}
-                    matches = count_matches_at_offset(hover_data, arrow_posts, 0, skip)
-                    if matches > best_matches:
-                        best_matches = matches
-                        best_skip = skip
+                
+                hover_likes = hover_reel.get('likes')
+                arrow_likes = arrow_list[arrow_idx].get('likes')
+                
+                if hover_likes is None or arrow_likes is None:
+                    matches += 1  # Can't compare, assume match
+                    continue
+                if not isinstance(hover_likes, (int, float)) or not isinstance(arrow_likes, (int, float)):
+                    matches += 1
+                    continue
+                    
+                max_val = max(hover_likes, arrow_likes)
+                if max_val == 0:
+                    if hover_likes == arrow_likes:
+                        matches += 1
+                    continue
+                
+                diff_pct = abs(hover_likes - arrow_likes) / max_val * 100
+                # Use 20% tolerance - enough for timing differences but not for wrong posts
+                if diff_pct <= 20.0:
+                    matches += 1
+                    details.append(f"H{i}={hover_likes} ≈ A{arrow_idx}={arrow_likes}")
+            
+            return matches, details
         
-        # Report what we're removing
-        extra_skips = best_skip - skip_before
-        if extra_skips:
-            removed_info = []
-            for idx in sorted(extra_skips):
-                if idx < len(arrow_posts):
-                    likes_val = arrow_posts[idx].get('likes')
-                    likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) else 'N/A'
-                    removed_info.append(f"post {idx+1} (likes: {likes_str})")
-            print(f"    🗑️ Removing {len(extra_skips)} outlier(s): {', '.join(removed_info)}")
+        # Try different shifts (-5 to +10) to find best alignment
+        best_shift = 0
+        best_matches = 0
+        best_details = []
         
-        if best_offset > 0:
-            print(f"    ℹ️ Skipping first {best_offset} posts (likely pinned/featured)")
+        print(f"    🔍 Finding best alignment shift...")
+        for shift in range(-5, 15):  # Try shifts from -5 to +14
+            matches, details = count_matches_with_shift(hover_data, arrow_posts, shift)
+            if matches > 0 and verbose:
+                print(f"      Shift {shift:+d}: {matches}/{len(hover_data)} matches")
+            if matches > best_matches:
+                best_matches = matches
+                best_shift = shift
+                best_details = details
         
-        print(f"    ✅ Final alignment: {best_matches}/{len(hover_data)} matches")
+        print(f"    📊 Best shift: {best_shift:+d} with {best_matches}/{len(hover_data)} matches")
         
-        return self.map_aligned_posts(hover_data, arrow_posts, best_skip)
-    
-    def map_aligned_posts(self, hover_data, arrow_posts, skip_indices):
-        """Map hover_data to arrow_posts after removing outliers"""
-        # Filter arrow_posts by removing skipped indices
-        filtered_arrow = [p for i, p in enumerate(arrow_posts) if i not in skip_indices]
+        if best_matches >= len(hover_data) * 0.7:
+            print(f"    ✅ Good alignment found!")
+        else:
+            print(f"    ⚠️ Low alignment - dates may not match correctly")
         
+        # Show some matching examples
+        if verbose and best_details:
+            print(f"    🔗 Sample matches: {', '.join(best_details[:5])}")
+        
+        # Build result by applying the shift
         url_data = []
         for i, reel in enumerate(hover_data):
-            if i < len(filtered_arrow):
-                arrow_post = filtered_arrow[i]
+            arrow_idx = i + best_shift
+            if 0 <= arrow_idx < len(arrow_posts):
+                arrow_post = arrow_posts[arrow_idx]
                 url_data.append({
                     'reel_id': reel['reel_id'],
                     'date': arrow_post.get('date'),
@@ -1340,7 +1281,7 @@ class InstagramScraper:
                     'comments': arrow_post.get('comments'),
                 })
             else:
-                # No matching arrow post
+                # No matching arrow post for this position
                 url_data.append({
                     'reel_id': reel['reel_id'],
                     'date': None,
@@ -1877,11 +1818,27 @@ class InstagramScraper:
                 if not arrow_item.get('date') and url_item.get('date'):
                     url_data[i] = url_item
         
-        # Step 3: Cross-validate data and identify outliers (with log correlation)
-        outliers = self.cross_validate_data(hover_data, url_data, test_mode=test_mode)
+        # Step 3: Cross-validate data and identify outliers (only if enabled)
+        if getattr(self, 'enable_outlier_detection', False):
+            print(f"  🔍 Step 3: Cross-validating data...")
+            outliers = self.cross_validate_data(hover_data, url_data, test_mode=test_mode)
+            # Step 4: Merge data using best values from outlier analysis
+            final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
+        else:
+            print(f"  ✅ Step 3: Using arrow scrape dates directly (outlier detection disabled)")
+            # Simple merge: use hover data for views/likes/comments, url_data for dates
+            final_data = []
+            for hover_reel, url_item in zip(hover_data, url_data):
+                final_data.append({
+                    'reel_id': hover_reel['reel_id'],
+                    'views': hover_reel.get('views'),
+                    'likes': hover_reel.get('likes'),
+                    'comments': hover_reel.get('comments'),
+                    'date': url_item.get('date'),
+                    'date_display': url_item.get('date_display'),
+                    'date_timestamp': url_item.get('date_timestamp'),
+                })
         
-        # Step 4: Merge data using best values from outlier analysis
-        final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
         pinned_count = 0  # Pinned detection not available in hover-first mode
         
         if exact_followers:
@@ -2046,10 +2003,11 @@ class InstagramScraper:
             print(f"   Reels: 15 (will display all 15)")
             print(f"   Browser: {browser_choice.upper()}")
             print(f"   Output: Terminal only (no Excel file)")
-            print(f"   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
+            print(f"   Strategy: Hover FIRST → Arrow Scrape → Cross-validate → Merge")
             print(f"   Debug: Enhanced hover scrape debug info enabled")
             accounts = ["popdartsgame"]
             expected_reels = 15
+            self.enable_outlier_detection = False  # Default off in test mode
         else:
             print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
             for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
@@ -2065,7 +2023,15 @@ class InstagramScraper:
             else:
                 print(f"\n📊 Mode: {max_reels} posts per account")
                 expected_reels = max_reels
-            print("   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
+            print("   Strategy: Hover FIRST → Arrow Scrape → Cross-validate → Merge")
+        
+        # Ask about outlier detection (disabled by default)
+        outlier_choice = input("\n🔍 Enable outlier detection? (y/N, default=No): ").strip().lower()
+        self.enable_outlier_detection = outlier_choice == 'y'
+        if self.enable_outlier_detection:
+            print("   ✅ Outlier detection: ENABLED")
+        else:
+            print("   ℹ️ Outlier detection: DISABLED (dates will be used directly)")
         
         input("\n▶️  Press ENTER to start scraping...")
         
