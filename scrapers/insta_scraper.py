@@ -1059,6 +1059,7 @@ class InstagramScraper:
         2. Navigate through reels using right arrow key
         3. Extract date info from each reel
         4. If /reels/ fails, fallback to main profile page
+        5. Match posts by likes if URL matching fails (handles mixed photo/reel content on main page)
         """
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.common.action_chains import ActionChains
@@ -1071,6 +1072,9 @@ class InstagramScraper:
         # Build set of reel IDs we need to find dates for
         reel_ids_needed = {reel['reel_id'] for reel in hover_data}
         arrow_data = {}  # reel_id -> date data
+        
+        # Store unmatched posts with their data for potential like-based matching
+        unmatched_posts = []  # List of (likes, date_info) for posts that didn't match by URL
         
         # Try /reels/ page first, then main profile as fallback
         pages_to_try = [
@@ -1133,21 +1137,26 @@ class InstagramScraper:
                     # Extract current reel ID from URL
                     current_url = driver.current_url
                     current_reel_id = None
+                    is_photo_post = False
                     
                     if '/reel/' in current_url:
                         current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
                     elif '/p/' in current_url:
-                        # This is a regular post, not a reel
+                        # This is a regular post, not a reel - track it for potential skip
+                        is_photo_post = True
                         current_reel_id = None
                     
                     # Extract date for all posts (for debugging)
                     date_info = self.extract_date_from_current_view(driver)
                     
-                    # Show verbose output for debugging
+                    # Show verbose output for debugging - now includes like count
                     if verbose and posts_processed < 20:  # Show first 20 posts
                         in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
-                        print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                        likes_val = date_info.get('likes')
+                        likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) and likes_val is not None else 'N/A'
+                        post_type = "PHOTO" if is_photo_post else (current_reel_id or 'REEL')
+                        print(f"      [{posts_processed+1}] {post_type} [{in_list}] → {date_str} | Likes: {likes_str}")
                     
                     # If we get 3 consecutive NO DATE on reels page, break and try main page
                     if page_type == "reels" and not date_info.get('date'):
@@ -1166,14 +1175,26 @@ class InstagramScraper:
                             consecutive_misses = 0
                             
                             if test_mode:
-                                print(f"    ✅ [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
+                                likes_val = date_info.get('likes')
+                                likes_str = f"{int(likes_val):,}" if isinstance(likes_val, (int, float)) and likes_val is not None else 'N/A'
+                                print(f"    ✅ [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')} | Likes: {likes_str}")
                             elif len(arrow_data) % 10 == 0:
                                 print(f"    Progress: {len(arrow_data)}/{len(reel_ids_needed)} dates collected...")
                         else:
                             consecutive_misses += 1
                     elif current_reel_id and current_reel_id not in reel_ids_needed:
-                        # Not a match but still found a reel
+                        # Not a match but still found a reel - store for potential like-based matching
+                        if date_info.get('date') and date_info.get('likes') is not None:
+                            unmatched_posts.append((date_info.get('likes'), date_info))
                         consecutive_misses += 1
+                    elif is_photo_post:
+                        # Photo post on main page - skip but don't count as failure since we expect mixed content
+                        # Still store it in case we can match by likes
+                        if date_info.get('date') and date_info.get('likes') is not None:
+                            unmatched_posts.append((date_info.get('likes'), date_info))
+                        # Don't increment consecutive_misses for photo posts on main page
+                        if page_type != "main":
+                            consecutive_misses += 1
                     else:
                         consecutive_misses += 1
                     
@@ -1202,6 +1223,61 @@ class InstagramScraper:
                 if verbose:
                     traceback.print_exc()
                 continue
+        
+        # Try to match remaining reels by like count if we have unmatched posts
+        remaining_reels = [reel_id for reel_id in reel_ids_needed if reel_id not in arrow_data]
+        
+        if remaining_reels and unmatched_posts:
+            print(f"    🔄 Attempting to match {len(remaining_reels)} remaining reels by like count...")
+            matched_by_likes = 0
+            
+            for reel in hover_data:
+                reel_id = reel['reel_id']
+                if reel_id in arrow_data:
+                    continue  # Already matched
+                
+                hover_likes = reel.get('likes')
+                if hover_likes is None or not isinstance(hover_likes, (int, float)):
+                    continue
+                
+                # Look for unmatched post with matching like count (within 5% tolerance)
+                best_match = None
+                best_diff = float('inf')
+                
+                for idx, (post_likes, post_data) in enumerate(unmatched_posts):
+                    if post_likes is None or not isinstance(post_likes, (int, float)):
+                        continue
+                    
+                    # Calculate percentage difference (skip if both are 0)
+                    max_likes = max(hover_likes, post_likes)
+                    if max_likes == 0:
+                        # Both are 0, check for exact match
+                        if hover_likes == post_likes:
+                            best_match = (idx, post_data)
+                            best_diff = 0
+                        continue
+                    
+                    diff_pct = abs(hover_likes - post_likes) / max_likes * 100
+                    
+                    # Accept matches within 5% tolerance (accounts for slight timing differences)
+                    if diff_pct <= 5.0 and diff_pct < best_diff:
+                        best_match = (idx, post_data)
+                        best_diff = diff_pct
+                
+                if best_match:
+                    idx, post_data = best_match
+                    arrow_data[reel_id] = post_data
+                    unmatched_posts.pop(idx)  # Remove from unmatched
+                    matched_by_likes += 1
+                    
+                    if verbose or test_mode:
+                        post_likes_val = post_data.get('likes')
+                        likes_str = f"{int(post_likes_val):,}" if isinstance(post_likes_val, (int, float)) and post_likes_val is not None else 'N/A'
+                        hover_likes_str = f"{int(hover_likes):,}" if isinstance(hover_likes, (int, float)) else 'N/A'
+                        print(f"    🔗 Matched {reel_id} by likes ({hover_likes_str} ≈ {likes_str}): {post_data.get('date_display', 'N/A')}")
+            
+            if matched_by_likes > 0:
+                print(f"    ✅ Matched {matched_by_likes} additional reels by like count")
         
         # Convert arrow_data dict to list format matching hover_data
         url_data = []
