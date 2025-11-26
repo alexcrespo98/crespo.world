@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script to debug date extraction from Instagram posts.
-Opens a reel and prints ALL text content found on the page
-to help identify where date information is located.
+Uses arrow keys to navigate through 10 posts and outputs date extraction results.
 """
 
 import sys
@@ -18,7 +17,7 @@ from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
 
-# Cookies for testing (same as salvage.py)
+# Cookies for testing
 TEST_COOKIES = [
     {'name': 'sessionid',  'value': '8438482535%3AMPEOwRDuMthipr%3A27%3AAYguJpa8sihvpLJqMSyswW-vqrU4gKsC-WHeCKl8gQ', 'domain': '.instagram.com'},
     {'name': 'csrftoken',  'value': 'PDZd_D2WZI-jbxK42IHbh7', 'domain': '.instagram.com'},
@@ -103,7 +102,6 @@ def dismiss_modal(driver):
         except:
             continue
     
-    # Try Escape key
     try:
         driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
         time.sleep(1)
@@ -113,94 +111,105 @@ def dismiss_modal(driver):
     return False
 
 
-def extract_all_text_content(driver):
+def extract_date(driver):
     """
-    Extract ALL text content from the page in various ways
-    to help identify where date information is located.
+    Extract date from currently displayed post.
+    Returns all available information for debugging.
     """
-    results = {}
+    result = {
+        'url': driver.current_url,
+        'reel_id': None,
+        'date': None,
+        'date_display': None,
+        'method_used': None,
+        'all_time_elements': [],
+        'likes': None
+    }
     
-    # 1. Get full body text
-    try:
-        body = driver.find_element(By.TAG_NAME, "body")
-        results['body_text'] = body.text
-    except Exception as e:
-        results['body_text'] = f"ERROR: {e}"
+    # Get reel ID from URL
+    current_url = driver.current_url
+    if '/reel/' in current_url:
+        result['reel_id'] = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+    elif '/p/' in current_url:
+        result['reel_id'] = 'POST:' + current_url.split('/p/')[-1].rstrip('/').split('?')[0]
     
-    # 2. Look for <time> elements (standard HTML date elements)
+    # Find ALL time elements first for debugging
     try:
-        time_elements = driver.find_elements(By.TAG_NAME, "time")
-        results['time_elements'] = []
-        for i, elem in enumerate(time_elements):
-            results['time_elements'].append({
+        all_times = driver.find_elements(By.TAG_NAME, "time")
+        for i, t in enumerate(all_times):
+            elem_info = {
                 'index': i,
-                'text': elem.text,
-                'datetime': elem.get_attribute('datetime'),
-                'title': elem.get_attribute('title'),
-                'outerHTML': elem.get_attribute('outerHTML')[:500] if elem.get_attribute('outerHTML') else None
-            })
+                'text': t.text,
+                'datetime': t.get_attribute('datetime'),
+                'class': t.get_attribute('class'),
+                'title': t.get_attribute('title')
+            }
+            result['all_time_elements'].append(elem_info)
     except Exception as e:
-        results['time_elements'] = f"ERROR: {e}"
+        result['all_time_elements'] = [f"ERROR: {e}"]
     
-    # 3. Look for elements with "ago" text (like "3 weeks ago")
+    # Method 1: CSS selector for specific class
     try:
-        ago_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'ago')]")
-        results['ago_elements'] = []
-        for i, elem in enumerate(ago_elements[:10]):  # Limit to first 10
-            results['ago_elements'].append({
-                'index': i,
-                'text': elem.text[:200] if elem.text else None,
-                'tag': elem.tag_name,
-                'outerHTML': elem.get_attribute('outerHTML')[:300] if elem.get_attribute('outerHTML') else None
-            })
+        time_elements = driver.find_elements(By.CSS_SELECTOR, "time.x1p4m5qa")
+        if time_elements:
+            elem = time_elements[0]
+            result['date'] = elem.get_attribute('datetime')
+            result['date_display'] = elem.text
+            result['method_used'] = 'CSS: time.x1p4m5qa'
     except Exception as e:
-        results['ago_elements'] = f"ERROR: {e}"
+        pass
     
-    # 4. Look for elements with month names
-    months = ['January', 'February', 'March', 'April', 'May', 'June', 
-              'July', 'August', 'September', 'October', 'November', 'December']
+    # Method 2: If no date found, try any time element with datetime and title
+    if not result['date']:
+        try:
+            all_times = driver.find_elements(By.TAG_NAME, "time")
+            for t in all_times:
+                datetime_val = t.get_attribute('datetime')
+                title_val = t.get_attribute('title')
+                # The post date usually has both datetime and title attributes
+                if datetime_val and title_val:
+                    result['date'] = datetime_val
+                    result['date_display'] = t.text
+                    result['method_used'] = 'Fallback: time with datetime+title'
+                    break
+        except:
+            pass
+    
+    # Method 3: If still no date, try first time element with datetime
+    if not result['date']:
+        try:
+            all_times = driver.find_elements(By.TAG_NAME, "time")
+            for t in all_times:
+                datetime_val = t.get_attribute('datetime')
+                if datetime_val:
+                    result['date'] = datetime_val
+                    result['date_display'] = t.text
+                    result['method_used'] = 'Fallback: first time with datetime'
+                    break
+        except:
+            pass
+    
+    # Extract likes
     try:
-        results['month_elements'] = []
-        for month in months:
-            month_elements = driver.find_elements(By.XPATH, f"//*[contains(text(), '{month}')]")
-            for elem in month_elements[:3]:  # Limit to first 3 per month
-                results['month_elements'].append({
-                    'month': month,
-                    'text': elem.text[:200] if elem.text else None,
-                    'tag': elem.tag_name,
-                })
-    except Exception as e:
-        results['month_elements'] = f"ERROR: {e}"
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        import re
+        others_match = re.search(r'and\s+([\d,.]+[KMB]?)\s+others', body_text, re.IGNORECASE)
+        if others_match:
+            result['likes'] = others_match.group(1)
+        else:
+            like_match = re.search(r'([\d,.]+[KMB]?)\s+likes?', body_text, re.IGNORECASE)
+            if like_match:
+                result['likes'] = like_match.group(1)
+    except:
+        pass
     
-    # 5. Look for spans (often contain dates)
-    try:
-        spans = driver.find_elements(By.TAG_NAME, "span")
-        results['span_samples'] = []
-        for i, span in enumerate(spans):
-            text = span.text.strip() if span.text else ""
-            # Only include spans with text that might be date-related
-            if text and len(text) < 50:
-                lower_text = text.lower()
-                if any(kw in lower_text for kw in ['ago', 'week', 'day', 'hour', 'minute', 'second', 
-                                                     'january', 'february', 'march', 'april', 'may', 'june',
-                                                     'july', 'august', 'september', 'october', 'november', 'december']):
-                    results['span_samples'].append({
-                        'index': i,
-                        'text': text,
-                    })
-    except Exception as e:
-        results['span_samples'] = f"ERROR: {e}"
-    
-    # 6. Current URL
-    results['current_url'] = driver.current_url
-    
-    return results
+    return result
 
 
 def run_test(username="popdartsgame"):
     """Run the test on a specified account"""
     print("\n" + "="*70)
-    print("🧪 DATE EXTRACTION TEST SCRIPT")
+    print("🧪 DATE EXTRACTION TEST (Arrow Navigation)")
     print("="*70)
     
     # Select browser
@@ -215,7 +224,7 @@ def run_test(username="popdartsgame"):
     if user_input:
         username = user_input
     
-    print(f"\n📸 Testing date extraction for @{username}")
+    print(f"\n�� Testing date extraction for @{username}")
     
     # Set up driver
     driver = setup_driver(browser)
@@ -264,78 +273,59 @@ def run_test(username="popdartsgame"):
         
         time.sleep(3)
         
-        # Now scrape the content from multiple posts
-        output_lines = []
-        num_posts = 5  # Test 5 posts
+        # Now navigate through 10 posts using arrow keys
+        num_posts = 10
+        results = []
+        
+        print(f"\n  ➡️ Extracting dates from {num_posts} posts using arrow navigation...\n")
+        
+        body = driver.find_element(By.TAG_NAME, "body")
         
         for post_num in range(num_posts):
-            output_lines.append("\n" + "="*70)
-            output_lines.append(f"POST {post_num + 1}")
-            output_lines.append("="*70)
+            # Wait a bit for content to load
+            time.sleep(1.5)
             
-            # Extract all text content
-            results = extract_all_text_content(driver)
+            # Extract date
+            result = extract_date(driver)
+            results.append(result)
             
-            output_lines.append(f"\n📍 URL: {results.get('current_url', 'N/A')}")
+            # Print result
+            date_str = result['date_display'] if result['date_display'] else 'NOT FOUND'
+            datetime_str = result['date'] if result['date'] else 'N/A'
+            method_str = result['method_used'] if result['method_used'] else 'NONE'
+            likes_str = result['likes'] if result['likes'] else 'N/A'
             
-            # Time elements (most likely to have dates)
-            output_lines.append("\n--- <time> ELEMENTS ---")
-            if isinstance(results.get('time_elements'), list):
-                for item in results['time_elements']:
-                    output_lines.append(f"  [{item['index']}] text='{item['text']}' datetime='{item['datetime']}' title='{item['title']}'")
-                    if item.get('outerHTML'):
-                        output_lines.append(f"      HTML: {item['outerHTML']}")
-            else:
-                output_lines.append(f"  {results.get('time_elements')}")
-            
-            # Elements with "ago" 
-            output_lines.append("\n--- ELEMENTS WITH 'ago' ---")
-            if isinstance(results.get('ago_elements'), list):
-                for item in results['ago_elements']:
-                    output_lines.append(f"  [{item['index']}] <{item['tag']}> text='{item['text']}'")
-            else:
-                output_lines.append(f"  {results.get('ago_elements')}")
-            
-            # Elements with month names
-            output_lines.append("\n--- ELEMENTS WITH MONTH NAMES ---")
-            if isinstance(results.get('month_elements'), list):
-                for item in results['month_elements']:
-                    output_lines.append(f"  [{item['month']}] <{item['tag']}> text='{item['text']}'")
-            else:
-                output_lines.append(f"  {results.get('month_elements')}")
-            
-            # Span samples with date keywords
-            output_lines.append("\n--- SPANS WITH DATE KEYWORDS ---")
-            if isinstance(results.get('span_samples'), list):
-                for item in results['span_samples']:
-                    output_lines.append(f"  [{item['index']}] '{item['text']}'")
-            else:
-                output_lines.append(f"  {results.get('span_samples')}")
-            
-            # Full body text (truncated)
-            output_lines.append("\n--- FULL BODY TEXT (first 2000 chars) ---")
-            body_text = results.get('body_text', '')
-            if body_text:
-                output_lines.append(body_text[:2000])
+            print(f"  [{post_num+1:2}] {result['reel_id'] or 'Unknown'}")
+            print(f"       Date: {date_str}")
+            print(f"       Datetime: {datetime_str}")
+            print(f"       Method: {method_str}")
+            print(f"       Likes: {likes_str}")
+            print(f"       Time elements found: {len(result['all_time_elements'])}")
+            if result['all_time_elements'] and not result['date']:
+                # Show what time elements we found if date extraction failed
+                print(f"       Available time elements:")
+                for elem in result['all_time_elements'][:3]:
+                    if isinstance(elem, dict):
+                        print(f"         [{elem['index']}] class='{elem['class']}' text='{elem['text']}' datetime='{elem['datetime']}'")
+            print()
             
             # Navigate to next post
             if post_num < num_posts - 1:
-                print(f"  ➡️ Navigating to post {post_num + 2}...")
-                body = driver.find_element(By.TAG_NAME, "body")
                 body.send_keys(Keys.ARROW_RIGHT)
-                time.sleep(2)
         
-        # Print all output
-        full_output = "\n".join(output_lines)
-        print(full_output)
-        
-        # Save to file
-        output_file = f"date_scrape_test_{username}.txt"
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(full_output)
-        
-        print(f"\n✅ Output saved to: {output_file}")
-        print("Please share the contents of this file so I can refine the date extraction!")
+        # Summary
+        print("\n" + "="*70)
+        print("📊 SUMMARY")
+        print("="*70)
+        dates_found = sum(1 for r in results if r['date'])
+        print(f"  Dates found: {dates_found}/{num_posts}")
+        print(f"  Methods used:")
+        methods = {}
+        for r in results:
+            m = r['method_used'] or 'NONE'
+            methods[m] = methods.get(m, 0) + 1
+        for m, count in methods.items():
+            print(f"    {m}: {count}")
         
         # Keep browser open for inspection
         input("\nPress Enter to close browser...")
