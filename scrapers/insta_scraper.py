@@ -1122,6 +1122,7 @@ class InstagramScraper:
                 body = driver.find_element(By.TAG_NAME, "body")
                 posts_processed = 0
                 consecutive_misses = 0
+                consecutive_no_dates = 0  # Track consecutive posts with no date found
                 max_consecutive_misses = 50  # Increased to allow more posts without matches
                 max_posts = min(len(hover_data) + 200, 2000)  # Limit to reasonable amount
                 
@@ -1147,6 +1148,17 @@ class InstagramScraper:
                         in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
                         print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                    
+                    # If we get 3 consecutive NO DATE on reels page, break and try main page
+                    if page_type == "reels" and not date_info.get('date'):
+                        consecutive_no_dates = consecutive_no_dates + 1 if 'consecutive_no_dates' in dir() else 1
+                        if consecutive_no_dates >= 3:
+                            print(f"    ⚠️ 3 consecutive NO DATE - switching to main page...")
+                            body.send_keys(Keys.ESCAPE)
+                            time.sleep(1)
+                            break
+                    else:
+                        consecutive_no_dates = 0
                     
                     if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
                         if date_info.get('date'):
