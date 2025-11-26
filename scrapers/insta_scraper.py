@@ -1127,10 +1127,12 @@ class InstagramScraper:
                 posts_processed = 0
                 consecutive_misses = 0
                 consecutive_no_dates = 0  # Track consecutive posts with no date found
+                consecutive_photos = 0  # Track consecutive photo posts (not reels)
                 max_consecutive_misses = 50  # Increased to allow more posts without matches
+                max_consecutive_photos = 30  # Stop if we only see photos for too long
                 max_posts = min(len(hover_data) + 200, 2000)  # Limit to reasonable amount
                 
-                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses and consecutive_photos < max_consecutive_photos:
                     # Wait for content to load
                     time.sleep(1.5)
                     
@@ -1170,6 +1172,7 @@ class InstagramScraper:
                         consecutive_no_dates = 0
                     
                     if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
+                        consecutive_photos = 0  # Reset photo counter when we find a reel
                         if date_info.get('date'):
                             arrow_data[current_reel_id] = date_info
                             consecutive_misses = 0
@@ -1183,11 +1186,13 @@ class InstagramScraper:
                         else:
                             consecutive_misses += 1
                     elif current_reel_id and current_reel_id not in reel_ids_needed:
+                        consecutive_photos = 0  # Reset photo counter when we find a reel
                         # Not a match but still found a reel - store for potential like-based matching
                         if date_info.get('date') and date_info.get('likes') is not None:
                             unmatched_posts.append((date_info.get('likes'), date_info))
                         consecutive_misses += 1
                     elif is_photo_post:
+                        consecutive_photos += 1  # Increment photo counter
                         # Photo post on main page - skip but don't count as failure since we expect mixed content
                         # Still store it in case we can match by likes
                         if date_info.get('date') and date_info.get('likes') is not None:
@@ -1202,15 +1207,18 @@ class InstagramScraper:
                     body.send_keys(Keys.ARROW_RIGHT)
                     posts_processed += 1
                     
-                    # Progress update every 50 posts
-                    if posts_processed % 50 == 0:
-                        print(f"    📊 Processed {posts_processed} posts, found {len(arrow_data)} matches...")
+                    # Progress update every 20 posts for better visibility
+                    if posts_processed % 20 == 0:
+                        print(f"    📊 Processed {posts_processed} posts, found {len(arrow_data)} matches, {len(unmatched_posts)} stored for like-matching...")
                     
                     # Check if we've collected all needed dates
                     if len(arrow_data) >= len(reel_ids_needed):
                         print(f"    ✅ Collected all {len(arrow_data)} dates!")
                         break
                 
+                # Report why we stopped
+                if consecutive_photos >= max_consecutive_photos:
+                    print(f"    ⚠️ Stopped: {consecutive_photos} consecutive photo posts without finding reels")
                 # Close the modal/overlay by pressing Escape
                 body.send_keys(Keys.ESCAPE)
                 time.sleep(1)
