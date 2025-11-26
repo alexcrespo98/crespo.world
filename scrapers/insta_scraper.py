@@ -1050,6 +1050,206 @@ class InstagramScraper:
         
         return hover_data
 
+    def arrow_scrape_dates(self, driver, username, hover_data, test_mode=False):
+        """
+        Arrow scrape method - click first reel and use arrow keys to navigate.
+        More reliable than visiting individual URLs (avoids 429 rate limits).
+        
+        1. Go to /reels/ page, click first reel
+        2. Navigate through reels using right arrow key
+        3. Extract date info from each reel
+        4. If /reels/ fails, fallback to main profile page
+        """
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+        
+        if test_mode:
+            print(f"\n  🧪 STEP 2: Arrow scrape (extracting dates via navigation)...")
+        else:
+            print(f"  ➡️ Step 2: Arrow scrape for dates...")
+        
+        # Build set of reel IDs we need to find dates for
+        reel_ids_needed = {reel['reel_id'] for reel in hover_data}
+        arrow_data = {}  # reel_id -> date data
+        
+        # Try /reels/ page first, then main profile as fallback
+        pages_to_try = [
+            f"https://www.instagram.com/{username}/reels/",
+            f"https://www.instagram.com/{username}/"
+        ]
+        
+        for page_url in pages_to_try:
+            if len(arrow_data) >= len(reel_ids_needed):
+                break  # Already got all dates
+            
+            page_type = "reels" if "/reels/" in page_url else "main"
+            print(f"    📄 Trying {page_type} page...")
+            
+            try:
+                driver.get(page_url)
+                self.add_jitter(3, 1)
+                
+                # Dismiss any modals
+                self.dismiss_modal(driver, max_attempts=2)
+                
+                # Find first clickable post/reel
+                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+                
+                if not post_links:
+                    print(f"    ⚠️ No posts found on {page_type} page")
+                    continue
+                
+                # Click the first post
+                first_post = post_links[0]
+                first_post_url = first_post.get_attribute('href')
+                print(f"    🖱️ Clicking first post...")
+                
+                try:
+                    first_post.click()
+                except:
+                    # Try JavaScript click as fallback
+                    driver.execute_script("arguments[0].click();", first_post)
+                
+                self.add_jitter(2, 1)
+                
+                # Now navigate through posts using arrow keys
+                body = driver.find_element(By.TAG_NAME, "body")
+                posts_processed = 0
+                consecutive_misses = 0
+                max_consecutive_misses = 10  # Stop if we miss 10 in a row
+                max_posts = len(hover_data) + 50  # Process a bit more than hover count
+                
+                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+                    # Extract current reel ID from URL
+                    current_url = driver.current_url
+                    current_reel_id = None
+                    
+                    if '/reel/' in current_url:
+                        current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                    elif '/p/' in current_url:
+                        # This is a regular post, not a reel - skip
+                        body.send_keys(Keys.ARROW_RIGHT)
+                        self.add_jitter(0.5, 0.3)
+                        posts_processed += 1
+                        continue
+                    
+                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
+                        # Extract date from this reel
+                        date_info = self.extract_date_from_current_view(driver)
+                        
+                        if date_info.get('date'):
+                            arrow_data[current_reel_id] = date_info
+                            consecutive_misses = 0
+                            
+                            if test_mode:
+                                print(f"    [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
+                            elif len(arrow_data) % 10 == 0:
+                                print(f"    Progress: {len(arrow_data)}/{len(reel_ids_needed)} dates collected...")
+                        else:
+                            consecutive_misses += 1
+                    else:
+                        consecutive_misses += 1
+                    
+                    # Navigate to next post
+                    body.send_keys(Keys.ARROW_RIGHT)
+                    self.add_jitter(0.8, 0.5)  # Small delay between arrows
+                    posts_processed += 1
+                    
+                    # Check if we've collected all needed dates
+                    if len(arrow_data) >= len(reel_ids_needed):
+                        print(f"    ✅ Collected all {len(arrow_data)} dates!")
+                        break
+                
+                # Close the modal/overlay by pressing Escape
+                body.send_keys(Keys.ESCAPE)
+                self.add_jitter(1, 0.5)
+                
+                print(f"    📊 Collected {len(arrow_data)} dates from {page_type} page")
+                
+            except Exception as e:
+                print(f"    ❌ Error on {page_type} page: {str(e)}")
+                continue
+        
+        # Convert arrow_data dict to list format matching hover_data
+        url_data = []
+        for reel in hover_data:
+            reel_id = reel['reel_id']
+            if reel_id in arrow_data:
+                url_data.append({
+                    'reel_id': reel_id,
+                    'date': arrow_data[reel_id].get('date'),
+                    'date_display': arrow_data[reel_id].get('date_display'),
+                    'date_timestamp': arrow_data[reel_id].get('date_timestamp'),
+                    'likes': arrow_data[reel_id].get('likes'),
+                    'comments': arrow_data[reel_id].get('comments'),
+                })
+            else:
+                # No date found for this reel
+                url_data.append({
+                    'reel_id': reel_id,
+                    'date': None,
+                    'date_display': None,
+                    'date_timestamp': None,
+                    'likes': None,
+                    'comments': None,
+                })
+        
+        dates_found = sum(1 for d in url_data if d.get('date'))
+        print(f"  📊 Arrow scrape complete: {dates_found}/{len(hover_data)} dates found")
+        
+        return url_data
+
+    def extract_date_from_current_view(self, driver):
+        """Extract date and other info from the currently displayed reel/post"""
+        data = {
+            'date': None,
+            'date_display': None,
+            'date_timestamp': None,
+            'likes': None,
+            'comments': None,
+        }
+        
+        # Extract date
+        try:
+            time_elements = driver.find_elements(By.TAG_NAME, "time")
+            if time_elements:
+                time_elem = time_elements[0]
+                data['date'] = time_elem.get_attribute('datetime')
+                data['date_display'] = time_elem.text
+                data['date_timestamp'] = self.parse_date_to_timestamp(data['date'])
+        except:
+            pass
+        
+        # Extract likes
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            others_match = re.search(r'and\s+([\d,.]+[KMB]?)\s+others', body_text, re.IGNORECASE)
+            if others_match:
+                data['likes'] = self.parse_number(others_match.group(1))
+            else:
+                like_match = re.search(r'([\d,.]+[KMB]?)\s+likes?', body_text, re.IGNORECASE)
+                if like_match:
+                    data['likes'] = self.parse_number(like_match.group(1))
+        except:
+            pass
+        
+        # Extract comments
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            comment_patterns = [
+                r'View all ([\d,.]+[KMB]?)\s+comments?',
+                r'([\d,.]+[KMB]?)\s+comments?'
+            ]
+            for pattern in comment_patterns:
+                comment_match = re.search(pattern, body_text, re.IGNORECASE)
+                if comment_match:
+                    data['comments'] = self.parse_number(comment_match.group(1))
+                    break
+        except:
+            pass
+        
+        return data
+
     def scrape_individual_urls(self, driver, hover_data, test_mode=False):
         """
         Visit each individual reel URL to extract date information and validate likes.
@@ -1458,7 +1658,7 @@ class InstagramScraper:
     def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, deep_deep=False, test_mode=False):
         """
         Main scraping method using hover-first approach.
-        Hover scrape first, then individual URL scraping for dates.
+        Hover scrape first, then arrow scrape for dates (more reliable than individual URLs).
         """
         # Track current username for backup purposes
         self.current_username = username
@@ -1479,8 +1679,20 @@ class InstagramScraper:
             print(f"  ❌ Hover scrape failed - cannot proceed")
             return [], None, 0
         
-        # Step 2: Individual URL scrape to get dates
-        url_data = self.scrape_individual_urls(driver, hover_data, test_mode=test_mode)
+        # Step 2: Arrow scrape to get dates (more reliable than individual URLs)
+        # Falls back to individual URLs if arrow scrape fails
+        url_data = self.arrow_scrape_dates(driver, username, hover_data, test_mode=test_mode)
+        
+        # Check if arrow scrape got enough dates
+        dates_found = sum(1 for d in url_data if d.get('date'))
+        if dates_found < len(hover_data) * 0.5:  # Less than 50% dates found
+            print(f"  ⚠️ Arrow scrape only found {dates_found}/{len(hover_data)} dates, trying individual URL fallback...")
+            url_data_fallback = self.scrape_individual_urls(driver, hover_data, test_mode=test_mode)
+            
+            # Merge: prefer arrow scrape data, fill in missing with URL scrape
+            for i, (arrow_item, url_item) in enumerate(zip(url_data, url_data_fallback)):
+                if not arrow_item.get('date') and url_item.get('date'):
+                    url_data[i] = url_item
         
         # Step 3: Cross-validate data and identify outliers (with log correlation)
         outliers = self.cross_validate_data(hover_data, url_data, test_mode=test_mode)
