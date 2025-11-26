@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Instagram Salvage Script v1.0
+Instagram Salvage Script v2.0
 - Opens existing Excel file and finds entries with missing dates
 - URL scrapes to get missing date information
 - Falls back to incognito mode if rate limited (429 error)
 - Adds jitter to avoid rate limiting
 - Saves updated data back to Excel
+- Supports both Chrome and Firefox browsers
+- Independent cookie management
 """
 
 import sys
@@ -22,16 +24,26 @@ from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.firefox.service import Service as FirefoxService
 
-# Import cookies and credentials from main scraper
-try:
-    from insta_scraper import INSTAGRAM_COOKIES, INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD
-except ImportError:
-    print("⚠️ Could not import from insta_scraper.py, using defaults")
-    INSTAGRAM_COOKIES = []
-    INSTAGRAM_USERNAME = "crespoworld"
-    INSTAGRAM_PASSWORD = "deleteme"
+# Independent cookies for salvage.py (updated with latest Firefox session)
+SALVAGE_COOKIES = [
+    {'name': 'sessionid',  'value': '8438482535%3AMPEOwRDuMthipr%3A27%3AAYguJpa8sihvpLJqMSyswW-vqrU4gKsC-WHeCKl8gQ', 'domain': '.instagram.com'},
+    {'name': 'csrftoken',  'value': 'PDZd_D2WZI-jbxK42IHbh7', 'domain': '.instagram.com'},
+    {'name': 'ds_user_id', 'value': '8438482535', 'domain': '.instagram.com'},
+    {'name': 'mid',        'value': 'aScXdwALAAHefecqIK7Kolvd0S83', 'domain': '.instagram.com'},
+    {'name': 'ig_did',     'value': 'BDB1F779-BEE2-4C1B-BB51-B7BF706BFE25', 'domain': '.instagram.com'},
+    {'name': 'datr',       'value': 'dxcnaSrRabzedk6Hc5PLcevi', 'domain': '.instagram.com'},
+    {'name': 'rur',        'value': '"NHA\0548438482535\0541795705630:01fe1f0ed9e4a1adb09627c7fee409e812141bbd4b409a0c6f89f9c5bd22a7144d798e1b"', 'domain': '.instagram.com'},
+    {'name': 'wd',         'value': '879x639', 'domain': '.instagram.com'},
+    {'name': 'dpr',        'value': '1.5', 'domain': '.instagram.com'},
+]
+
+# Login credentials for Instagram
+INSTAGRAM_USERNAME = "crespoworld"
+INSTAGRAM_PASSWORD = "deleteme"
 
 
 class InstagramSalvage:
@@ -41,6 +53,9 @@ class InstagramSalvage:
         self.rate_limited = False
         self.consecutive_failures = 0
         self.max_consecutive_failures = 5
+        self.browser_choice = 'chrome'  # Default browser
+        self.cookies = SALVAGE_COOKIES.copy()  # Use independent cookies
+        self.incognito_failed = False  # Track if incognito already failed
         
     def install_package(self, package):
         subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
@@ -154,29 +169,61 @@ class InstagramSalvage:
         print(f"\n✅ Parsed {len(cookies)} Instagram cookies")
         return cookies
 
+    def select_browser(self):
+        """Let user select browser (Chrome or Firefox)"""
+        print("\n" + "="*70)
+        print("🌐 SELECT BROWSER")
+        print("="*70)
+        print("\n1. Chrome (Recommended)")
+        print("2. Firefox")
+        print()
+        while True:
+            choice = input("Enter your choice (1 or 2, default=Chrome): ").strip()
+            if choice == '1' or choice == '':
+                self.browser_choice = 'chrome'
+                return 'chrome'
+            elif choice == '2':
+                self.browser_choice = 'firefox'
+                return 'firefox'
+            else:
+                print("Invalid choice. Please enter 1 or 2.")
+
     def setup_driver(self, incognito=False):
-        """Set up Chrome driver, optionally in incognito mode"""
+        """Set up browser driver, optionally in incognito mode"""
         from webdriver_manager.chrome import ChromeDriverManager
-        global INSTAGRAM_COOKIES
+        from webdriver_manager.firefox import GeckoDriverManager
         
-        mode_str = "incognito" if incognito else "normal"
-        print(f"  🌐 Setting up Chrome driver ({mode_str} mode)...")
+        mode_str = "incognito/private" if incognito else "normal"
+        browser_name = self.browser_choice.capitalize()
+        print(f"  🌐 Setting up {browser_name} driver ({mode_str} mode)...")
         
-        chrome_options = ChromeOptions()
-        chrome_options.add_argument("--start-maximized")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-        chrome_options.add_argument("--log-level=3")
-        chrome_options.add_argument("--disable-logging")
-        
-        if incognito:
-            chrome_options.add_argument("--incognito")
-        
-        service = ChromeService(ChromeDriverManager().install())
-        service.log_path = os.devnull
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        if self.browser_choice == 'chrome':
+            chrome_options = ChromeOptions()
+            chrome_options.add_argument("--start-maximized")
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            chrome_options.add_argument("--log-level=3")
+            chrome_options.add_argument("--disable-logging")
+            
+            if incognito:
+                chrome_options.add_argument("--incognito")
+            
+            service = ChromeService(ChromeDriverManager().install())
+            service.log_path = os.devnull
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        else:
+            # Firefox
+            firefox_options = FirefoxOptions()
+            firefox_options.set_preference("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0")
+            
+            if incognito:
+                firefox_options.add_argument("-private")
+            
+            service = FirefoxService(GeckoDriverManager().install())
+            driver = webdriver.Firefox(service=service, options=firefox_options)
+            driver.maximize_window()
         
         print("  🌐 Loading Instagram...")
         driver.get("https://www.instagram.com")
@@ -184,10 +231,10 @@ class InstagramSalvage:
         
         logged_in = False
         
-        if not incognito and INSTAGRAM_COOKIES:
+        if not incognito and self.cookies:
             print("  🍪 Loading cookies...")
             try:
-                for cookie in INSTAGRAM_COOKIES:
+                for cookie in self.cookies:
                     driver.add_cookie(cookie)
                 driver.refresh()
                 self.add_jitter(3, 1)
@@ -221,7 +268,7 @@ class InstagramSalvage:
             if choice == '1':
                 new_cookies = self.prompt_for_new_cookies()
                 if new_cookies:
-                    INSTAGRAM_COOKIES = new_cookies
+                    self.cookies = new_cookies
                     driver.delete_all_cookies()
                     for cookie in new_cookies:
                         try:
@@ -237,9 +284,11 @@ class InstagramSalvage:
                 driver.quit()
                 sys.exit(0)
         
-        # For incognito, always try to log in
+        # For incognito, try to log in
         if incognito:
-            self.login_to_instagram(driver)
+            if not self.login_to_instagram(driver):
+                print("  ❌ Incognito login failed!")
+                self.incognito_failed = True
         
         return driver
 
@@ -431,13 +480,54 @@ class InstagramSalvage:
             except:
                 pass
         
+        # If incognito already failed, prompt for new cookies instead
+        if self.incognito_failed:
+            print("\n  ⚠️ Incognito mode already failed. Need new cookies.")
+            return self.prompt_for_cookies_and_restart()
+        
         # Set up incognito driver
         self.incognito_driver = self.setup_driver(incognito=True)
         self.rate_limited = False
         self.consecutive_failures = 0
         
+        # Check if incognito setup failed
+        if self.incognito_failed:
+            print("\n  ❌ Incognito login failed!")
+            return self.prompt_for_cookies_and_restart()
+        
         print("  ✅ Incognito mode active!")
         return self.incognito_driver
+
+    def prompt_for_cookies_and_restart(self):
+        """Prompt for new cookies when incognito fails"""
+        print("\n" + "="*70)
+        print("🍪 NEW COOKIES REQUIRED")
+        print("="*70)
+        print("\nBoth normal and incognito modes have failed.")
+        print("Please provide fresh cookies from your browser.\n")
+        
+        new_cookies = self.prompt_for_new_cookies()
+        
+        if not new_cookies:
+            print("\n❌ No cookies provided. Cannot continue.")
+            print("Would you like to:")
+            print("  1. Try again with new cookies")
+            print("  2. Exit")
+            
+            choice = input("\nEnter choice (1/2): ").strip()
+            if choice == '1':
+                return self.prompt_for_cookies_and_restart()
+            else:
+                sys.exit(1)
+        
+        # Update cookies and set up new driver
+        self.cookies = new_cookies
+        self.incognito_failed = False  # Reset flag
+        self.consecutive_failures = 0
+        
+        print("\n🌐 Setting up browser with new cookies...")
+        self.driver = self.setup_driver(incognito=False)
+        return self.driver
 
     def find_missing_dates(self, excel_path):
         """Find all entries with missing dates in the Excel file"""
@@ -486,7 +576,7 @@ class InstagramSalvage:
         self.ensure_packages()
         
         print("\n" + "="*70)
-        print("🔧 Instagram Date Salvage Tool v1.0")
+        print("🔧 Instagram Date Salvage Tool v2.0")
         print("="*70)
         
         # Find missing dates
@@ -502,6 +592,9 @@ class InstagramSalvage:
         if confirm != 'y':
             print("❌ Cancelled")
             return
+        
+        # Select browser
+        self.select_browser()
         
         # Set up driver
         print("\n🌐 Setting up browser...")
