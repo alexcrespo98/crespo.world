@@ -582,24 +582,48 @@ def main():
             print(f"\n  Match rate: {stats['match_rate']:.1f}%")
     
     # Save results
-    print(f"\n💾 Saving to {OUTPUT_FILE}...")
-    with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
-        for account in all_merged:
-            # Main merged data
-            sheet_name = account[:31]
-            all_merged[account].to_excel(writer, sheet_name=sheet_name, index=False)
-            
-            # Orphans sheet if any
-            if account in all_orphans and len(all_orphans[account]) > 0:
-                orphan_sheet = f"{account[:26]}_orph"
-                all_orphans[account].to_excel(writer, sheet_name=orphan_sheet, index=False)
+    if not all_merged:
+        print("❌ No data to save - no accounts were processed successfully")
+        return
     
-    print(f"✅ Merged data saved to {OUTPUT_FILE}")
-    print("\nSheets created:")
-    for account in all_merged:
-        print(f"  - {account}: {len(all_merged[account])} rows")
-        if account in all_orphans and len(all_orphans[account]) > 0:
-            print(f"  - {account[:26]}_orph: {len(all_orphans[account])} orphaned hover entries")
+    print(f"\n💾 Saving to {OUTPUT_FILE}...")
+    try:
+        with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
+            for account in all_merged:
+                # Main merged data - sanitize sheet name
+                sheet_name = account.replace('@', '').replace('/', '_')[:31]
+                if not sheet_name:
+                    sheet_name = "Account"
+                
+                merged_df = all_merged[account]
+                if merged_df is None or len(merged_df) == 0:
+                    print(f"  ⚠️ Skipping {account} - no merged data")
+                    continue
+                    
+                merged_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                print(f"  ✓ Wrote {sheet_name}: {len(merged_df)} rows")
+                
+                # Orphans sheet if any
+                if account in all_orphans and all_orphans[account] is not None and len(all_orphans[account]) > 0:
+                    orphan_sheet = f"{sheet_name[:26]}_orph"
+                    all_orphans[account].to_excel(writer, sheet_name=orphan_sheet, index=False)
+                    print(f"  ✓ Wrote {orphan_sheet}: {len(all_orphans[account])} orphans")
+        
+        print(f"\n✅ Merged data saved to {OUTPUT_FILE}")
+        print("\nSheets created:")
+        for account in all_merged:
+            sheet_name = account.replace('@', '').replace('/', '_')[:31]
+            if all_merged[account] is not None and len(all_merged[account]) > 0:
+                print(f"  - {sheet_name}: {len(all_merged[account])} rows")
+                if account in all_orphans and all_orphans[account] is not None and len(all_orphans[account]) > 0:
+                    print(f"  - {sheet_name[:26]}_orph: {len(all_orphans[account])} orphaned hover entries")
+    except PermissionError:
+        print(f"❌ Cannot save - {OUTPUT_FILE} is open in another program. Close Excel and try again.")
+    except Exception as e:
+        print(f"❌ Error saving file: {e}")
+        import traceback
+        traceback.print_exc()
+    
     print("="*70)
 
 if __name__ == "__main__":
