@@ -3034,17 +3034,16 @@ class InstagramScraper:
         print("="*70)
         print("\n1. Custom scrape (default: 100 posts)")
         print("2. Deep scrape (back 2 years)")
-        print("3. Test mode (15 reels on @popdartsgame)")
-        print("4. Enhanced test mode (50 reels with Excel output)")
+        print("3. Test mode (50 reels on @popdartsgame with diagnostics)")
         print()
         while True:
-            choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
+            choice = input("Enter your choice (1, 2, or 3): ").strip()
             if choice == '1' or choice == '':
                 num_input = input("\nHow many posts per account? (default 100): ").strip()
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False, False, False  # Added 5th return value for enhanced_test_mode
+                        return num_posts, False, False, False, False
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
@@ -3071,11 +3070,9 @@ class InstagramScraper:
                     else:
                         continue
             elif choice == '3':
-                return 15, False, True, False, False
-            elif choice == '4':
-                return 50, False, False, False, True  # Enhanced test mode with 50 posts
+                return 50, False, False, False, True  # Test mode with 50 posts and diagnostics
             else:
-                print("Invalid choice. Please enter 1, 2, 3, or 4.")
+                print("Invalid choice. Please enter 1, 2, or 3.")
 
     def run(self):
         """Main execution function"""
@@ -3090,7 +3087,7 @@ class InstagramScraper:
         browser_choice = self.select_browser()
         max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode = self.get_scrape_mode()
         
-        # Handle enhanced test mode separately
+        # Handle test mode (enhanced diagnostics on @popdartsgame)
         if enhanced_test_mode:
             self.driver = self.setup_driver(browser=browser_choice)
             try:
@@ -3105,37 +3102,28 @@ class InstagramScraper:
                         pass
             return
         
-        if test_mode:
-            print("\n🧪 TEST MODE ACTIVATED")
-            print(f"   Account: @popdartsgame")
-            print(f"   Reels: 15 (will display all 15)")
-            print(f"   Browser: {browser_choice.upper()}")
-            print(f"   Output: Terminal only (no Excel file)")
-            print(f"   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
-            print(f"   Debug: Enhanced hover scrape debug info enabled")
-            accounts = ["popdartsgame"]
-            expected_reels = 15
-        else:
-            print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
-            for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
-                print(f"   {i}. @{account}")
-            print(f"\n   Browser: {browser_choice.upper()}")
-            accounts = ACCOUNTS_TO_TRACK
-            if deep_scrape:
-                if deep_deep:
-                    print("\n🔥 Mode: DEEP DEEP SCRAPE (ALL available posts - no limit)")
-                else:
-                    print("\n🔍 Mode: DEEP SCRAPE (back 2 years)")
-                expected_reels = None
+        # Regular scrape modes (custom or deep)
+        print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
+        for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
+            print(f"   {i}. @{account}")
+        print(f"\n   Browser: {browser_choice.upper()}")
+        accounts = ACCOUNTS_TO_TRACK
+        if deep_scrape:
+            if deep_deep:
+                print("\n🔥 Mode: DEEP DEEP SCRAPE (ALL available posts - no limit)")
             else:
-                print(f"\n📊 Mode: {max_reels} posts per account")
-                expected_reels = max_reels
-            print("   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
+                print("\n🔍 Mode: DEEP SCRAPE (back 2 years)")
+            expected_reels = None
+        else:
+            print(f"\n📊 Mode: {max_reels} posts per account")
+            expected_reels = max_reels
+        print("   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
+        print("   Output: Verbose (shows errors, corrections, salvage status)")
         
         input("\n▶️  Press ENTER to start scraping...")
         
         self.driver = self.setup_driver(browser=browser_choice)
-        existing_data = self.load_existing_excel() if not test_mode else {}
+        existing_data = self.load_existing_excel()
         timestamp_col = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         all_account_data = {}
         scrape_results = {}
@@ -3143,15 +3131,12 @@ class InstagramScraper:
         try:
             for idx, username in enumerate(accounts, 1):
                 print("\n" + "="*70)
-                if test_mode:
-                    print(f"🧪 TEST SCRAPE: @{username}")
-                else:
-                    print(f"📱 [{idx}/{len(accounts)}] Processing @{username}")
+                print(f"📱 [{idx}/{len(accounts)}] Processing @{username}")
                 print("="*70)
                 
                 try:
                     reels_data, followers, pinned_count = self.scrape_instagram_account(
-                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=test_mode
+                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=False
                     )
                     
                     scrape_results[username] = {
@@ -3162,40 +3147,29 @@ class InstagramScraper:
                     }
                     
                     # Store current data for backup
-                    if not test_mode:
-                        existing_df = existing_data.get(username, pd.DataFrame())
-                        df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
-                        all_account_data[username] = df
-                        self.current_data = all_account_data
+                    existing_df = existing_data.get(username, pd.DataFrame())
+                    df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
+                    all_account_data[username] = df
+                    self.current_data = all_account_data
                     
-                    if test_mode:
-                        print("\n" + "="*70)
-                        print("✅ TEST COMPLETE!")
-                        print("="*70)
-                        print(f"\n📊 Summary:")
-                        print(f"   Account: @{username}")
-                        print(f"   Browser: {browser_choice.upper()}")
-                        print(f"   Followers: {followers:,}" if followers else "   Followers: N/A")
-                        print(f"   Reels scraped: {len(reels_data)}")
-                    else:
-                        print(f"\n  ✅ @{username} complete!")
-                        print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
-                        if deep_scrape:
-                            if reels_data:
-                                oldest_date = None
-                                for reel in reversed(reels_data):
-                                    if reel.get('date_timestamp'):
-                                        oldest_date = reel['date_timestamp']
-                                        break
-                                if oldest_date:
-                                    days_back = (datetime.now() - oldest_date).days
-                                    print(f"  🎬 Reels: {len(reels_data)} (spanning ~{days_back} days)")
-                                else:
-                                    print(f"  🎬 Reels: {len(reels_data)}")
+                    print(f"\n  ✅ @{username} complete!")
+                    print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
+                    if deep_scrape:
+                        if reels_data:
+                            oldest_date = None
+                            for reel in reversed(reels_data):
+                                if reel.get('date_timestamp'):
+                                    oldest_date = reel['date_timestamp']
+                                    break
+                            if oldest_date:
+                                days_back = (datetime.now() - oldest_date).days
+                                print(f"  🎬 Reels: {len(reels_data)} (spanning ~{days_back} days)")
                             else:
-                                print(f"  🎬 Reels: 0")
+                                print(f"  🎬 Reels: {len(reels_data)}")
                         else:
-                            print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'}")
+                            print(f"  🎬 Reels: 0")
+                    else:
+                        print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'}")
                 
                 except Exception as e:
                     print(f"\n  ❌ Error with @{username}: {e}")
@@ -3208,16 +3182,15 @@ class InstagramScraper:
                     }
                     continue
             
-            if not test_mode:
-                # Save results
-                self.save_to_excel(all_account_data)
-                self.upload_to_google_drive()
-                
-                print("\n" + "="*70)
-                print("✅ All scraping complete!")
-                print(f"📁 Local file: '{OUTPUT_EXCEL}'")
-                print(f"🌐 View analytics: https://crespo.world/crespomize.html")
-                print("="*70 + "\n")
+            # Save results
+            self.save_to_excel(all_account_data)
+            self.upload_to_google_drive()
+            
+            print("\n" + "="*70)
+            print("✅ All scraping complete!")
+            print(f"📁 Local file: '{OUTPUT_EXCEL}'")
+            print(f"🌐 View analytics: https://crespo.world/crespomize.html")
+            print("="*70 + "\n")
         
         finally:
             if self.driver:
