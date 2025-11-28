@@ -2345,6 +2345,35 @@ class InstagramScraper:
                         final_likes = max(likes_a, likes_a_plus)
                         disagreement = f"likes: A={likes_a} vs A+={likes_a_plus} → used {final_likes}"
                     
+                    # VALIDATION: Check if likes == views (likely extraction error)
+                    # Views and likes being exactly equal is extremely rare and usually means
+                    # the views value was incorrectly captured as likes
+                    likes_equals_views_error = False
+                    if final_views and final_likes and final_views == final_likes:
+                        likes_equals_views_error = True
+                        # Try to use the lower of the two method values if they differ
+                        if likes_a is not None and likes_a_plus is not None:
+                            if likes_a != likes_a_plus:
+                                # Use the one that's NOT equal to views
+                                if likes_a != final_views:
+                                    final_likes = likes_a
+                                elif likes_a_plus != final_views:
+                                    final_likes = likes_a_plus
+                                else:
+                                    # Both are wrong - set to None and flag
+                                    final_likes = None
+                            else:
+                                # Both methods gave same wrong value - set to None
+                                final_likes = None
+                        else:
+                            # Only one method available and it's wrong - set to None
+                            final_likes = None
+                        
+                        if final_likes is None:
+                            disagreement = f"⚠️ EXTRACTION ERROR: likes={final_views} equals views - reset to None"
+                        else:
+                            disagreement = f"⚠️ CORRECTED: likes was {final_views} (=views), now {final_likes}"
+                    
                     hover_data.append({
                         'reel_id': post_id,
                         'url': post_url,
@@ -2354,7 +2383,8 @@ class InstagramScraper:
                         'position': len(hover_data) + 1,
                         'method_a_likes': likes_a,
                         'method_a_plus_likes': likes_a_plus,
-                        'disagreement': disagreement
+                        'disagreement': disagreement,
+                        'likes_equals_views_error': likes_equals_views_error
                     })
                     processed_reel_ids.add(post_id)
                     new_this_cycle = True
@@ -2390,13 +2420,16 @@ class InstagramScraper:
         likes_found = sum(1 for h in hover_data if h.get('likes') is not None)
         comments_found = sum(1 for h in hover_data if h.get('comments') is not None)
         disagreements = sum(1 for h in hover_data if h.get('disagreement'))
+        extraction_errors = sum(1 for h in hover_data if h.get('likes_equals_views_error'))
         
         print(f"\n   ✅ Hover scrape complete: {len(hover_data)} posts")
         print(f"   ✅ Views found: {views_found}/{len(hover_data)}")
         print(f"   ✅ Likes found: {likes_found}/{len(hover_data)}")
         print(f"   ✅ Comments found: {comments_found}/{len(hover_data)}")
         if disagreements > 0:
-            print(f"   ⚠️ Method disagreements resolved: {disagreements}")
+            print(f"   ⚠️ Issues resolved: {disagreements}")
+        if extraction_errors > 0:
+            print(f"   🔧 Likes=Views errors corrected: {extraction_errors}")
         
         # =====================================================================
         # STEP 2: Arrow Scrape for dates (with fallback)
@@ -2655,6 +2688,7 @@ class InstagramScraper:
                 "likes_found": likes_found,
                 "comments_found": comments_found,
                 "disagreements_resolved": disagreements,
+                "extraction_errors_corrected": extraction_errors,
                 "success_rate": round(sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None) / len(hover_data) * 100, 1) if hover_data else 0
             },
             "arrow_scrape": {
@@ -2700,6 +2734,8 @@ class InstagramScraper:
         print(f"\n📌 Pinned Posts: {len(pinned_posts)}")
         print(f"⚠️ Outliers: {len(outliers)}")
         print(f"🔄 Disagreements Resolved: {disagreements}")
+        if extraction_errors > 0:
+            print(f"🔧 Likes=Views Errors Corrected: {extraction_errors}")
         print(f"\n📁 Output files:")
         print(f"   • {test_excel_path} (Excel for analysis)")
         print(f"   • {diagnostic_filename} (JSON diagnostic)")
