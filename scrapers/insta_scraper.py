@@ -77,6 +77,7 @@ class InstagramScraper:
     DISCREPANCY_THRESHOLD_PCT = 10.0  # Threshold for flagging discrepancies between methods
     MAX_ARROW_POSTS_OFFSET = 200  # Extra posts to process beyond target in arrow scrape
     MAX_ARROW_POSTS_CAP = 2000  # Maximum posts to process in arrow scrape
+    POST_TIMEOUT_SECONDS = 10  # Maximum time allowed per post for any method (skip if exceeded)
     
     def __init__(self):
         self.driver = None
@@ -2032,11 +2033,18 @@ class InstagramScraper:
         
         return likes, comments, views
     
-    def hover_method_d_click_through(self, driver, reel_url, reel_id):
+    def hover_method_d_click_through(self, driver, reel_url, reel_id, timeout=None):
         """
         Method D - Click-through method.
         Actually navigates to the post to extract data, then returns.
+        Returns (likes, comments, views, elapsed_time).
+        If timeout is provided, returns early if exceeded.
         """
+        import time as time_module
+        
+        start_time = time_module.time()
+        timeout = timeout or self.POST_TIMEOUT_SECONDS
+        
         views = None
         likes = None  
         comments = None
@@ -2046,10 +2054,20 @@ class InstagramScraper:
             driver.get(reel_url)
             time.sleep(2)
             
+            # Check timeout after navigation
+            elapsed = time_module.time() - start_time
+            if elapsed > timeout:
+                return likes, comments, views, elapsed
+            
             # Extract data from full post view
             data = self.extract_date_from_current_view(driver)
             likes = data.get('likes')
             comments = data.get('comments')
+            
+            # Check timeout before view extraction
+            elapsed = time_module.time() - start_time
+            if elapsed > timeout:
+                return likes, comments, views, elapsed
             
             # Try to get views from the post page
             try:
@@ -2076,7 +2094,8 @@ class InstagramScraper:
             except:
                 pass
         
-        return likes, comments, views
+        elapsed = time_module.time() - start_time
+        return likes, comments, views, elapsed
     
     def arrow_scrape_with_fallback(self, driver, username, hover_data):
         """
@@ -2405,24 +2424,77 @@ class InstagramScraper:
         # STEP 3: Method D - Click-through (slower but more reliable)
         # =====================================================================
         print("\n📍 STEP 3: Running Method D (Click-through)")
-        print("   This method visits each post individually...")
+        print(f"   This method visits each post individually (timeout: {self.POST_TIMEOUT_SECONDS}s per post)...")
+        
+        method_d_timings = []
+        method_d_skipped = 0
+        method_d_consecutive_slow = 0
         
         for i, reel in enumerate(hover_data):
             reel_id = reel['reel_id']
             reel_url = reel.get('url') or f"https://www.instagram.com/reel/{reel_id}/"
             
-            likes_d, comments_d, views_d = self.hover_method_d_click_through(driver, reel_url, reel_id)
-            method_results['method_d'].append({
-                'reel_id': reel_id,
-                'views': views_d,
-                'likes': likes_d,
-                'comments': comments_d
-            })
+            # Skip remaining posts if 3 consecutive slow posts detected
+            if method_d_consecutive_slow >= 3:
+                print(f"   ⚠️ Skipping remaining posts (3 consecutive timeouts)")
+                method_d_skipped += len(hover_data) - i
+                # Add empty results for skipped posts
+                for j in range(i, len(hover_data)):
+                    method_results['method_d'].append({
+                        'reel_id': hover_data[j]['reel_id'],
+                        'views': None,
+                        'likes': None,
+                        'comments': None,
+                        'skipped': True,
+                        'reason': 'consecutive_timeouts'
+                    })
+                break
+            
+            likes_d, comments_d, views_d, elapsed_time = self.hover_method_d_click_through(driver, reel_url, reel_id)
+            method_d_timings.append(elapsed_time)
+            
+            # Check if this post exceeded timeout
+            if elapsed_time > self.POST_TIMEOUT_SECONDS:
+                method_d_consecutive_slow += 1
+                method_d_skipped += 1
+                print(f"   ⏱️ [{i+1}] {reel_id}: {elapsed_time:.1f}s (TIMEOUT - skipped)")
+                method_results['method_d'].append({
+                    'reel_id': reel_id,
+                    'views': views_d,  # May have partial data
+                    'likes': likes_d,
+                    'comments': comments_d,
+                    'skipped': True,
+                    'elapsed_time': elapsed_time,
+                    'reason': 'timeout'
+                })
+            else:
+                method_d_consecutive_slow = 0  # Reset on successful fast post
+                method_results['method_d'].append({
+                    'reel_id': reel_id,
+                    'views': views_d,
+                    'likes': likes_d,
+                    'comments': comments_d,
+                    'elapsed_time': elapsed_time
+                })
             
             if (i + 1) % 5 == 0:
-                print(f"   Progress: {i+1}/{len(hover_data)} posts processed...")
+                avg_time = sum(method_d_timings) / len(method_d_timings)
+                print(f"   Progress: {i+1}/{len(hover_data)} posts (avg: {avg_time:.1f}s/post, skipped: {method_d_skipped})")
         
-        print(f"   ✅ Method D complete")
+        # Calculate timing stats
+        if method_d_timings:
+            avg_time = sum(method_d_timings) / len(method_d_timings)
+            print(f"   ✅ Method D complete (avg: {avg_time:.1f}s/post, skipped: {method_d_skipped}/{len(hover_data)})")
+        else:
+            print(f"   ⚠️ Method D: no posts processed")
+        
+        # Add timing stats to diagnostic data
+        diagnostic_data["method_d_timing"] = {
+            "avg_time_per_post": round(sum(method_d_timings) / len(method_d_timings), 2) if method_d_timings else None,
+            "total_time": round(sum(method_d_timings), 2) if method_d_timings else None,
+            "posts_skipped": method_d_skipped,
+            "timeout_threshold": self.POST_TIMEOUT_SECONDS
+        }
         
         # =====================================================================
         # STEP 4: Analyze and compare all methods
