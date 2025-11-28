@@ -145,6 +145,113 @@ class YoutubeScraper:
         if self.api_quota_used > self.api_quota_limit * 0.8:
             print(f"  ⚠️ API quota warning: {self.api_quota_used}/{self.api_quota_limit} units used")
 
+    def get_exact_subscriber_count(self, channel_id):
+        """
+        Get exact subscriber count from livecounts.io
+        Falls back to API count if this fails.
+        Returns (subscriber_count, source) where source is 'livecounts' or 'api'
+        """
+        try:
+            from selenium import webdriver
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.chrome.service import Service
+            
+            # Set up headless Chrome
+            options = Options()
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--window-size=1920,1080")
+            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            
+            driver = webdriver.Chrome(options=options)
+            driver.set_page_load_timeout(30)
+            
+            try:
+                url = f"https://livecounts.io/youtube-live-subscriber-counter/{channel_id}"
+                print(f"  🔍 Getting exact subscriber count from livecounts.io...")
+                driver.get(url)
+                
+                # Wait for page to load and accept cookies if needed
+                time.sleep(3)
+                
+                # Try to click the OK/Accept cookies button if present
+                try:
+                    accept_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'OK') or contains(text(), 'Accept') or contains(text(), 'Got it') or contains(@class, 'accept')]")
+                    for btn in accept_buttons:
+                        try:
+                            btn.click()
+                            time.sleep(1)
+                            break
+                        except:
+                            continue
+                except:
+                    pass
+                
+                # Wait for the subscriber count to appear
+                time.sleep(3)
+                
+                # Try multiple selectors to find the subscriber count
+                subscriber_count = None
+                
+                # Method 1: Look for the main counter element
+                try:
+                    # The count is usually in a large display element
+                    counter_elements = driver.find_elements(By.CSS_SELECTOR, ".odometer, .counter, [class*='count'], [class*='subscriber'], [class*='number']")
+                    for elem in counter_elements:
+                        text = elem.text.strip().replace(',', '').replace(' ', '')
+                        if text.isdigit() and len(text) > 3:  # At least 1000 subscribers
+                            subscriber_count = int(text)
+                            break
+                except:
+                    pass
+                
+                # Method 2: Parse page source for numbers
+                if not subscriber_count:
+                    try:
+                        page_source = driver.page_source
+                        # Look for large numbers that could be subscriber counts
+                        import re
+                        numbers = re.findall(r'[\d,]+', page_source)
+                        for num_str in numbers:
+                            num = int(num_str.replace(',', ''))
+                            # Subscriber counts are typically between 1K and 100M
+                            if 1000 <= num <= 100000000:
+                                subscriber_count = num
+                                break
+                    except:
+                        pass
+                
+                # Method 3: Look for span elements with numeric content
+                if not subscriber_count:
+                    try:
+                        spans = driver.find_elements(By.TAG_NAME, "span")
+                        for span in spans:
+                            text = span.text.strip().replace(',', '').replace(' ', '')
+                            if text.isdigit() and 1000 <= int(text) <= 100000000:
+                                subscriber_count = int(text)
+                                break
+                    except:
+                        pass
+                
+                if subscriber_count:
+                    print(f"  ✅ Exact subscriber count from livecounts.io: {subscriber_count:,}")
+                    return subscriber_count, 'livecounts'
+                else:
+                    print(f"  ⚠️ Could not parse subscriber count from livecounts.io")
+                    return None, None
+                    
+            finally:
+                driver.quit()
+                
+        except Exception as e:
+            print(f"  ⚠️ livecounts.io failed: {str(e)[:50]}")
+            return None, None
+
     def get_channel_info(self, channel_name):
         """Get channel ID, statistics, and uploads playlist"""
         # Try by handle first
@@ -168,10 +275,23 @@ class YoutubeScraper:
         
         if 'items' in data and len(data['items']) > 0:
             item = data['items'][0]
+            channel_id = item['id']
+            api_subscribers = int(item['statistics'].get('subscriberCount', 0))
+            
+            # Try to get exact subscriber count from livecounts.io
+            exact_subs, source = self.get_exact_subscriber_count(channel_id)
+            final_subscribers = exact_subs if exact_subs else api_subscribers
+            
+            if exact_subs:
+                print(f"  📊 Using exact count: {final_subscribers:,} (API had: {api_subscribers:,})")
+            else:
+                print(f"  📊 Using API count: {final_subscribers:,}")
+            
             return {
-                'channel_id': item['id'],
+                'channel_id': channel_id,
                 'title': item['snippet']['title'],
-                'subscribers': int(item['statistics'].get('subscriberCount', 0)),
+                'subscribers': final_subscribers,
+                'subscribers_source': source if exact_subs else 'api',
                 'total_views': int(item['statistics'].get('viewCount', 0)),
                 'total_videos': int(item['statistics'].get('videoCount', 0)),
                 'uploads_playlist': item['contentDetails']['relatedPlaylists']['uploads']
@@ -215,10 +335,22 @@ class YoutubeScraper:
             
             if 'items' in data:
                 item = data['items'][0]
+                api_subscribers = int(item['statistics'].get('subscriberCount', 0))
+                
+                # Try to get exact subscriber count from livecounts.io
+                exact_subs, source = self.get_exact_subscriber_count(channel_id)
+                final_subscribers = exact_subs if exact_subs else api_subscribers
+                
+                if exact_subs:
+                    print(f"  📊 Using exact count: {final_subscribers:,} (API had: {api_subscribers:,})")
+                else:
+                    print(f"  📊 Using API count: {final_subscribers:,}")
+                
                 return {
                     'channel_id': item['id'],
                     'title': item['snippet']['title'],
-                    'subscribers': int(item['statistics'].get('subscriberCount', 0)),
+                    'subscribers': final_subscribers,
+                    'subscribers_source': source if exact_subs else 'api',
                     'total_views': int(item['statistics'].get('viewCount', 0)),
                     'total_videos': int(item['statistics'].get('videoCount', 0)),
                     'uploads_playlist': item['contentDetails']['relatedPlaylists']['uploads']

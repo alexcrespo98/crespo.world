@@ -1037,20 +1037,27 @@ class InstagramScraper:
                     # VALIDATION: Check if likes == views (extraction error)
                     # Views and likes being exactly equal is extremely rare and usually means
                     # the views value was incorrectly captured as likes
+                    extraction_error_detected = False
                     if views and likes and views == likes:
+                        extraction_error_detected = True
                         # Try to use alternative value if different
                         if likes_a is not None and likes_a_plus is not None:
                             if likes_a != likes_a_plus:
                                 if likes_a != views:
                                     likes = likes_a
+                                    print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views, corrected to {likes_a}")
                                 elif likes_a_plus != views:
                                     likes = likes_a_plus
+                                    print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views, corrected to {likes_a_plus}")
                                 else:
                                     likes = None  # Both are wrong
+                                    print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views (will salvage)")
                             else:
                                 likes = None  # Both methods gave same wrong value
+                                print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views (will salvage)")
                         else:
                             likes = None  # Set to None - will be salvaged later
+                            print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views (will salvage)")
                     
                     # Apply 2-year cutoff only for deep_scrape (not deep_deep)
                     if deep_scrape and not deep_deep and len(hover_data) > 730:
@@ -1072,6 +1079,7 @@ class InstagramScraper:
                     if len(hover_data) % 10 == 0:
                         self.partial_scrape_data = {'hover_data': hover_data.copy()}
                     
+                    # Verbose output for progress
                     if test_mode and len(hover_data) <= max_reels:
                         # Format output to distinguish N/A from 0
                         views_str = 'N/A' if views is None else str(views)
@@ -1080,6 +1088,16 @@ class InstagramScraper:
                         print(f"    [{len(hover_data)}] {post_id}: views={views_str}, likes={likes_str}, comments={comments_str}")
                     elif not test_mode and len(hover_data) % 25 == 0:
                         print(f"    Progress: {len(hover_data)}/{target_reels} reels")
+                    
+                    # Show missing data warnings (will be salvaged later)
+                    if not extraction_error_detected and (likes is None or comments is None):
+                        missing = []
+                        if likes is None:
+                            missing.append("likes")
+                        if comments is None:
+                            missing.append("comments")
+                        if missing:
+                            print(f"    ⚠️ [{len(hover_data)}] {post_id}: Missing {', '.join(missing)} (will salvage)")
                     
                     time.sleep(0.24)
                 except Exception as e:
@@ -1849,17 +1867,14 @@ class InstagramScraper:
                         # Validate recovered likes isn't same as views
                         if not (item.get('views') and salvage_data['likes'] == item['views']):
                             item['likes'] = salvage_data['likes']
-                            if not test_mode:
-                                print(f"    ✅ Recovered likes={salvage_data['likes']} for {reel_id}")
+                            print(f"    ✅ Recovered likes={salvage_data['likes']} for {reel_id}")
                     
                     if 'comments' in missing and salvage_data.get('comments') is not None:
                         item['comments'] = salvage_data['comments']
-                        if not test_mode:
-                            print(f"    ✅ Recovered comments={salvage_data['comments']} for {reel_id}")
+                        print(f"    ✅ Recovered comments={salvage_data['comments']} for {reel_id}")
                     
                 except Exception as e:
-                    if not test_mode:
-                        print(f"    ❌ Salvage failed for {reel_id}: {str(e)[:40]}")
+                    print(f"    ❌ Salvage failed for {reel_id}: {str(e)[:40]}")
                     continue
             
             # Go back to profile page
