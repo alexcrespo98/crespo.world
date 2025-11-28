@@ -348,6 +348,7 @@
     // State management
     let connectedAccounts = [];
     let sessionData = null;
+    let countdownIntervalId = null;  // Track interval to prevent memory leaks
 
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
@@ -453,6 +454,12 @@
     function startSessionCountdown() {
       if (connectedAccounts.length === 0) return;
       
+      // Clear any existing interval to prevent memory leaks
+      if (countdownIntervalId) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+      }
+      
       // Find the earliest expiry
       const earliestExpiry = Math.min(...connectedAccounts.map(a => new Date(a.expiresAt).getTime()));
       
@@ -463,6 +470,11 @@
         if (remaining <= 0) {
           document.getElementById('sessionCountdown').textContent = 'EXPIRED';
           document.getElementById('sessionCountdown').style.color = '#e74c3c';
+          // Clear interval when expired
+          if (countdownIntervalId) {
+            clearInterval(countdownIntervalId);
+            countdownIntervalId = null;
+          }
           return;
         }
         
@@ -475,7 +487,7 @@
       };
       
       updateCountdown();
-      setInterval(updateCountdown, 60000); // Update every minute
+      countdownIntervalId = setInterval(updateCountdown, 60000); // Update every minute
     }
 
     // Initiate Instagram OAuth login
