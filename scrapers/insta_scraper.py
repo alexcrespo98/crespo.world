@@ -73,6 +73,11 @@ class InstagramScraper:
     # Cross-validation outlier threshold (percentage difference to flag as outlier)
     OUTLIER_THRESHOLD_PCT = 20.0
     
+    # Enhanced test mode constants
+    DISCREPANCY_THRESHOLD_PCT = 10.0  # Threshold for flagging discrepancies between methods
+    MAX_ARROW_POSTS_OFFSET = 200  # Extra posts to process beyond target in arrow scrape
+    MAX_ARROW_POSTS_CAP = 2000  # Maximum posts to process in arrow scrape
+    
     def __init__(self):
         self.driver = None
         self.incognito_driver = None  # For fallback on rate limiting
@@ -1869,8 +1874,11 @@ class InstagramScraper:
         """
         Method A - Current baseline hover overlay extraction.
         Uses the existing extract_hover_overlay_data logic.
+        Returns (likes, comments, views) for consistency with other methods.
         """
-        return self.extract_hover_overlay_data(parent, test_mode=False, reel_id=reel_id)
+        likes, comments = self.extract_hover_overlay_data(parent, test_mode=False, reel_id=reel_id)
+        # Views are extracted separately in the main loop, so return None here
+        return likes, comments, None
     
     def hover_method_b_alt_selectors(self, driver, parent, reel_id):
         """
@@ -2029,12 +2037,9 @@ class InstagramScraper:
         Method D - Click-through method.
         Actually navigates to the post to extract data, then returns.
         """
-        from selenium.webdriver.common.keys import Keys
-        
         views = None
         likes = None  
         comments = None
-        original_url = driver.current_url
         
         try:
             # Navigate to the reel
@@ -2061,15 +2066,13 @@ class InstagramScraper:
             except:
                 pass
             
-            # Navigate back
-            driver.back()
-            time.sleep(1.5)
-            
         except Exception as e:
-            # Try to go back on error
+            pass
+        finally:
+            # Always try to navigate back
             try:
                 driver.back()
-                time.sleep(1)
+                time.sleep(1.5)
             except:
                 pass
         
@@ -2131,7 +2134,7 @@ class InstagramScraper:
                 consecutive_misses = 0
                 consecutive_no_dates = 0
                 max_consecutive_misses = 50
-                max_posts = min(len(hover_data) + 200, 2000)
+                max_posts = min(len(hover_data) + self.MAX_ARROW_POSTS_OFFSET, self.MAX_ARROW_POSTS_CAP)
                 
                 while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
                     time.sleep(1.5)
@@ -2289,10 +2292,10 @@ class InstagramScraper:
                         time.sleep(1.2)
                         
                         # Method A - Current (baseline)
-                        likes_a, comments_a = self.hover_method_a_current(parent, post_id)
+                        likes_a, comments_a, views_a = self.hover_method_a_current(parent, post_id)
                         method_results['method_a'].append({
                             'reel_id': post_id,
-                            'views': views,
+                            'views': views_a if views_a else views,
                             'likes': likes_a,
                             'comments': comments_a
                         })
@@ -2547,7 +2550,7 @@ class InstagramScraper:
                 values = list(all_likes.values())
                 max_val = max(values)
                 min_val = min(values)
-                if max_val > 0 and (max_val - min_val) / max_val > 0.1:  # >10% difference
+                if max_val > 0 and (max_val - min_val) / max_val > (self.DISCREPANCY_THRESHOLD_PCT / 100):
                     post_detail["discrepancies"].append({
                         "metric": "likes",
                         **{k: v for k, v in all_likes.items()},
