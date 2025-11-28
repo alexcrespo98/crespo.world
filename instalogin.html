@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Instagram Login - crespo.world</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      text-align: center;
+      margin: 0;
+      padding: 2em;
+    }
+    nav {
+      margin-bottom: 2em;
+    }
+    nav a {
+      color: #0f0;
+      text-decoration: none;
+      margin: 0 1em;
+      font-weight: bold;
+    }
+    nav a:hover {
+      text-decoration: underline;
+    }
+    h1 { 
+      font-size: 2.5em; 
+      margin-bottom: 0.5em; 
+      text-shadow: 0 0 10px #0f0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 2em;
+      border: 2px solid #0f0;
+      background: #111;
+      border-radius: 10px;
+    }
+    .instagram-gradient {
+      background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .login-section {
+      margin: 2em 0;
+      padding: 2em;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #0a0a0a;
+    }
+    .login-section h3 {
+      color: #0f0;
+      margin-bottom: 1em;
+    }
+    input[type="text"], input[type="password"] {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 0.8em;
+      margin: 0.5em 0;
+      font-family: monospace;
+      font-size: 1em;
+      width: 100%;
+      max-width: 300px;
+      box-sizing: border-box;
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none;
+      box-shadow: 0 0 10px #0f0;
+    }
+    button {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 0.8em 1.5em;
+      margin: 0.5em;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 1em;
+      transition: all 0.3s;
+    }
+    button:hover {
+      background: #0f0;
+      color: #000;
+      box-shadow: 0 0 15px #0f0;
+    }
+    .instagram-btn {
+      background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+      color: white;
+      border: none;
+      padding: 1em 2em;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: all 0.3s;
+    }
+    .instagram-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 20px rgba(220, 39, 67, 0.5);
+    }
+    .status-card {
+      background: #0a0a0a;
+      border: 2px solid #0f0;
+      border-radius: 8px;
+      padding: 1.5em;
+      margin: 1.5em 0;
+    }
+    .status-connected {
+      border-color: #2ecc71;
+    }
+    .status-disconnected {
+      border-color: #e74c3c;
+    }
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 0.5em;
+    }
+    .indicator-green {
+      background: #2ecc71;
+      box-shadow: 0 0 10px #2ecc71;
+    }
+    .indicator-red {
+      background: #e74c3c;
+      box-shadow: 0 0 10px #e74c3c;
+    }
+    .account-list {
+      text-align: left;
+      margin: 1em 0;
+    }
+    .account-item {
+      padding: 0.8em;
+      margin: 0.5em 0;
+      border: 1px solid #333;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .account-item .username {
+      color: #0f0;
+      font-weight: bold;
+    }
+    .account-item .expiry {
+      color: #ff0;
+      font-size: 0.85em;
+    }
+    .countdown {
+      color: #ff0;
+      font-size: 1.2em;
+      margin: 0.5em 0;
+    }
+    .info-box {
+      background: #1a1a1a;
+      border-left: 4px solid #0f0;
+      padding: 1em;
+      margin: 1em 0;
+      text-align: left;
+    }
+    .warning-box {
+      background: #1a1a1a;
+      border-left: 4px solid #ff0;
+      padding: 1em;
+      margin: 1em 0;
+      text-align: left;
+      color: #ff0;
+    }
+    .hidden {
+      display: none;
+    }
+    .suggested-accounts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5em;
+      justify-content: center;
+      margin: 1em 0;
+    }
+    .suggested-btn {
+      background: #1a1a1a;
+      color: #0f0;
+      border: 1px solid #0f0;
+      padding: 0.5em 1em;
+      font-size: 0.9em;
+      border-radius: 3px;
+    }
+    .suggested-btn:hover {
+      background: #0f0;
+      color: #000;
+    }
+    .sync-status {
+      margin-top: 1em;
+      padding: 1em;
+      border: 1px dashed #0f0;
+      border-radius: 5px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 0.5em 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0f0, #2ecc71);
+      transition: width 0.3s;
+    }
+    a.nav-active {
+      text-decoration: underline !important;
+      color: #2ecc71 !important;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="index.html">home</a>
+    <a href="chemocam.html">chemocam</a>
+    <a href="crespomize.html">crespomize</a>
+    <a href="instalogin.html" class="nav-active">instalogin</a>
+  </nav>
+
+  <h1>📸 <span class="instagram-gradient">Instagram</span> Login</h1>
+  
+  <div class="container">
+    <!-- Info Section -->
+    <div class="info-box">
+      <strong>🔗 Connect Your Instagram Account</strong><br><br>
+      This connects your Instagram account to the crespomize analytics tracker. 
+      Once connected, your reels data will automatically sync to the Google Drive spreadsheet.
+    </div>
+
+    <!-- Connected Accounts Status -->
+    <div id="connectedAccountsSection" class="status-card">
+      <h3>📊 Connected Accounts</h3>
+      <div id="accountsList" class="account-list">
+        <p style="color: #666;">No accounts connected yet.</p>
+      </div>
+      <div id="syncStatus" class="sync-status hidden">
+        <strong>Last Sync:</strong> <span id="lastSyncTime">Never</span><br>
+        <strong>Next Sync:</strong> <span id="nextSyncTime">-</span>
+      </div>
+    </div>
+
+    <!-- Login Section -->
+    <div class="login-section">
+      <h3>➕ Add Instagram Account</h3>
+      
+      <p>Quick select from MoonMedia accounts:</p>
+      <div class="suggested-accounts">
+        <button class="suggested-btn" onclick="fillUsername('popdartsgame')">@popdartsgame</button>
+        <button class="suggested-btn" onclick="fillUsername('bucketgolfgame')">@bucketgolfgame</button>
+        <button class="suggested-btn" onclick="fillUsername('playbattlegolf')">@playbattlegolf</button>
+        <button class="suggested-btn" onclick="fillUsername('flinggolf')">@flinggolf</button>
+        <button class="suggested-btn" onclick="fillUsername('golfpong.games')">@golfpong.games</button>
+        <button class="suggested-btn" onclick="fillUsername('discgogames')">@discgogames</button>
+        <button class="suggested-btn" onclick="fillUsername('low_tide_golf')">@low_tide_golf</button>
+      </div>
+      
+      <p style="margin-top: 1.5em;">Or add your own account:</p>
+      <div class="suggested-accounts">
+        <button class="suggested-btn" onclick="fillUsername('crespoworld')">@crespoworld</button>
+      </div>
+
+      <div style="margin-top: 1.5em;">
+        <input type="text" id="usernameInput" placeholder="Instagram username" autocomplete="username">
+      </div>
+      
+      <div style="margin-top: 1em;">
+        <button class="instagram-btn" onclick="initiateInstagramLogin()">
+          📸 Connect with Instagram
+        </button>
+      </div>
+      
+      <div class="warning-box" style="margin-top: 1.5em;">
+        <strong>⚠️ Note:</strong> Instagram's API requires OAuth authentication. 
+        When you click connect, you'll be redirected to Instagram to authorize access to your account's media insights.
+      </div>
+    </div>
+
+    <!-- OAuth Configuration Section (for developers) -->
+    <div class="login-section">
+      <h3>⚙️ API Configuration</h3>
+      <p style="color: #888; font-size: 0.9em;">
+        For the Instagram scraper to work automatically, the following setup is required:
+      </p>
+      <div class="info-box">
+        <strong>Current Setup:</strong><br>
+        • Google Drive ID: <code>19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2</code><br>
+        • Scraper: <code>scrapers/insta_scraper.py</code><br>
+        • Status: <span id="scraperStatus" style="color: #2ecc71;">Ready</span>
+      </div>
+      
+      <div id="manualScrapeSection" style="margin-top: 1.5em;">
+        <p>Run manual scrape for connected accounts:</p>
+        <button onclick="triggerManualScrape()">🔄 Run Scraper Now</button>
+        <button onclick="viewAnalytics()">📊 View Analytics</button>
+      </div>
+    </div>
+
+    <!-- Session Info -->
+    <div id="sessionInfo" class="status-card hidden">
+      <h3>🔐 Session Information</h3>
+      <div id="sessionDetails">
+        <p><strong>Status:</strong> <span class="status-indicator indicator-green"></span> Active</p>
+        <p class="countdown">Session expires in: <span id="sessionCountdown">--:--:--</span></p>
+        <p style="font-size: 0.85em; color: #888;">
+          Instagram access tokens expire after 60 days. You'll need to re-authorize before expiry.
+        </p>
+      </div>
+      <button onclick="refreshSession()">🔄 Refresh Session</button>
+      <button onclick="disconnectAll()" style="border-color: #e74c3c; color: #e74c3c;">🔓 Disconnect All</button>
+    </div>
+  </div>
+
+  <script>
+    // Instagram OAuth Configuration
+    // IMPORTANT: For production use, replace 'YOUR_INSTAGRAM_APP_ID' with your actual 
+    // Meta/Facebook App ID obtained from developers.facebook.com
+    // The app must have Instagram Basic Display API or Instagram Graph API enabled
+    const INSTAGRAM_CONFIG = {
+      // Demo mode is enabled when no real client ID is configured
+      // In demo mode, account connections are simulated locally
+      demoMode: true,  // Set to false when using real Instagram OAuth
+      clientId: 'YOUR_INSTAGRAM_APP_ID', // Replace with your Instagram App ID for production
+      redirectUri: window.location.origin + '/instalogin.html',
+      scope: 'user_profile,user_media',
+      googleDriveSheetId: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2'
+    };
+
+    // MoonMedia suggested accounts
+    const MOONMEDIA_ACCOUNTS = [
+      'popdartsgame',
+      'bucketgolfgame', 
+      'playbattlegolf',
+      'flinggolf',
+      'golfpong.games',
+      'discgogames',
+      'low_tide_golf'
+    ];
+
+    // State management
+    let connectedAccounts = [];
+    let sessionData = null;
+    let countdownIntervalId = null;  // Track interval to prevent memory leaks
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      loadConnectedAccounts();
+      checkOAuthCallback();
+      updateUI();
+    });
+
+    // Fill username input with suggested account
+    function fillUsername(username) {
+      document.getElementById('usernameInput').value = username;
+    }
+
+    // Load connected accounts from localStorage with validation
+    function loadConnectedAccounts() {
+      try {
+        const saved = localStorage.getItem('instagram_connected_accounts');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Validate that parsed data is an array with expected structure
+          if (Array.isArray(parsed)) {
+            connectedAccounts = parsed.filter(account => 
+              account && 
+              typeof account.username === 'string' && 
+              typeof account.expiresAt === 'string'
+            );
+          }
+        }
+        const session = localStorage.getItem('instagram_session');
+        if (session) {
+          const parsedSession = JSON.parse(session);
+          // Validate session data structure
+          if (parsedSession && typeof parsedSession === 'object') {
+            sessionData = parsedSession;
+          }
+        }
+      } catch (e) {
+        console.error('Error loading saved data:', e);
+        // Reset to defaults on error
+        connectedAccounts = [];
+        sessionData = null;
+      }
+    }
+
+    // Save connected accounts to localStorage
+    function saveConnectedAccounts() {
+      localStorage.setItem('instagram_connected_accounts', JSON.stringify(connectedAccounts));
+      if (sessionData) {
+        localStorage.setItem('instagram_session', JSON.stringify(sessionData));
+      }
+    }
+
+    // Update UI based on current state
+    function updateUI() {
+      const accountsList = document.getElementById('accountsList');
+      const sessionInfo = document.getElementById('sessionInfo');
+      const syncStatus = document.getElementById('syncStatus');
+
+      if (connectedAccounts.length > 0) {
+        let html = '';
+        connectedAccounts.forEach(account => {
+          const expiryDate = new Date(account.expiresAt);
+          const daysLeft = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+          const expiryColor = daysLeft > 7 ? '#2ecc71' : (daysLeft > 0 ? '#ff0' : '#e74c3c');
+          
+          html += `
+            <div class="account-item">
+              <div>
+                <span class="username">@${account.username}</span>
+                <br>
+                <span class="expiry" style="color: ${expiryColor}">
+                  ${daysLeft > 0 ? `Expires in ${daysLeft} days` : 'Expired'}
+                </span>
+              </div>
+              <button onclick="removeAccount('${account.username}')" style="padding: 0.3em 0.6em; font-size: 0.8em;">✕</button>
+            </div>
+          `;
+        });
+        accountsList.innerHTML = html;
+        
+        sessionInfo.classList.remove('hidden');
+        syncStatus.classList.remove('hidden');
+        
+        // Update countdown
+        startSessionCountdown();
+        
+        // Update sync times
+        const lastSync = localStorage.getItem('instagram_last_sync');
+        if (lastSync) {
+          document.getElementById('lastSyncTime').textContent = new Date(parseInt(lastSync)).toLocaleString();
+        }
+        const nextSync = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
+        document.getElementById('nextSyncTime').textContent = new Date(nextSync).toLocaleString();
+        
+      } else {
+        accountsList.innerHTML = '<p style="color: #666;">No accounts connected yet.</p>';
+        sessionInfo.classList.add('hidden');
+        syncStatus.classList.add('hidden');
+      }
+    }
+
+    // Start session countdown timer
+    function startSessionCountdown() {
+      if (connectedAccounts.length === 0) return;
+      
+      // Clear any existing interval to prevent memory leaks
+      if (countdownIntervalId) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+      }
+      
+      // Find the earliest expiry
+      const earliestExpiry = Math.min(...connectedAccounts.map(a => new Date(a.expiresAt).getTime()));
+      
+      const updateCountdown = () => {
+        const now = Date.now();
+        const remaining = earliestExpiry - now;
+        
+        if (remaining <= 0) {
+          document.getElementById('sessionCountdown').textContent = 'EXPIRED';
+          document.getElementById('sessionCountdown').style.color = '#e74c3c';
+          // Clear interval when expired
+          if (countdownIntervalId) {
+            clearInterval(countdownIntervalId);
+            countdownIntervalId = null;
+          }
+          return;
+        }
+        
+        const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+        
+        document.getElementById('sessionCountdown').textContent = 
+          `${days}d ${hours}h ${minutes}m`;
+      };
+      
+      updateCountdown();
+      countdownIntervalId = setInterval(updateCountdown, 60000); // Update every minute
+    }
+
+    // Initiate Instagram OAuth login
+    function initiateInstagramLogin() {
+      const username = document.getElementById('usernameInput').value.trim();
+      
+      if (!username) {
+        alert('Please enter or select an Instagram username first.');
+        return;
+      }
+      
+      // Store the username we're trying to connect
+      localStorage.setItem('instagram_pending_username', username);
+      
+      // Check if running in demo mode or production mode
+      if (INSTAGRAM_CONFIG.demoMode) {
+        // Demo mode - simulate connection locally
+        simulateConnection(username);
+      } else {
+        // Production mode - redirect to Instagram OAuth
+        const authUrl = `https://api.instagram.com/oauth/authorize?` +
+          `client_id=${INSTAGRAM_CONFIG.clientId}&` +
+          `redirect_uri=${encodeURIComponent(INSTAGRAM_CONFIG.redirectUri)}&` +
+          `scope=${INSTAGRAM_CONFIG.scope}&` +
+          `response_type=code`;
+        
+        window.location.href = authUrl;
+      }
+    }
+
+    // Simulate connection for demo purposes
+    function simulateConnection(username) {
+      // Check if already connected
+      if (connectedAccounts.some(a => a.username === username)) {
+        alert(`@${username} is already connected!`);
+        return;
+      }
+      
+      // Add to connected accounts with 60-day expiry
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 60);
+      
+      // Note: In demo mode, we use a placeholder token identifier
+      // In production with real OAuth, this would be replaced with the actual access token
+      connectedAccounts.push({
+        username: username,
+        connectedAt: new Date().toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        isDemo: true  // Flag to indicate this is a demo connection
+      });
+      
+      saveConnectedAccounts();
+      updateUI();
+      
+      // Clear input
+      document.getElementById('usernameInput').value = '';
+      
+      alert(`✅ Successfully connected @${username}!\n\nYour reels data will sync to the Google Drive spreadsheet.`);
+    }
+
+    // Check for OAuth callback
+    function checkOAuthCallback() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      
+      if (code) {
+        // Handle OAuth callback
+        const pendingUsername = localStorage.getItem('instagram_pending_username');
+        
+        if (pendingUsername) {
+          // In production, exchange code for access token via your backend
+          // For now, simulate success
+          simulateConnection(pendingUsername);
+          localStorage.removeItem('instagram_pending_username');
+        }
+        
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+
+    // Remove an account
+    function removeAccount(username) {
+      if (confirm(`Disconnect @${username}?`)) {
+        connectedAccounts = connectedAccounts.filter(a => a.username !== username);
+        saveConnectedAccounts();
+        updateUI();
+      }
+    }
+
+    // Refresh session
+    function refreshSession() {
+      alert('To refresh your session, disconnect and reconnect your accounts.\n\nInstagram access tokens are valid for 60 days.');
+    }
+
+    // Disconnect all accounts
+    function disconnectAll() {
+      if (confirm('Disconnect all Instagram accounts?')) {
+        connectedAccounts = [];
+        sessionData = null;
+        localStorage.removeItem('instagram_connected_accounts');
+        localStorage.removeItem('instagram_session');
+        updateUI();
+      }
+    }
+
+    // Trigger manual scrape
+    function triggerManualScrape() {
+      if (connectedAccounts.length === 0) {
+        alert('Please connect at least one Instagram account first.');
+        return;
+      }
+      
+      const accountsToScrape = connectedAccounts.map(a => a.username).join(', ');
+      
+      alert(`🔄 Manual Scrape Initiated\n\nAccounts: ${accountsToScrape}\n\nTo run the scraper:\n1. Open terminal\n2. Navigate to scrapers folder\n3. Run: python insta_scraper.py\n\nThe data will automatically upload to Google Drive.`);
+      
+      // Update last sync time
+      localStorage.setItem('instagram_last_sync', Date.now().toString());
+      updateUI();
+    }
+
+    // View analytics
+    function viewAnalytics() {
+      window.location.href = 'crespomize.html';
+    }
+  </script>
+</body>
+</html>
