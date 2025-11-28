@@ -1129,7 +1129,8 @@ class InstagramScraper:
         1. Go to /reels/ page, click first reel
         2. Navigate through reels using right arrow key
         3. Extract date info from each reel
-        4. If /reels/ fails, fallback to main profile page
+        4. If /reels/ fails, fallback to main profile page (fresh start)
+        5. Keep reels data as backup for cross-validation
         """
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.common.action_chains import ActionChains
@@ -1142,6 +1143,7 @@ class InstagramScraper:
         # Build set of reel IDs we need to find dates for
         reel_ids_needed = {reel['reel_id'] for reel in hover_data}
         arrow_data = {}  # reel_id -> date data
+        reels_page_data = {}  # Keep reels page data as backup
         
         # Try /reels/ page first, then main profile as fallback
         pages_to_try = [
@@ -1156,9 +1158,19 @@ class InstagramScraper:
             page_type = "reels" if "/reels/" in page_url else "main"
             print(f"    📄 Trying {page_type} page...")
             
+            # Save reels page data before trying main page
+            if page_type == "main" and arrow_data:
+                reels_page_data = arrow_data.copy()
+                print(f"    📦 Keeping {len(reels_page_data)} dates from reels page as backup")
+            
             try:
+                # Use shorter timeout for page load to avoid long hangs
+                driver.set_page_load_timeout(30)  # 30 second timeout
                 driver.get(page_url)
                 time.sleep(4)  # Wait for page to load
+                
+                # Reset to normal timeout
+                driver.set_page_load_timeout(120)
                 
                 # Dismiss any modals
                 self.dismiss_modal(driver, max_attempts=2)
@@ -1262,17 +1274,58 @@ class InstagramScraper:
                         break
                 
                 # Close the modal/overlay by pressing Escape
-                body.send_keys(Keys.ESCAPE)
-                time.sleep(1)
+                try:
+                    body.send_keys(Keys.ESCAPE)
+                    time.sleep(1)
+                except:
+                    pass
                 
                 print(f"    📊 Collected {len(arrow_data)} dates from {page_type} page (processed {posts_processed} posts)")
                 
             except Exception as e:
                 import traceback
-                print(f"    ❌ Error on {page_type} page: {str(e)}")
+                error_msg = str(e)
+                
+                # Check if this is a timeout error
+                if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                    print(f"    ⏱️ Timeout on {page_type} page - trying recovery...")
+                    
+                    # Try to recover: navigate to a simple page first
+                    try:
+                        driver.set_page_load_timeout(15)  # Short timeout
+                        driver.get("about:blank")
+                        time.sleep(1)
+                        driver.set_page_load_timeout(120)  # Reset timeout
+                        
+                        # If we have reels data, we can continue with it
+                        if reels_page_data:
+                            print(f"    ✅ Using {len(reels_page_data)} dates from reels page backup")
+                            arrow_data = reels_page_data
+                        
+                    except:
+                        pass
+                else:
+                    print(f"    ❌ Error on {page_type} page: {error_msg[:60]}")
+                
                 if verbose:
                     traceback.print_exc()
                 continue
+        
+        # Cross-validate if we have data from both reels and main pages
+        if reels_page_data and arrow_data != reels_page_data:
+            # Check for overlapping reel_ids and validate dates match
+            overlap = set(reels_page_data.keys()) & set(arrow_data.keys())
+            if overlap:
+                matches = sum(1 for r in overlap if reels_page_data[r].get('date') == arrow_data[r].get('date'))
+                if len(overlap) > 0:
+                    match_rate = matches / len(overlap) * 100
+                    print(f"    🔍 Cross-validation: {matches}/{len(overlap)} dates match ({match_rate:.0f}%)")
+                    
+                    # Merge: prefer main page data, fill in missing with reels data
+                    for reel_id, data in reels_page_data.items():
+                        if reel_id not in arrow_data:
+                            arrow_data[reel_id] = data
+                    print(f"    ✅ Merged: now have {len(arrow_data)} dates total")
         
         # Convert arrow_data dict to list format matching hover_data
         url_data = []
