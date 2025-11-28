@@ -993,17 +993,64 @@ class InstagramScraper:
                     parent = post_link.find_element(By.XPATH, "..")
                     views = self.extract_views_from_container(parent)
                     
+                    # ===== Method A (standard hover - 1.1s) =====
+                    likes_a = None
+                    comments_a = None
                     try:
                         actions = ActionChains(driver)
                         actions.move_to_element(parent).perform()
                         time.sleep(1.1)
-                        likes, comments = self.extract_hover_overlay_data(
+                        likes_a, comments_a = self.extract_hover_overlay_data(
                             parent, 
-                            test_mode=test_mode and len(hover_data) < max_reels, 
+                            test_mode=False, 
                             reel_id=post_id
                         )
                     except:
-                        likes, comments = None, None
+                        pass
+                    
+                    # ===== Method A+ (optimized hover - 1.5s with re-trigger) =====
+                    likes_a_plus = None
+                    comments_a_plus = None
+                    try:
+                        # Move away briefly then back (helps trigger overlay refresh)
+                        actions = ActionChains(driver)
+                        actions.move_by_offset(10, 10).perform()
+                        time.sleep(0.3)
+                        actions.move_to_element(parent).perform()
+                        time.sleep(1.5)
+                        likes_a_plus, comments_a_plus = self.extract_hover_overlay_data(
+                            parent, 
+                            test_mode=False, 
+                            reel_id=post_id
+                        )
+                    except:
+                        pass
+                    
+                    # Use best available values with disagreement resolution
+                    likes = likes_a_plus if likes_a_plus is not None else likes_a
+                    comments = comments_a_plus if comments_a_plus is not None else comments_a
+                    
+                    # If methods disagree on likes, use higher value (usually more accurate)
+                    if likes_a is not None and likes_a_plus is not None and likes_a != likes_a_plus:
+                        likes = max(likes_a, likes_a_plus)
+                    
+                    # VALIDATION: Check if likes == views (extraction error)
+                    # Views and likes being exactly equal is extremely rare and usually means
+                    # the views value was incorrectly captured as likes
+                    if views and likes and views == likes:
+                        # Try to use alternative value if different
+                        if likes_a is not None and likes_a_plus is not None:
+                            if likes_a != likes_a_plus:
+                                if likes_a != views:
+                                    likes = likes_a
+                                elif likes_a_plus != views:
+                                    likes = likes_a_plus
+                                else:
+                                    likes = None  # Both are wrong
+                            else:
+                                likes = None  # Both methods gave same wrong value
+                        else:
+                            likes = None  # Set to None - will be salvaged later
                     
                     # Apply 2-year cutoff only for deep_scrape (not deep_deep)
                     if deep_scrape and not deep_deep and len(hover_data) > 730:
@@ -1769,6 +1816,55 @@ class InstagramScraper:
         # Step 4: Merge data using best values from outlier analysis
         final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
         pinned_count = 0  # Pinned detection not available in hover-first mode
+        
+        # Step 5: Salvage scrape for posts missing critical data (likes, comments)
+        posts_needing_salvage = [d for d in final_data if d.get('likes') is None or d.get('comments') is None]
+        
+        if posts_needing_salvage and len(posts_needing_salvage) <= 10:
+            # Only salvage if there are a reasonable number of missing posts (avoid long delays)
+            print(f"\n  🔧 Salvaging {len(posts_needing_salvage)} posts with missing data...")
+            
+            for item in posts_needing_salvage:
+                reel_id = item['reel_id']
+                reel_url = f"https://www.instagram.com/reel/{reel_id}/"
+                missing = []
+                if item.get('likes') is None:
+                    missing.append('likes')
+                if item.get('comments') is None:
+                    missing.append('comments')
+                
+                try:
+                    # Add jitter before request (1-3 seconds)
+                    self.add_jitter(base_delay=1.0, max_jitter=2.0)
+                    
+                    # Navigate to the specific post
+                    driver.get(reel_url)
+                    time.sleep(2)
+                    
+                    # Extract data from the post page
+                    salvage_data = self.extract_date_from_current_view(driver)
+                    
+                    # Update with recovered data
+                    if 'likes' in missing and salvage_data.get('likes') is not None:
+                        # Validate recovered likes isn't same as views
+                        if not (item.get('views') and salvage_data['likes'] == item['views']):
+                            item['likes'] = salvage_data['likes']
+                            if not test_mode:
+                                print(f"    ✅ Recovered likes={salvage_data['likes']} for {reel_id}")
+                    
+                    if 'comments' in missing and salvage_data.get('comments') is not None:
+                        item['comments'] = salvage_data['comments']
+                        if not test_mode:
+                            print(f"    ✅ Recovered comments={salvage_data['comments']} for {reel_id}")
+                    
+                except Exception as e:
+                    if not test_mode:
+                        print(f"    ❌ Salvage failed for {reel_id}: {str(e)[:40]}")
+                    continue
+            
+            # Go back to profile page
+            driver.get(f"https://www.instagram.com/{username}/reels/")
+            time.sleep(2)
         
         if exact_followers:
             followers = exact_followers
