@@ -2205,39 +2205,31 @@ class InstagramScraper:
         
         return arrow_data, page_type_used
     
-    def run_enhanced_test_mode(self, driver, username, max_reels=30):
+    def run_enhanced_test_mode(self, driver, username, max_reels=50):
         """
-        Enhanced Test Mode - Runs 4 different hover scrape methods in parallel 
-        on 30 posts, compares results, and generates diagnostic JSON.
+        Enhanced Test Mode - Optimized scraping with outlier detection and pinned post identification.
+        - Uses Method A (proven) + Method A+ (optimized variant)
+        - Detects pinned posts (out of chronological sequence)
+        - Finds outliers (likes > views, or off the logarithmic trend)
+        - Smart disagreement resolution using statistical analysis
+        - Outputs test.xlsx file for analysis
         """
+        import pandas as pd
+        import math
+        
         print("\n" + "="*70)
         print("🧪 ENHANCED TEST MODE: @" + username + f" ({max_reels} posts)")
         print("="*70)
         print("\nThis mode will:")
-        print("  • Run arrow scrape for URLs and dates (with reels→main fallback)")
-        print("  • Test 4 different hover scrape methods")
-        print("  • Compare and align results from all methods")
-        print("  • Generate diagnostic JSON file")
-        print("  • Recommend best method per metric")
+        print("  • Run hover scrape with Method A + optimized variant")
+        print("  • Run arrow scrape for dates (with reels→main fallback)")
+        print("  • Detect pinned posts (out of chronological sequence)")
+        print("  • Find outliers (likes > views, off logarithmic trend)")
+        print("  • Smart disagreement resolution")
+        print("  • Output test.xlsx file for analysis")
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        diagnostic_data = {
-            "test_config": {
-                "account": username,
-                "posts_analyzed": max_reels,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            },
-            "arrow_scrape": {},
-            "hover_methods": {
-                "method_a": {"views_found": 0, "likes_found": 0, "comments_found": 0},
-                "method_b": {"views_found": 0, "likes_found": 0, "comments_found": 0},
-                "method_c": {"views_found": 0, "likes_found": 0, "comments_found": 0},
-                "method_d": {"views_found": 0, "likes_found": 0, "comments_found": 0},
-            },
-            "alignment": {},
-            "per_post_detail": [],
-            "recommendations": []
-        }
+        timestamp_col = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # Get follower count using existing API method
         print("\n📍 STEP 0: Getting Follower Count")
@@ -2247,13 +2239,13 @@ class InstagramScraper:
             print(f"   ✅ Exact follower count: {followers:,}")
         else:
             print("   ⚠️ Could not get exact follower count")
-        diagnostic_data["test_config"]["followers"] = followers
         
         # =====================================================================
-        # STEP 1: Hover Scrape to get URLs and initial metrics (views, likes, comments)
+        # STEP 1: Hover Scrape with multiple passes to skip no posts
         # =====================================================================
-        print("\n📍 STEP 1: Hover Scrape (Primary - views, likes, comments, URLs)")
+        print("\n📍 STEP 1: Hover Scrape (Method A + optimized variants)")
         print("   Scrolling through grid and hovering over posts...")
+        print("   Running multiple passes to ensure no posts are skipped...")
         
         profile_url = f"https://www.instagram.com/{username}/reels/"
         driver.get(profile_url)
@@ -2263,17 +2255,13 @@ class InstagramScraper:
         time.sleep(2)
         
         hover_data = []
-        method_results = {
-            'method_a': [],  # Current method (baseline)
-            'method_b': [],  # Alt selectors
-            'method_c': [],  # Regex
-            'method_d': [],  # Click-through (will be populated later)
-        }
-        
+        method_a_results = []  # Standard Method A
+        method_a_plus_results = []  # Optimized variant with longer hover
         processed_reel_ids = set()
         fail_counter = 0
+        pass_number = 1
         
-        while len(hover_data) < max_reels and fail_counter < 10:
+        while len(hover_data) < max_reels and fail_counter < 15:  # Increased fail threshold
             post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
             new_this_cycle = False
             
@@ -2301,80 +2289,114 @@ class InstagramScraper:
                     
                     parent = post_link.find_element(By.XPATH, "..")
                     
-                    # Get views from container (for initial data)
+                    # Get views from container first
                     views = self.extract_views_from_container(parent)
                     
-                    # Hover over the element
+                    # ===== Method A (standard) =====
+                    likes_a = None
+                    comments_a = None
+                    views_a = None
                     try:
                         actions = ActionChains(driver)
                         actions.move_to_element(parent).perform()
-                        time.sleep(1.2)
-                        
-                        # Method A - Current (baseline)
+                        time.sleep(1.2)  # Standard timing
                         likes_a, comments_a, views_a = self.hover_method_a_current(parent, post_id)
-                        method_results['method_a'].append({
-                            'reel_id': post_id,
-                            'views': views_a if views_a else views,
-                            'likes': likes_a,
-                            'comments': comments_a
-                        })
-                        
-                        # Method B - Alt selectors
-                        likes_b, comments_b, views_b = self.hover_method_b_alt_selectors(driver, parent, post_id)
-                        method_results['method_b'].append({
-                            'reel_id': post_id,
-                            'views': views_b if views_b else views,
-                            'likes': likes_b,
-                            'comments': comments_b
-                        })
-                        
-                        # Method C - Regex
-                        likes_c, comments_c, views_c = self.hover_method_c_body_regex(driver, parent, post_id)
-                        method_results['method_c'].append({
-                            'reel_id': post_id,
-                            'views': views_c if views_c else views,
-                            'likes': likes_c,
-                            'comments': comments_c
-                        })
-                        
-                    except Exception as e:
-                        likes_a, comments_a = None, None
-                        method_results['method_a'].append({'reel_id': post_id, 'views': views, 'likes': None, 'comments': None})
-                        method_results['method_b'].append({'reel_id': post_id, 'views': views, 'likes': None, 'comments': None})
-                        method_results['method_c'].append({'reel_id': post_id, 'views': views, 'likes': None, 'comments': None})
+                    except:
+                        pass
+                    
+                    method_a_results.append({
+                        'reel_id': post_id,
+                        'views': views_a if views_a else views,
+                        'likes': likes_a,
+                        'comments': comments_a
+                    })
+                    
+                    # ===== Method A+ (optimized - longer hover, re-extract) =====
+                    likes_a_plus = None
+                    comments_a_plus = None
+                    views_a_plus = None
+                    try:
+                        # Move away briefly then back (helps trigger overlay refresh)
+                        actions = ActionChains(driver)
+                        actions.move_by_offset(10, 10).perform()
+                        time.sleep(0.3)
+                        actions.move_to_element(parent).perform()
+                        time.sleep(1.5)  # Longer hover time
+                        likes_a_plus, comments_a_plus, views_a_plus = self.hover_method_a_current(parent, post_id)
+                    except:
+                        pass
+                    
+                    method_a_plus_results.append({
+                        'reel_id': post_id,
+                        'views': views_a_plus if views_a_plus else views,
+                        'likes': likes_a_plus,
+                        'comments': comments_a_plus
+                    })
+                    
+                    # Use best available values (prefer non-None)
+                    final_views = views_a_plus or views_a or views
+                    final_likes = likes_a_plus if likes_a_plus is not None else likes_a
+                    final_comments = comments_a_plus if comments_a_plus is not None else comments_a
+                    
+                    # Check for disagreement and log it
+                    disagreement = None
+                    if likes_a is not None and likes_a_plus is not None and likes_a != likes_a_plus:
+                        # Use higher value (usually more accurate for likes)
+                        final_likes = max(likes_a, likes_a_plus)
+                        disagreement = f"likes: A={likes_a} vs A+={likes_a_plus} → used {final_likes}"
                     
                     hover_data.append({
                         'reel_id': post_id,
                         'url': post_url,
-                        'views': views,
-                        'likes': likes_a,  # Use method A as primary
-                        'comments': comments_a,
-                        'position': len(hover_data) + 1
+                        'views': final_views,
+                        'likes': final_likes,
+                        'comments': final_comments,
+                        'position': len(hover_data) + 1,
+                        'method_a_likes': likes_a,
+                        'method_a_plus_likes': likes_a_plus,
+                        'disagreement': disagreement
                     })
                     processed_reel_ids.add(post_id)
                     new_this_cycle = True
                     
                     # Progress output
-                    views_str = 'N/A' if views is None else str(views)
-                    likes_str = 'N/A' if likes_a is None else str(likes_a)
-                    comments_str = 'N/A' if comments_a is None else str(comments_a)
-                    print(f"   [{len(hover_data)}] {post_id}: views={views_str}, likes={likes_str}, comments={comments_str}")
+                    views_str = 'N/A' if final_views is None else str(final_views)
+                    likes_str = 'N/A' if final_likes is None else str(final_likes)
+                    comments_str = 'N/A' if final_comments is None else str(final_comments)
+                    disagree_str = f" ⚠️ {disagreement}" if disagreement else ""
+                    print(f"   [{len(hover_data)}] {post_id}: views={views_str}, likes={likes_str}, comments={comments_str}{disagree_str}")
                     
-                    time.sleep(0.25)
+                    time.sleep(0.2)
                     
                 except Exception as e:
                     continue
             
             if not new_this_cycle:
                 fail_counter += 1
+                # On fail, scroll back up a bit and try again (catch orphans)
+                if fail_counter % 3 == 0:
+                    driver.execute_script("window.scrollBy(0, -300);")
+                    time.sleep(0.5)
+                    pass_number += 1
+                    print(f"   📍 Pass {pass_number}: Scrolling back to catch any missed posts...")
             else:
                 fail_counter = 0
             
-            driver.execute_script("window.scrollBy(0, 600);")
-            time.sleep(0.7)
+            driver.execute_script("window.scrollBy(0, 500);")
+            time.sleep(0.6)
+        
+        # Summary of hover scrape
+        views_found = sum(1 for h in hover_data if h.get('views'))
+        likes_found = sum(1 for h in hover_data if h.get('likes') is not None)
+        comments_found = sum(1 for h in hover_data if h.get('comments') is not None)
+        disagreements = sum(1 for h in hover_data if h.get('disagreement'))
         
         print(f"\n   ✅ Hover scrape complete: {len(hover_data)} posts")
-        print(f"   ✅ Extracted {sum(1 for h in hover_data if h['url'])} URLs")
+        print(f"   ✅ Views found: {views_found}/{len(hover_data)}")
+        print(f"   ✅ Likes found: {likes_found}/{len(hover_data)}")
+        print(f"   ✅ Comments found: {comments_found}/{len(hover_data)}")
+        if disagreements > 0:
+            print(f"   ⚠️ Method disagreements resolved: {disagreements}")
         
         # =====================================================================
         # STEP 2: Arrow Scrape for dates (with fallback)
@@ -2384,336 +2406,280 @@ class InstagramScraper:
         
         arrow_data, page_type_used = self.arrow_scrape_with_fallback(driver, username, hover_data)
         
-        # Convert to list format
-        url_data = []
+        # Merge arrow scrape dates with hover data
         for reel in hover_data:
             reel_id = reel['reel_id']
             if reel_id in arrow_data:
-                url_data.append({
-                    'reel_id': reel_id,
-                    'date': arrow_data[reel_id].get('date'),
-                    'date_display': arrow_data[reel_id].get('date_display'),
-                    'date_timestamp': arrow_data[reel_id].get('date_timestamp'),
-                    'likes': arrow_data[reel_id].get('likes'),
-                    'comments': arrow_data[reel_id].get('comments'),
-                })
+                reel['date'] = arrow_data[reel_id].get('date')
+                reel['date_display'] = arrow_data[reel_id].get('date_display')
+                reel['date_timestamp'] = arrow_data[reel_id].get('date_timestamp')
             else:
-                url_data.append({
-                    'reel_id': reel_id,
-                    'date': None,
-                    'date_display': None,
-                    'date_timestamp': None,
-                    'likes': None,
-                    'comments': None,
-                })
+                reel['date'] = None
+                reel['date_display'] = None
+                reel['date_timestamp'] = None
         
-        dates_found = sum(1 for d in url_data if d.get('date'))
-        diagnostic_data["arrow_scrape"] = {
-            "page_type_used": page_type_used or "none",
-            "posts_found": len(hover_data),
-            "urls_extracted": sum(1 for h in hover_data if h.get('url')),
-            "dates_extracted": dates_found,
-            "success_rate": round(dates_found / len(hover_data) * 100, 1) if hover_data else 0
-        }
-        
+        dates_found = sum(1 for h in hover_data if h.get('date'))
         print(f"\n   Page type used: {page_type_used or 'none'}")
-        print(f"   ✅ Found {len(hover_data)} posts")
-        print(f"   ✅ Extracted {dates_found} dates")
+        print(f"   ✅ Extracted {dates_found}/{len(hover_data)} dates")
         
         # =====================================================================
-        # STEP 3: Method D - Click-through (slower but more reliable)
+        # STEP 3: Detect Pinned Posts (out of chronological sequence)
         # =====================================================================
-        print("\n📍 STEP 3: Running Method D (Click-through)")
-        print(f"   This method visits each post individually (timeout: {self.POST_TIMEOUT_SECONDS}s per post)...")
+        print("\n📍 STEP 3: Detecting Pinned Posts")
         
-        method_d_timings = []
-        method_d_skipped = 0
-        method_d_consecutive_slow = 0
+        pinned_posts = []
+        posts_with_dates = [(i, h) for i, h in enumerate(hover_data) if h.get('date_timestamp')]
+        
+        if len(posts_with_dates) >= 2:
+            # Sort by date to find chronological order
+            sorted_by_date = sorted(posts_with_dates, key=lambda x: x[1]['date_timestamp'], reverse=True)
+            
+            for i, (orig_pos, reel) in enumerate(posts_with_dates):
+                # Check if this post is significantly out of order (more than 3 positions)
+                expected_pos = next((j for j, (_, r) in enumerate(sorted_by_date) if r['reel_id'] == reel['reel_id']), orig_pos)
+                if abs(orig_pos - expected_pos) > 3:
+                    pinned_posts.append({
+                        'reel_id': reel['reel_id'],
+                        'position': orig_pos + 1,
+                        'expected_position': expected_pos + 1,
+                        'date': reel.get('date_display'),
+                        'reason': 'Out of chronological sequence'
+                    })
+                    reel['is_pinned'] = True
+                else:
+                    reel['is_pinned'] = False
+        
+        # Also check first 3 posts - often pinned
+        for i, reel in enumerate(hover_data[:3]):
+            if reel.get('date_timestamp') and not reel.get('is_pinned'):
+                # If an early post has an old date, it might be pinned
+                if len(posts_with_dates) >= 5:
+                    avg_recent_date = sum(h['date_timestamp'].timestamp() for _, h in posts_with_dates[3:8] if h.get('date_timestamp')) / min(5, len(posts_with_dates) - 3)
+                    if reel['date_timestamp'].timestamp() < avg_recent_date - (30 * 24 * 60 * 60):  # 30 days older
+                        pinned_posts.append({
+                            'reel_id': reel['reel_id'],
+                            'position': i + 1,
+                            'date': reel.get('date_display'),
+                            'reason': 'Early position with old date (likely pinned)'
+                        })
+                        reel['is_pinned'] = True
+        
+        if pinned_posts:
+            print(f"   📌 Found {len(pinned_posts)} likely pinned posts:")
+            for p in pinned_posts:
+                print(f"      Position {p['position']}: {p['reel_id']} ({p['date']}) - {p['reason']}")
+        else:
+            print("   ✅ No pinned posts detected")
+        
+        # =====================================================================
+        # STEP 4: Find Outliers (likes > views, off logarithmic trend)
+        # =====================================================================
+        print("\n📍 STEP 4: Finding Outliers")
+        
+        outliers = []
+        
+        # Build logarithmic regression model for views vs likes
+        valid_pairs = [(h['views'], h['likes']) for h in hover_data 
+                       if h.get('views') and h.get('views') > 0 
+                       and h.get('likes') is not None and h['likes'] > 0]
+        
+        log_a, log_b = None, None
+        if len(valid_pairs) >= 5:
+            try:
+                log_views = [math.log(v) for v, l in valid_pairs]
+                log_likes = [math.log(l) for v, l in valid_pairs]
+                
+                n = len(valid_pairs)
+                sum_x = sum(log_views)
+                sum_y = sum(log_likes)
+                sum_xy = sum(x * y for x, y in zip(log_views, log_likes))
+                sum_xx = sum(x * x for x in log_views)
+                
+                denominator = n * sum_xx - sum_x * sum_x
+                if denominator != 0:
+                    log_a = (n * sum_xy - sum_x * sum_y) / denominator
+                    log_b = (sum_y - log_a * sum_x) / n
+                    print(f"   📈 Logarithmic model: log(likes) = {log_a:.3f} × log(views) + {log_b:.3f}")
+            except:
+                pass
         
         for i, reel in enumerate(hover_data):
-            reel_id = reel['reel_id']
-            reel_url = reel.get('url') or f"https://www.instagram.com/reel/{reel_id}/"
+            views = reel.get('views')
+            likes = reel.get('likes')
+            outlier_reasons = []
             
-            # Skip remaining posts if 3 consecutive slow posts detected
-            if method_d_consecutive_slow >= 3:
-                print(f"   ⚠️ Skipping remaining posts (3 consecutive timeouts)")
-                method_d_skipped += len(hover_data) - i
-                # Add empty results for skipped posts
-                for j in range(i, len(hover_data)):
-                    method_results['method_d'].append({
-                        'reel_id': hover_data[j]['reel_id'],
-                        'views': None,
-                        'likes': None,
-                        'comments': None,
-                        'skipped': True,
-                        'reason': 'consecutive_timeouts'
-                    })
-                break
+            # Check 1: likes > views (impossible/error)
+            if views and likes and likes > views:
+                outlier_reasons.append(f"likes ({likes}) > views ({views})")
             
-            likes_d, comments_d, views_d, elapsed_time = self.hover_method_d_click_through(driver, reel_url, reel_id)
-            method_d_timings.append(elapsed_time)
+            # Check 2: Off logarithmic trend (>3x expected or <0.33x expected)
+            if log_a is not None and views and views > 0 and likes and likes > 0:
+                try:
+                    expected_log_likes = log_a * math.log(views) + log_b
+                    expected_likes = math.exp(expected_log_likes)
+                    ratio = likes / expected_likes
+                    
+                    if ratio > 3:
+                        outlier_reasons.append(f"likes {ratio:.1f}x higher than expected ({int(expected_likes)})")
+                    elif ratio < 0.33:
+                        outlier_reasons.append(f"likes {ratio:.1f}x lower than expected ({int(expected_likes)})")
+                except:
+                    pass
             
-            # Check if this post exceeded timeout
-            if elapsed_time > self.POST_TIMEOUT_SECONDS:
-                method_d_consecutive_slow += 1
-                method_d_skipped += 1
-                print(f"   ⏱️ [{i+1}] {reel_id}: {elapsed_time:.1f}s (TIMEOUT - skipped)")
-                method_results['method_d'].append({
-                    'reel_id': reel_id,
-                    'views': views_d,  # May have partial data
-                    'likes': likes_d,
-                    'comments': comments_d,
-                    'skipped': True,
-                    'elapsed_time': elapsed_time,
-                    'reason': 'timeout'
+            # Check 3: Zero likes but has views (suspicious)
+            if views and views > 1000 and (likes == 0 or likes is None):
+                outlier_reasons.append(f"no likes but {views} views")
+            
+            if outlier_reasons:
+                outliers.append({
+                    'reel_id': reel['reel_id'],
+                    'position': i + 1,
+                    'views': views,
+                    'likes': likes,
+                    'reasons': outlier_reasons
                 })
+                reel['is_outlier'] = True
+                reel['outlier_reasons'] = outlier_reasons
             else:
-                method_d_consecutive_slow = 0  # Reset on successful fast post
-                method_results['method_d'].append({
-                    'reel_id': reel_id,
-                    'views': views_d,
-                    'likes': likes_d,
-                    'comments': comments_d,
-                    'elapsed_time': elapsed_time
-                })
-            
-            if (i + 1) % 5 == 0:
-                avg_time = sum(method_d_timings) / len(method_d_timings)
-                print(f"   Progress: {i+1}/{len(hover_data)} posts (avg: {avg_time:.1f}s/post, skipped: {method_d_skipped})")
+                reel['is_outlier'] = False
         
-        # Calculate timing stats
-        if method_d_timings:
-            avg_time = sum(method_d_timings) / len(method_d_timings)
-            print(f"   ✅ Method D complete (avg: {avg_time:.1f}s/post, skipped: {method_d_skipped}/{len(hover_data)})")
+        if outliers:
+            print(f"   ⚠️ Found {len(outliers)} outliers:")
+            for o in outliers:
+                print(f"      Position {o['position']}: {o['reel_id']} - {', '.join(o['reasons'])}")
         else:
-            print(f"   ⚠️ Method D: no posts processed")
+            print("   ✅ No outliers detected")
         
-        # Add timing stats to diagnostic data
-        diagnostic_data["method_d_timing"] = {
-            "avg_time_per_post": round(sum(method_d_timings) / len(method_d_timings), 2) if method_d_timings else None,
-            "total_time": round(sum(method_d_timings), 2) if method_d_timings else None,
-            "posts_skipped": method_d_skipped,
-            "timeout_threshold": self.POST_TIMEOUT_SECONDS
+        # =====================================================================
+        # STEP 5: Check for orphans (missing posts in sequence)
+        # =====================================================================
+        print("\n📍 STEP 5: Checking for Orphans/Missing Posts")
+        
+        orphan_check = {
+            'total_posts': len(hover_data),
+            'with_views': views_found,
+            'with_likes': likes_found,
+            'with_comments': comments_found,
+            'with_dates': dates_found,
+            'complete_posts': sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None and h.get('date')),
+            'missing_views': [h['reel_id'] for h in hover_data if not h.get('views')],
+            'missing_likes': [h['reel_id'] for h in hover_data if h.get('likes') is None],
+            'missing_comments': [h['reel_id'] for h in hover_data if h.get('comments') is None],
+            'missing_dates': [h['reel_id'] for h in hover_data if not h.get('date')]
         }
         
-        # =====================================================================
-        # STEP 4: Analyze and compare all methods
-        # =====================================================================
-        print("\n📍 STEP 4: Hover Scrape Method Comparison")
-        print("=" * 60)
+        if orphan_check['complete_posts'] == len(hover_data):
+            print(f"   ✅ All {len(hover_data)} posts complete - no orphans!")
+        else:
+            print(f"   📊 Complete posts: {orphan_check['complete_posts']}/{len(hover_data)}")
+            if orphan_check['missing_views']:
+                print(f"   ⚠️ Missing views: {orphan_check['missing_views'][:5]}{'...' if len(orphan_check['missing_views']) > 5 else ''}")
+            if orphan_check['missing_likes']:
+                print(f"   ⚠️ Missing likes: {orphan_check['missing_likes'][:5]}{'...' if len(orphan_check['missing_likes']) > 5 else ''}")
+            if orphan_check['missing_dates']:
+                print(f"   ⚠️ Missing dates: {orphan_check['missing_dates'][:5]}{'...' if len(orphan_check['missing_dates']) > 5 else ''}")
         
-        for method_name, results in method_results.items():
-            views_found = sum(1 for r in results if r.get('views') is not None)
-            likes_found = sum(1 for r in results if r.get('likes') is not None)
-            comments_found = sum(1 for r in results if r.get('comments') is not None)
-            total = len(results) if results else 1
+        # =====================================================================
+        # STEP 6: Build final data with all analysis
+        # =====================================================================
+        print("\n📍 STEP 6: Building final data")
+        
+        final_data = []
+        for reel in hover_data:
+            # Calculate engagement if we have all values
+            engagement = None
+            if reel.get('views') and reel.get('likes') is not None and reel.get('comments') is not None:
+                if reel['views'] > 0:
+                    engagement = round(((reel['likes'] + reel['comments']) / reel['views']) * 100, 2)
             
-            diagnostic_data["hover_methods"][method_name] = {
+            final_data.append({
+                'reel_id': reel['reel_id'],
+                'position': reel['position'],
+                'is_pinned': reel.get('is_pinned', False),
+                'is_outlier': reel.get('is_outlier', False),
+                'outlier_reasons': reel.get('outlier_reasons', []),
+                'date': reel.get('date'),
+                'date_display': reel.get('date_display'),
+                'views': reel.get('views'),
+                'likes': reel.get('likes'),
+                'comments': reel.get('comments'),
+                'engagement': engagement,
+                'method_a_likes': reel.get('method_a_likes'),
+                'method_a_plus_likes': reel.get('method_a_plus_likes'),
+                'disagreement': reel.get('disagreement')
+            })
+        
+        # =====================================================================
+        # STEP 7: Save to test.xlsx (same format as normal scrape)
+        # =====================================================================
+        print("\n📍 STEP 7: Saving to test.xlsx")
+        
+        # Create DataFrame in same format as create_dataframe_for_account
+        df = pd.DataFrame()
+        df[timestamp_col] = None
+        
+        df.loc["followers", timestamp_col] = followers
+        df.loc["reels_scraped", timestamp_col] = len(final_data)
+        df.loc["pinned_posts", timestamp_col] = len(pinned_posts)
+        df.loc["outliers", timestamp_col] = len(outliers)
+        
+        for reel in final_data:
+            reel_id = reel['reel_id']
+            for metric in ['is_pinned', 'is_outlier', 'date', 'date_display', 'views', 'likes', 'comments', 'engagement']:
+                row_name = f"reel_{reel_id}_{metric}"
+                df.loc[row_name, timestamp_col] = reel.get(metric, "")
+        
+        # Save to test.xlsx
+        test_excel_path = "test.xlsx"
+        try:
+            with pd.ExcelWriter(test_excel_path, engine='openpyxl') as writer:
+                sheet_name = username[:31]
+                df.to_excel(writer, sheet_name=sheet_name)
+            print(f"   ✅ Saved: {test_excel_path}")
+        except Exception as e:
+            print(f"   ❌ Error saving Excel: {e}")
+        
+        # =====================================================================
+        # STEP 8: Save comprehensive diagnostic JSON
+        # =====================================================================
+        diagnostic_data = {
+            "test_config": {
+                "account": username,
+                "posts_analyzed": len(hover_data),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "followers": followers
+            },
+            "hover_scrape": {
+                "method": "method_a + method_a_plus",
                 "views_found": views_found,
                 "likes_found": likes_found,
                 "comments_found": comments_found,
-                "success_rate": round((views_found + likes_found + comments_found) / (total * 3) * 100, 1)
-            }
-            
-            method_display = {
-                'method_a': 'Method A (Current)',
-                'method_b': 'Method B (Alt Selectors)',
-                'method_c': 'Method C (Regex)',
-                'method_d': 'Method D (Click-through)'
-            }
-            
-            print(f"\n   {method_display[method_name]}:")
-            print(f"      Views: {views_found}/{total}")
-            print(f"      Likes: {likes_found}/{total}")
-            print(f"      Comments: {comments_found}/{total}")
-        
-        # =====================================================================
-        # STEP 5: Data Alignment and Per-Post Detail
-        # =====================================================================
-        print("\n📍 STEP 5: Data Alignment")
-        print("=" * 60)
-        
-        perfect_matches = 0
-        partial_matches = 0
-        failures = 0
-        
-        for i, reel in enumerate(hover_data):
-            reel_id = reel['reel_id']
-            position = i + 1
-            
-            # Get data from all methods
-            method_a_data = method_results['method_a'][i] if i < len(method_results['method_a']) else {}
-            method_b_data = method_results['method_b'][i] if i < len(method_results['method_b']) else {}
-            method_c_data = method_results['method_c'][i] if i < len(method_results['method_c']) else {}
-            method_d_data = method_results['method_d'][i] if i < len(method_results['method_d']) else {}
-            arrow_item = url_data[i] if i < len(url_data) else {}
-            
-            post_detail = {
-                "position": position,
-                "reel_id": reel_id,
-                "url": reel.get('url'),
-                "url_found_by": "hover_scrape",
-                "date_found_by": "arrow_scrape" if arrow_item.get('date') else None,
-                "date": arrow_item.get('date_display'),
-                "discrepancies": []
-            }
-            
-            # Determine best value for each metric using cascading fallback
-            # Views: Try A → B → C → D
-            views_sources = [
-                ('method_a', method_a_data.get('views')),
-                ('method_b', method_b_data.get('views')),
-                ('method_c', method_c_data.get('views')),
-                ('method_d', method_d_data.get('views')),
-            ]
-            views_value = None
-            views_source = None
-            for src, val in views_sources:
-                if val is not None:
-                    views_value = val
-                    views_source = src
-                    break
-            post_detail["views_found_by"] = views_source
-            post_detail["views"] = views_value
-            
-            # Likes: Try A → B → C → D
-            likes_sources = [
-                ('method_a', method_a_data.get('likes')),
-                ('method_b', method_b_data.get('likes')),
-                ('method_c', method_c_data.get('likes')),
-                ('method_d', method_d_data.get('likes')),
-            ]
-            likes_value = None
-            likes_source = None
-            for src, val in likes_sources:
-                if val is not None:
-                    likes_value = val
-                    likes_source = src
-                    break
-            post_detail["likes_found_by"] = likes_source
-            post_detail["likes"] = likes_value
-            
-            # Comments: Try A → B → C → D
-            comments_sources = [
-                ('method_a', method_a_data.get('comments')),
-                ('method_b', method_b_data.get('comments')),
-                ('method_c', method_c_data.get('comments')),
-                ('method_d', method_d_data.get('comments')),
-            ]
-            comments_value = None
-            comments_source = None
-            for src, val in comments_sources:
-                if val is not None:
-                    comments_value = val
-                    comments_source = src
-                    break
-            post_detail["comments_found_by"] = comments_source
-            post_detail["comments"] = comments_value
-            
-            # Check for discrepancies between methods
-            all_likes = {k: v for k, v in [
-                ('method_a', method_a_data.get('likes')),
-                ('method_b', method_b_data.get('likes')),
-                ('method_c', method_c_data.get('likes')),
-                ('method_d', method_d_data.get('likes')),
-            ] if v is not None}
-            
-            if len(all_likes) >= 2:
-                values = list(all_likes.values())
-                max_val = max(values)
-                min_val = min(values)
-                if max_val > 0 and (max_val - min_val) / max_val > (self.DISCREPANCY_THRESHOLD_PCT / 100):
-                    post_detail["discrepancies"].append({
-                        "metric": "likes",
-                        **{k: v for k, v in all_likes.items()},
-                        "difference_pct": round((max_val - min_val) / max_val * 100, 1),
-                        "value_used": likes_value,
-                        "reason": f"Used {likes_source} (first available)"
-                    })
-            
-            # Categorize match quality
-            has_all = all([
-                post_detail.get('url'),
-                post_detail.get('date'),
-                post_detail.get('views'),
-                post_detail.get('likes'),
-                post_detail.get('comments')
-            ])
-            has_some = any([
-                post_detail.get('views'),
-                post_detail.get('likes'),
-                post_detail.get('comments')
-            ])
-            
-            if has_all:
-                perfect_matches += 1
-            elif has_some:
-                partial_matches += 1
-            else:
-                failures += 1
-            
-            diagnostic_data["per_post_detail"].append(post_detail)
-            
-            # Terminal output
-            print(f"\n   [{position}] {reel_id}")
-            print(f"      URL: hover_scrape ✓")
-            print(f"      Date: {'arrow_scrape ✓ → ' + str(arrow_item.get('date_display', 'N/A')) if arrow_item.get('date') else 'NOT FOUND'}")
-            
-            views_str = f"{views_source}={views_value}" if views_value else "NOT FOUND"
-            likes_str = f"{likes_source}={likes_value}" if likes_value else "NOT FOUND"
-            comments_str = f"{comments_source}={comments_value}" if comments_value else "NOT FOUND"
-            
-            print(f"      Views: {views_str}")
-            print(f"      Likes: {likes_str}")
-            print(f"      Comments: {comments_str}")
-        
-        diagnostic_data["alignment"] = {
-            "posts_matched": len(hover_data),
-            "perfect_matches": perfect_matches,
-            "partial_matches": partial_matches,
-            "failures": failures
+                "disagreements_resolved": disagreements,
+                "success_rate": round(sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None) / len(hover_data) * 100, 1) if hover_data else 0
+            },
+            "arrow_scrape": {
+                "page_type_used": page_type_used or "none",
+                "dates_extracted": dates_found,
+                "success_rate": round(dates_found / len(hover_data) * 100, 1) if hover_data else 0
+            },
+            "pinned_posts": pinned_posts,
+            "outliers": outliers,
+            "orphan_check": orphan_check,
+            "logarithmic_model": {
+                "coefficient_a": round(log_a, 4) if log_a else None,
+                "coefficient_b": round(log_b, 4) if log_b else None,
+                "formula": f"log(likes) = {log_a:.3f} × log(views) + {log_b:.3f}" if log_a else None
+            },
+            "per_post_detail": final_data
         }
         
-        # =====================================================================
-        # STEP 6: Generate recommendations
-        # =====================================================================
-        print("\n📍 STEP 6: Recommendations")
-        print("=" * 60)
-        
-        # Find best method for each metric
-        best_views = max(diagnostic_data["hover_methods"].items(), 
-                        key=lambda x: x[1]["views_found"])
-        best_likes = max(diagnostic_data["hover_methods"].items(), 
-                        key=lambda x: x[1]["likes_found"])
-        best_comments = max(diagnostic_data["hover_methods"].items(), 
-                           key=lambda x: x[1]["comments_found"])
-        
-        total_posts = len(hover_data)
-        
-        recommendations = [
-            f"Best for views: {best_views[0]} ({best_views[1]['views_found']}/{total_posts} = {round(best_views[1]['views_found']/total_posts*100, 1)}% success)",
-            f"Best for likes: {best_likes[0]} ({best_likes[1]['likes_found']}/{total_posts} = {round(best_likes[1]['likes_found']/total_posts*100, 1)}% success)",
-            f"Best for comments: {best_comments[0]} ({best_comments[1]['comments_found']}/{total_posts} = {round(best_comments[1]['comments_found']/total_posts*100, 1)}% success)",
-            f"Arrow scrape for URLs: {diagnostic_data['arrow_scrape']['page_type_used']} page ({diagnostic_data['arrow_scrape']['urls_extracted']}/{total_posts} URLs)",
-            f"Arrow scrape for dates: {diagnostic_data['arrow_scrape']['dates_extracted']}/{total_posts} dates extracted"
-        ]
-        
-        diagnostic_data["recommendations"] = recommendations
-        
-        for rec in recommendations:
-            print(f"   • {rec}")
-        
-        # =====================================================================
-        # STEP 7: Save diagnostic JSON file
-        # =====================================================================
         diagnostic_filename = f"insta_diagnostic_{timestamp}.json"
-        
         try:
             with open(diagnostic_filename, 'w', encoding='utf-8') as f:
                 json.dump(diagnostic_data, f, indent=2, default=str)
-            print(f"\n📊 DIAGNOSTICS SAVED: {diagnostic_filename}")
+            print(f"   ✅ Saved: {diagnostic_filename}")
         except Exception as e:
-            print(f"\n❌ Error saving diagnostic file: {e}")
+            print(f"   ❌ Error saving diagnostic file: {e}")
         
         # =====================================================================
         # Final Summary
@@ -2724,16 +2690,19 @@ class InstagramScraper:
         print(f"\n📊 Summary:")
         print(f"   Account: @{username}")
         print(f"   Followers: {followers:,}" if followers else "   Followers: N/A")
-        print(f"   Posts analyzed: {len(hover_data)}")
-        print(f"   Perfect matches: {perfect_matches}")
-        print(f"   Partial matches: {partial_matches}")
-        print(f"   Failures: {failures}")
-        print(f"\n   Best URL method: hover_scrape")
-        print(f"   Best date method: arrow_scrape ({page_type_used} page)")
-        print(f"   Best views method: {best_views[0]} ({round(best_views[1]['views_found']/total_posts*100, 1)}%)")
-        print(f"   Best likes method: {best_likes[0]} ({round(best_likes[1]['likes_found']/total_posts*100, 1)}%)")
-        print(f"   Best comments method: {best_comments[0]} ({round(best_comments[1]['comments_found']/total_posts*100, 1)}%)")
-        print(f"\n📁 Diagnostic file: {diagnostic_filename}")
+        print(f"   Posts scraped: {len(final_data)}")
+        print(f"   Complete posts: {orphan_check['complete_posts']}/{len(hover_data)}")
+        print(f"\n📍 Data Quality:")
+        print(f"   Views found: {views_found}/{len(hover_data)}")
+        print(f"   Likes found: {likes_found}/{len(hover_data)}")
+        print(f"   Comments found: {comments_found}/{len(hover_data)}")
+        print(f"   Dates found: {dates_found}/{len(hover_data)}")
+        print(f"\n📌 Pinned Posts: {len(pinned_posts)}")
+        print(f"⚠️ Outliers: {len(outliers)}")
+        print(f"🔄 Disagreements Resolved: {disagreements}")
+        print(f"\n📁 Output files:")
+        print(f"   • {test_excel_path} (Excel for analysis)")
+        print(f"   • {diagnostic_filename} (JSON diagnostic)")
         print("="*70 + "\n")
         
         return diagnostic_data
@@ -2745,7 +2714,7 @@ class InstagramScraper:
         print("\n1. Custom scrape (default: 100 posts)")
         print("2. Deep scrape (back 2 years)")
         print("3. Test mode (15 reels on @popdartsgame)")
-        print("4. Enhanced test mode (30 reels with multi-method diagnostics)")
+        print("4. Enhanced test mode (50 reels with Excel output)")
         print()
         while True:
             choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
@@ -2783,7 +2752,7 @@ class InstagramScraper:
             elif choice == '3':
                 return 15, False, True, False, False
             elif choice == '4':
-                return 30, False, False, False, True  # Enhanced test mode with 30 posts
+                return 50, False, False, False, True  # Enhanced test mode with 50 posts
             else:
                 print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
@@ -2804,7 +2773,7 @@ class InstagramScraper:
         if enhanced_test_mode:
             self.driver = self.setup_driver(browser=browser_choice)
             try:
-                self.run_enhanced_test_mode(self.driver, "popdartsgame", max_reels=30)
+                self.run_enhanced_test_mode(self.driver, "popdartsgame", max_reels=50)
             finally:
                 if self.driver:
                     self.driver.quit()
