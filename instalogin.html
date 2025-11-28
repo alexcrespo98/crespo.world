@@ -232,8 +232,14 @@
     <!-- Info Section -->
     <div class="info-box">
       <strong>🔗 Connect Your Instagram Account</strong><br><br>
-      This connects your Instagram account to the crespomize analytics tracker. 
-      Once connected, your reels data will automatically sync to the Google Drive spreadsheet.
+      This page helps you manage Instagram accounts for the crespomize analytics tracker.<br><br>
+      <strong>How it works:</strong>
+      <ol style="margin: 0.5em 0; padding-left: 1.5em;">
+        <li>Select an account from the MoonMedia list or enter your own</li>
+        <li>Click "Connect with Instagram" to authorize access</li>
+        <li>You'll be redirected to Instagram's official login page</li>
+        <li>After authorization, the account data can be synced to Google Drive</li>
+      </ol>
     </div>
 
     <!-- Connected Accounts Status -->
@@ -279,8 +285,16 @@
       </div>
       
       <div class="warning-box" style="margin-top: 1.5em;">
-        <strong>⚠️ Note:</strong> Instagram's API requires OAuth authentication. 
-        When you click connect, you'll be redirected to Instagram to authorize access to your account's media insights.
+        <strong>⚠️ How Instagram OAuth Works:</strong><br><br>
+        When you click "Connect with Instagram", you'll be redirected to Instagram's official login page where you'll enter your username and password directly on Instagram's site (not here). 
+        Instagram will then ask you to authorize this app to access your account data.<br><br>
+        <strong>Requirements for Full Automation:</strong>
+        <ul style="margin: 0.5em 0; padding-left: 1.5em;">
+          <li>A Meta/Facebook Developer App with Instagram Basic Display API</li>
+          <li>A backend server to handle token exchange and API calls</li>
+          <li>Google Cloud credentials for Sheets API access</li>
+        </ul>
+        <em style="color: #888;">Currently using manual scraper mode - run <code>python scrapers/insta_scraper.py</code></em>
       </div>
     </div>
 
@@ -288,17 +302,33 @@
     <div class="login-section">
       <h3>⚙️ API Configuration</h3>
       <p style="color: #888; font-size: 0.9em;">
-        For the Instagram scraper to work automatically, the following setup is required:
+        For full automation, the following setup is required:
       </p>
       <div class="info-box">
         <strong>Current Setup:</strong><br>
         • Google Drive ID: <code>19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2</code><br>
         • Scraper: <code>scrapers/insta_scraper.py</code><br>
-        • Status: <span id="scraperStatus" style="color: #2ecc71;">Ready</span>
+        • Instagram App: <span id="appStatus" style="color: #ff0;">Not configured</span><br>
+        • Backend API: <span id="backendStatus" style="color: #ff0;">Not configured</span><br>
+        • Scraper Status: <span id="scraperStatus" style="color: #2ecc71;">Ready for manual use</span>
+      </div>
+      
+      <div class="warning-box">
+        <strong>📋 Why Automatic Updates Require a Backend:</strong><br><br>
+        Instagram's OAuth flow returns an authorization code that must be exchanged for an access token. 
+        This exchange requires your App Secret, which cannot be safely included in client-side JavaScript.<br><br>
+        A backend server is needed to:
+        <ol style="margin: 0.5em 0; padding-left: 1.5em;">
+          <li>Securely exchange the code for an access token</li>
+          <li>Store and refresh tokens before they expire</li>
+          <li>Call Instagram's API to fetch account data</li>
+          <li>Update the Google Drive spreadsheet via Google Sheets API</li>
+        </ol>
+        <em>Without a backend, use the manual Python scraper.</em>
       </div>
       
       <div id="manualScrapeSection" style="margin-top: 1.5em;">
-        <p>Run manual scrape for connected accounts:</p>
+        <p>Actions for connected accounts:</p>
         <button onclick="triggerManualScrape()">🔄 Run Scraper Now</button>
         <button onclick="viewAnalytics()">📊 View Analytics</button>
       </div>
@@ -321,17 +351,21 @@
 
   <script>
     // Instagram OAuth Configuration
-    // IMPORTANT: For production use, replace 'YOUR_INSTAGRAM_APP_ID' with your actual 
-    // Meta/Facebook App ID obtained from developers.facebook.com
-    // The app must have Instagram Basic Display API or Instagram Graph API enabled
+    // Uses Instagram Basic Display API for authentication
+    // Users will be redirected to Instagram to log in and authorize access
     const INSTAGRAM_CONFIG = {
-      // Demo mode is enabled when no real client ID is configured
-      // In demo mode, account connections are simulated locally
-      demoMode: true,  // Set to false when using real Instagram OAuth
-      clientId: 'YOUR_INSTAGRAM_APP_ID', // Replace with your Instagram App ID for production
+      // Instagram Basic Display API endpoint
+      authEndpoint: 'https://api.instagram.com/oauth/authorize',
+      // This would need to be your registered Instagram App ID from developers.facebook.com
+      // For now, we'll redirect to Instagram login page directly
+      clientId: 'YOUR_INSTAGRAM_APP_ID', // Replace with your actual App ID
       redirectUri: window.location.origin + '/instalogin.html',
       scope: 'user_profile,user_media',
-      googleDriveSheetId: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2'
+      googleDriveSheetId: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2',
+      
+      // Backend API endpoint that would handle token exchange and Google Drive sync
+      // This would be needed for a fully automated solution
+      backendApiUrl: null  // Set this to your backend API URL when available
     };
 
     // MoonMedia suggested accounts
@@ -499,30 +533,62 @@
         return;
       }
       
-      // Store the username we're trying to connect
+      // Store the username we're trying to connect for when we return from OAuth
       localStorage.setItem('instagram_pending_username', username);
       
-      // Check if running in demo mode or production mode
-      if (INSTAGRAM_CONFIG.demoMode) {
-        // Demo mode - simulate connection locally
-        simulateConnection(username);
-      } else {
-        // Production mode - redirect to Instagram OAuth
-        const authUrl = `https://api.instagram.com/oauth/authorize?` +
-          `client_id=${INSTAGRAM_CONFIG.clientId}&` +
-          `redirect_uri=${encodeURIComponent(INSTAGRAM_CONFIG.redirectUri)}&` +
-          `scope=${INSTAGRAM_CONFIG.scope}&` +
-          `response_type=code`;
-        
-        window.location.href = authUrl;
+      // Check if a real Instagram App ID is configured
+      if (INSTAGRAM_CONFIG.clientId === 'YOUR_INSTAGRAM_APP_ID') {
+        // No real App ID configured - show setup instructions
+        showSetupInstructions(username);
+        return;
+      }
+      
+      // Redirect to Instagram OAuth authorization page
+      // This will require the user to log in with their Instagram credentials
+      const authUrl = `${INSTAGRAM_CONFIG.authEndpoint}?` +
+        `client_id=${INSTAGRAM_CONFIG.clientId}&` +
+        `redirect_uri=${encodeURIComponent(INSTAGRAM_CONFIG.redirectUri)}&` +
+        `scope=${INSTAGRAM_CONFIG.scope}&` +
+        `response_type=code`;
+      
+      window.location.href = authUrl;
+    }
+    
+    // Show setup instructions when Instagram App is not configured
+    function showSetupInstructions(username) {
+      const message = `📋 Instagram API Setup Required
+
+To enable full Instagram OAuth login, you need to:
+
+1️⃣ Create a Meta/Facebook Developer App:
+   • Go to developers.facebook.com
+   • Create a new app and add "Instagram Basic Display" product
+   • Configure OAuth redirect URI to: ${INSTAGRAM_CONFIG.redirectUri}
+
+2️⃣ Get your App ID and replace 'YOUR_INSTAGRAM_APP_ID' in instalogin.html
+
+3️⃣ For automatic Google Drive sync, you'll need a backend server that:
+   • Exchanges the OAuth code for an access token
+   • Uses the Instagram API to fetch account data
+   • Updates the Google Drive spreadsheet via Google Sheets API
+
+📝 Current Workaround:
+For now, you can run the Python scraper manually:
+   cd scrapers
+   python insta_scraper.py
+
+Would you like to add @${username} to the pending accounts list for manual scraping?`;
+
+      if (confirm(message)) {
+        addPendingAccount(username);
       }
     }
-
-    // Simulate connection for demo purposes
-    function simulateConnection(username) {
+    
+    // Add account to pending list for manual scraping
+    function addPendingAccount(username) {
       // Check if already connected
       if (connectedAccounts.some(a => a.username === username)) {
-        alert(`@${username} is already connected!`);
+        alert(`@${username} is already in the accounts list!`);
         return;
       }
       
@@ -530,13 +596,11 @@
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 60);
       
-      // Note: In demo mode, we use a placeholder token identifier
-      // In production with real OAuth, this would be replaced with the actual access token
       connectedAccounts.push({
         username: username,
         connectedAt: new Date().toISOString(),
         expiresAt: expiresAt.toISOString(),
-        isDemo: true  // Flag to indicate this is a demo connection
+        status: 'pending_oauth'  // Indicates OAuth setup is needed
       });
       
       saveConnectedAccounts();
@@ -545,28 +609,117 @@
       // Clear input
       document.getElementById('usernameInput').value = '';
       
-      alert(`✅ Successfully connected @${username}!\n\nYour reels data will sync to the Google Drive spreadsheet.`);
+      alert(`✅ @${username} added to accounts list!\n\nTo sync data, run the Python scraper manually:\n  cd scrapers\n  python insta_scraper.py`);
     }
 
     // Check for OAuth callback
     function checkOAuthCallback() {
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
+      const error = urlParams.get('error');
+      const errorReason = urlParams.get('error_reason');
+      
+      if (error) {
+        // Handle OAuth error
+        alert(`Instagram login failed: ${errorReason || error}\n\nPlease try again.`);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
       
       if (code) {
-        // Handle OAuth callback
+        // Handle OAuth callback - we have an authorization code
         const pendingUsername = localStorage.getItem('instagram_pending_username');
         
         if (pendingUsername) {
-          // In production, exchange code for access token via your backend
-          // For now, simulate success
-          simulateConnection(pendingUsername);
+          // In a full implementation, we would:
+          // 1. Send this code to a backend server
+          // 2. Exchange it for an access token
+          // 3. Use the token to fetch Instagram data
+          // 4. Update the Google Drive spreadsheet
+          
+          if (INSTAGRAM_CONFIG.backendApiUrl) {
+            // Send to backend for token exchange
+            exchangeCodeForToken(code, pendingUsername);
+          } else {
+            // No backend configured - show manual steps
+            showBackendRequiredMessage(code, pendingUsername);
+          }
+          
           localStorage.removeItem('instagram_pending_username');
         }
         
         // Clean up URL
         window.history.replaceState({}, document.title, window.location.pathname);
       }
+    }
+    
+    // Exchange authorization code for access token via backend
+    async function exchangeCodeForToken(code, username) {
+      try {
+        const response = await fetch(`${INSTAGRAM_CONFIG.backendApiUrl}/auth/instagram/callback`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            code: code,
+            username: username,
+            redirectUri: INSTAGRAM_CONFIG.redirectUri
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Token exchange failed');
+        }
+        
+        const data = await response.json();
+        
+        // Add the successfully authenticated account
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 60);
+        
+        connectedAccounts.push({
+          username: username,
+          connectedAt: new Date().toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          status: 'connected'
+          // Note: Access token is stored securely on the backend server
+          // Never store access tokens in client-side localStorage
+        });
+        
+        saveConnectedAccounts();
+        updateUI();
+        
+        alert(`✅ Successfully connected @${username}!\n\nYour reels data will automatically sync to the Google Drive spreadsheet.`);
+        
+      } catch (error) {
+        console.error('Token exchange error:', error);
+        alert(`Failed to complete authentication: ${error.message}\n\nPlease try again.`);
+      }
+    }
+    
+    // Show message when backend is required but not configured
+    function showBackendRequiredMessage(code, username) {
+      const message = `✅ Instagram Authorization Successful!
+
+You've authorized access to @${username}'s Instagram account.
+
+⚠️ Backend Server Required:
+To complete the setup and enable automatic Google Drive sync, a backend server is needed to:
+
+1. Exchange the authorization code for an access token
+2. Periodically fetch Instagram data using the API
+3. Update the Google Drive spreadsheet
+
+📝 For now, the account has been added to your list.
+Run the Python scraper manually to sync data:
+   cd scrapers
+   python insta_scraper.py`;
+
+      alert(message);
+      
+      // Add to pending accounts
+      addPendingAccount(username);
     }
 
     // Remove an account
