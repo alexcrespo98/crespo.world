@@ -175,25 +175,25 @@ class InstagramScraper:
         return total_delay
 
     def check_for_rate_limit(self, driver):
-        """Check if we've hit a 429 rate limit"""
+        """Check if we've hit a 429 rate limit - uses strict checks to avoid false positives"""
         try:
             page_source = driver.page_source.lower()
-            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
             
-            rate_limit_indicators = [
-                "rate limit",
+            # Strict rate limit indicators - these are specific to actual rate limiting
+            strict_indicators = [
+                "rate limit exceeded",
                 "too many requests",
-                "please wait",
-                "try again later",
-                "something went wrong"
+                "429",
+                "you've been temporarily blocked"
             ]
             
-            for indicator in rate_limit_indicators:
-                if indicator in page_source or indicator in body_text:
+            for indicator in strict_indicators:
+                if indicator in page_source:
                     return True
             
-            # Check for 429 in network (if visible in page)
-            if "429" in page_source:
+            # Check for completely blank page or error page (often indicates rate limit)
+            body_text = driver.find_element(By.TAG_NAME, "body").text.strip()
+            if len(body_text) < 50 and "error" in body_text.lower():
                 return True
                 
         except:
