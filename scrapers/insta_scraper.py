@@ -2389,12 +2389,33 @@ class InstagramScraper:
                     processed_reel_ids.add(post_id)
                     new_this_cycle = True
                     
-                    # Progress output
-                    views_str = 'N/A' if final_views is None else str(final_views)
-                    likes_str = 'N/A' if final_likes is None else str(final_likes)
-                    comments_str = 'N/A' if final_comments is None else str(final_comments)
-                    disagree_str = f" ⚠️ {disagreement}" if disagreement else ""
-                    print(f"   [{len(hover_data)}] {post_id}: views={views_str}, likes={likes_str}, comments={comments_str}{disagree_str}")
+                    # Detailed progress output - show exactly what was found
+                    pos = len(hover_data)
+                    views_str = f"{final_views:,}" if final_views else "❌"
+                    likes_str = f"{final_likes:,}" if final_likes is not None else "❌"
+                    comments_str = f"{final_comments:,}" if final_comments is not None else "❌"
+                    
+                    # Build status indicators
+                    status = "✅" if (final_views and final_likes is not None and final_comments is not None) else "⚠️"
+                    
+                    print(f"   {status} [{pos}] {post_id}")
+                    print(f"      📊 views={views_str} | likes={likes_str} | comments={comments_str}")
+                    
+                    # Show method comparison if there was any difference
+                    if likes_a != likes_a_plus and likes_a is not None and likes_a_plus is not None:
+                        print(f"      🔄 Method comparison: A={likes_a} vs A+={likes_a_plus} → used {final_likes}")
+                    
+                    # Show extraction error if detected
+                    if likes_equals_views_error:
+                        print(f"      ⚠️ EXTRACTION ERROR: likes was same as views ({final_views}) - corrected")
+                    
+                    # Show if any data is missing
+                    if final_views is None:
+                        print(f"      ❌ Missing: views")
+                    if final_likes is None:
+                        print(f"      ❌ Missing: likes (will salvage)")
+                    if final_comments is None:
+                        print(f"      ❌ Missing: comments (will salvage)")
                     
                     time.sleep(0.2)
                     
@@ -2541,27 +2562,24 @@ class InstagramScraper:
             likes = reel.get('likes')
             outlier_reasons = []
             
-            # Check 1: likes > views (impossible/error)
+            # Check 1: likes == views or very close (extraction error - views captured as likes)
+            # This is the main issue - when likes equals views, it's almost always wrong
+            if views and likes and views > 0:
+                # Check if likes is within 5% of views - this is almost always an extraction error
+                ratio = likes / views
+                if 0.95 <= ratio <= 1.05:
+                    outlier_reasons.append(f"likes ({likes}) ≈ views ({views}) - likely extraction error")
+            
+            # Check 2: likes > views (impossible/error)
             if views and likes and likes > views:
                 outlier_reasons.append(f"likes ({likes}) > views ({views})")
             
-            # Check 2: Off logarithmic trend (>3x expected or <0.33x expected)
-            if log_a is not None and views and views > 0 and likes and likes > 0:
-                try:
-                    expected_log_likes = log_a * math.log(views) + log_b
-                    expected_likes = math.exp(expected_log_likes)
-                    ratio = likes / expected_likes
-                    
-                    if ratio > 3:
-                        outlier_reasons.append(f"likes {ratio:.1f}x higher than expected ({int(expected_likes)})")
-                    elif ratio < 0.33:
-                        outlier_reasons.append(f"likes {ratio:.1f}x lower than expected ({int(expected_likes)})")
-                except:
-                    pass
-            
-            # Check 3: Zero likes but has views (suspicious)
+            # Check 3: Zero likes but has views (missing data - will be salvaged)
             if views and views > 1000 and (likes == 0 or likes is None):
                 outlier_reasons.append(f"no likes but {views} views")
+            
+            # NOTE: Removed the logarithmic outlier check - posts with unusual engagement 
+            # are valid, only flag actual extraction errors
             
             if outlier_reasons:
                 outliers.append({
@@ -2611,6 +2629,115 @@ class InstagramScraper:
                 print(f"   ⚠️ Missing likes: {orphan_check['missing_likes'][:5]}{'...' if len(orphan_check['missing_likes']) > 5 else ''}")
             if orphan_check['missing_dates']:
                 print(f"   ⚠️ Missing dates: {orphan_check['missing_dates'][:5]}{'...' if len(orphan_check['missing_dates']) > 5 else ''}")
+        
+        # =====================================================================
+        # STEP 5.5: SALVAGE SCRAPE - Visit specific URLs for missing data
+        # =====================================================================
+        # Get list of posts that need salvaging (missing likes, comments, or dates)
+        posts_needing_salvage = []
+        for reel in hover_data:
+            needs_salvage = False
+            missing = []
+            if reel.get('likes') is None:
+                needs_salvage = True
+                missing.append('likes')
+            if reel.get('comments') is None:
+                needs_salvage = True
+                missing.append('comments')
+            if not reel.get('date'):
+                needs_salvage = True
+                missing.append('date')
+            if needs_salvage:
+                posts_needing_salvage.append({
+                    'reel': reel,
+                    'missing': missing
+                })
+        
+        salvage_stats = {'attempted': 0, 'likes_recovered': 0, 'comments_recovered': 0, 'dates_recovered': 0}
+        
+        if posts_needing_salvage:
+            print(f"\n📍 STEP 5.5: SALVAGE SCRAPE ({len(posts_needing_salvage)} posts need data)")
+            print(f"   🔧 Visiting individual URLs to recover missing data...")
+            print(f"   ⏱️ Adding jitter between requests to avoid detection...")
+            
+            for i, item in enumerate(posts_needing_salvage):
+                reel = item['reel']
+                missing = item['missing']
+                reel_id = reel['reel_id']
+                reel_url = reel.get('url') or f"https://www.instagram.com/reel/{reel_id}/"
+                
+                print(f"\n   [{i+1}/{len(posts_needing_salvage)}] Salvaging {reel_id}...")
+                print(f"      📍 URL: {reel_url}")
+                print(f"      ❓ Missing: {', '.join(missing)}")
+                
+                salvage_stats['attempted'] += 1
+                
+                try:
+                    # Add jitter before request (1-3 seconds)
+                    jitter_delay = self.add_jitter(base_delay=1.0, max_jitter=2.0)
+                    print(f"      ⏱️ Waited {jitter_delay:.1f}s (jitter)")
+                    
+                    # Navigate to the specific post
+                    driver.get(reel_url)
+                    time.sleep(2)
+                    
+                    # Extract data from the post page
+                    salvage_data = self.extract_date_from_current_view(driver)
+                    
+                    # Update reel with recovered data
+                    recovered = []
+                    
+                    if 'likes' in missing and salvage_data.get('likes') is not None:
+                        # Validate recovered likes isn't same as views
+                        if reel.get('views') and salvage_data['likes'] == reel['views']:
+                            print(f"      ⚠️ Likes ({salvage_data['likes']}) = views - skipping bad data")
+                        else:
+                            reel['likes'] = salvage_data['likes']
+                            salvage_stats['likes_recovered'] += 1
+                            recovered.append(f"likes={salvage_data['likes']}")
+                    
+                    if 'comments' in missing and salvage_data.get('comments') is not None:
+                        reel['comments'] = salvage_data['comments']
+                        salvage_stats['comments_recovered'] += 1
+                        recovered.append(f"comments={salvage_data['comments']}")
+                    
+                    if 'date' in missing and salvage_data.get('date'):
+                        reel['date'] = salvage_data['date']
+                        reel['date_display'] = salvage_data.get('date_display')
+                        reel['date_timestamp'] = salvage_data.get('date_timestamp')
+                        salvage_stats['dates_recovered'] += 1
+                        recovered.append(f"date={salvage_data.get('date_display', salvage_data['date'])}")
+                    
+                    if recovered:
+                        print(f"      ✅ RECOVERED: {', '.join(recovered)}")
+                    else:
+                        print(f"      ❌ Could not recover any data")
+                    
+                    # Add additional jitter after request
+                    self.add_jitter(base_delay=0.5, max_jitter=1.0)
+                    
+                except Exception as e:
+                    print(f"      ❌ Error: {str(e)[:50]}")
+                    continue
+            
+            # Update counts after salvage
+            likes_found = sum(1 for h in hover_data if h.get('likes') is not None)
+            comments_found = sum(1 for h in hover_data if h.get('comments') is not None)
+            dates_found = sum(1 for h in hover_data if h.get('date'))
+            
+            print(f"\n   📊 SALVAGE SUMMARY:")
+            print(f"      Posts attempted: {salvage_stats['attempted']}")
+            print(f"      Likes recovered: {salvage_stats['likes_recovered']}")
+            print(f"      Comments recovered: {salvage_stats['comments_recovered']}")
+            print(f"      Dates recovered: {salvage_stats['dates_recovered']}")
+            print(f"      New totals: likes={likes_found}, comments={comments_found}, dates={dates_found}")
+            
+            # Update orphan check with new counts
+            orphan_check['salvage_stats'] = salvage_stats
+            orphan_check['with_likes'] = likes_found
+            orphan_check['with_comments'] = comments_found
+            orphan_check['with_dates'] = dates_found
+            orphan_check['complete_posts'] = sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None and h.get('date'))
         
         # =====================================================================
         # STEP 6: Build final data with all analysis
