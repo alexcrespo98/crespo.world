@@ -2738,6 +2738,53 @@ class InstagramScraper:
             orphan_check['with_comments'] = comments_found
             orphan_check['with_dates'] = dates_found
             orphan_check['complete_posts'] = sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None and h.get('date'))
+            
+            # Re-run outlier detection after salvage to remove recovered posts from outliers list
+            print(f"\n   🔄 Updating outliers after salvage...")
+            new_outliers = []
+            for o in outliers:
+                reel_id = o['reel_id']
+                # Find the reel in hover_data
+                reel = next((h for h in hover_data if h['reel_id'] == reel_id), None)
+                if reel:
+                    views = reel.get('views')
+                    likes = reel.get('likes')
+                    # Check if still an outlier after salvage
+                    still_outlier = False
+                    new_reasons = []
+                    
+                    if views and likes and views > 0:
+                        ratio = likes / views
+                        if 0.95 <= ratio <= 1.05:
+                            still_outlier = True
+                            new_reasons.append(f"likes ({likes}) ≈ views ({views}) - likely extraction error")
+                    
+                    if views and likes and likes > views:
+                        still_outlier = True
+                        new_reasons.append(f"likes ({likes}) > views ({views})")
+                    
+                    if views and views > 1000 and (likes == 0 or likes is None):
+                        still_outlier = True
+                        new_reasons.append(f"no likes but {views} views")
+                    
+                    if still_outlier:
+                        new_outliers.append({
+                            'reel_id': reel_id,
+                            'position': o['position'],
+                            'views': views,
+                            'likes': likes,
+                            'reasons': new_reasons
+                        })
+                        reel['is_outlier'] = True
+                        reel['outlier_reasons'] = new_reasons
+                    else:
+                        # Mark as no longer outlier
+                        reel['is_outlier'] = False
+                        reel['outlier_reasons'] = []
+                        print(f"      ✅ {reel_id} no longer an outlier (data recovered)")
+            
+            outliers = new_outliers
+            print(f"   📊 Final outliers after salvage: {len(outliers)}")
         
         # =====================================================================
         # STEP 6: Build final data with all analysis
