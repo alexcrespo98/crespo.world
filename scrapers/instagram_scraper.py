@@ -6,7 +6,7 @@ it hover scrapes each posts extracts urls and views as well as likes and comment
 over the first, post then clicks it then and does the right arrow input and reads each post for date, also gets likes and comments sometimes. 
 sometimes it fails so you do it again on the main channel instead but that also has individual posts. it can detect issues, sometimes it misreads the views
 as likes and sometimes at zero, i dont know but i hope this works next week. i dont know what is redundant in here theres no way it should be 4000 lines lol
-""
+"""
 
 import sys
 import subprocess
@@ -1100,14 +1100,17 @@ class InstagramScraper:
 
     def arrow_scrape_dates(self, driver, username, hover_data, test_mode=False, verbose=True):
         """
-        Arrow scrape method - click first reel and use arrow keys to navigate.
+        Arrow scrape method with multiple fallback methods - click first reel and use arrow keys to navigate.
         More reliable than visiting individual URLs (avoids 429 rate limits).
         
-        1. Go to /reels/ page, click first reel
-        2. Navigate through reels using right arrow key
-        3. Extract date info from each reel
-        4. If /reels/ fails, fallback to main profile page (fresh start)
-        5. Keep reels data as backup for cross-validation
+        Fallback Methods (tried in order):
+        1. /reels/ page - standard click + arrow navigation
+        2. /reels/ page - hover first + click + arrow navigation
+        3. /reels/ page - JavaScript click + arrow navigation
+        4. Main page - standard click + arrow navigation
+        5. Main page - hover first + click + arrow navigation
+        6. Main page - direct URL to first reel + arrow navigation
+        7. Finally: Fall back to individual URL scraping only if all arrow methods fail
         """
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.common.action_chains import ActionChains
@@ -1120,99 +1123,152 @@ class InstagramScraper:
         # Build set of reel IDs we need to find dates for
         reel_ids_needed = {reel['reel_id'] for reel in hover_data}
         arrow_data = {}  # reel_id -> date data
-        reels_page_data = {}  # Keep reels page data as backup
+        best_method_data = {}  # Track best result so far
+        best_method_name = None
         
-        # Try /reels/ page first, then main profile as fallback
-        pages_to_try = [
-            f"https://www.instagram.com/{username}/reels/",
-            f"https://www.instagram.com/{username}/"
+        # Define all 6 fallback methods
+        methods = [
+            {"name": "METHOD 1", "description": "/reels/ page - standard click", "page": "reels", "hover": False, "js_click": False, "direct_url": False},
+            {"name": "METHOD 2", "description": "/reels/ page - hover first + click", "page": "reels", "hover": True, "js_click": False, "direct_url": False},
+            {"name": "METHOD 3", "description": "/reels/ page - JavaScript click", "page": "reels", "hover": False, "js_click": True, "direct_url": False},
+            {"name": "METHOD 4", "description": "Main page - standard click", "page": "main", "hover": False, "js_click": False, "direct_url": False},
+            {"name": "METHOD 5", "description": "Main page - hover first + click", "page": "main", "hover": True, "js_click": False, "direct_url": False},
+            {"name": "METHOD 6", "description": "Main page - direct URL to first reel", "page": "main", "hover": False, "js_click": False, "direct_url": True},
         ]
         
-        for page_url in pages_to_try:
+        # Constants for fallback logic
+        METHOD_TIMEOUT = 30  # Max seconds per method attempt
+        MAX_CONSECUTIVE_NO_DATE = 3  # Switch methods after 3 consecutive NO DATE
+        MAX_CONSECUTIVE_NO_REEL_ID = 5  # Switch methods after 5 consecutive "POST" (no reel ID)
+        MIN_SUCCESS_RATE = 0.5  # Need at least 50% of dates to avoid individual URL fallback
+        
+        for method in methods:
+            # Check if we already have enough dates
             if len(arrow_data) >= len(reel_ids_needed):
-                break  # Already got all dates
+                break
             
-            page_type = "reels" if "/reels/" in page_url else "main"
-            print(f"    📄 Trying {page_type} page...")
+            method_name = method["name"]
+            method_desc = method["description"]
+            page_type = method["page"]
+            hover_first = method["hover"]
+            js_click = method["js_click"]
+            direct_url = method["direct_url"]
             
-            # Save reels page data before trying main page
-            if page_type == "main" and arrow_data:
-                reels_page_data = arrow_data.copy()
-                print(f"    📦 Keeping {len(reels_page_data)} dates from reels page as backup")
+            print(f"\n📍 {method_name}: {method_desc}")
+            
+            # Prepare page URL
+            if page_type == "reels":
+                page_url = f"https://www.instagram.com/{username}/reels/"
+            else:
+                page_url = f"https://www.instagram.com/{username}/"
+            
+            method_start_time = time.time()
+            method_arrow_data = {}
+            consecutive_no_dates = 0
+            consecutive_no_reel_id = 0
             
             try:
-                # Use shorter timeout for page load to avoid long hangs
-                driver.set_page_load_timeout(20)  # 20 second timeout (reduced from 30)
+                # Set shorter timeout for page load
+                driver.set_page_load_timeout(20)
                 
-                try:
-                    driver.get(page_url)
-                except Exception as timeout_err:
-                    if "timeout" in str(timeout_err).lower():
-                        print(f"    ⏱️ Timeout loading {page_type} page - skipping to next method...")
-                        # Reset timeout and try recovery
-                        driver.set_page_load_timeout(120)
+                # For direct URL method (METHOD 6), navigate directly to first reel
+                if direct_url and hover_data:
+                    first_reel_id = hover_data[0].get('reel_id')
+                    if first_reel_id:
+                        first_reel_url = f"https://www.instagram.com/{username}/reel/{first_reel_id}/"
+                        print(f"  📎 Navigating directly to first reel: {first_reel_id}")
                         try:
-                            driver.get("about:blank")
-                            time.sleep(1)
+                            driver.get(first_reel_url)
+                        except Exception as e:
+                            if "timeout" in str(e).lower():
+                                print(f"  ⏱️ Timeout - trying next method...")
+                                continue
+                            raise
+                        time.sleep(3)
+                    else:
+                        print(f"  ⚠️ No reel ID available for direct URL method")
+                        continue
+                else:
+                    # Navigate to page
+                    try:
+                        driver.get(page_url)
+                    except Exception as e:
+                        if "timeout" in str(e).lower():
+                            print(f"  ⏱️ Timeout loading page - trying next method...")
+                            driver.set_page_load_timeout(120)
+                            continue
+                        raise
+                    
+                    time.sleep(4)
+                    
+                    # Reset timeout
+                    driver.set_page_load_timeout(120)
+                    
+                    # Dismiss any modals
+                    self.dismiss_modal(driver, max_attempts=2)
+                    
+                    # Find clickable posts
+                    post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+                    if not post_links:
+                        post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+                    
+                    if not post_links:
+                        print(f"  ⚠️ No posts found - trying next method...")
+                        continue
+                    
+                    print(f"  ✅ Found {len(post_links)} posts")
+                    
+                    first_post = post_links[0]
+                    
+                    # Apply method-specific approach
+                    if hover_first:
+                        print(f"  🖱️ Hovering over first post...")
+                        try:
+                            actions = ActionChains(driver)
+                            actions.move_to_element(first_post).perform()
+                            time.sleep(1.5)
                         except:
                             pass
-                        continue
-                    raise timeout_err
+                    
+                    # Click the post
+                    print(f"  🖱️ Clicking first post...")
+                    try:
+                        if js_click:
+                            driver.execute_script("arguments[0].click();", first_post)
+                        else:
+                            first_post.click()
+                    except Exception as click_err:
+                        print(f"  ⚠️ Click failed, trying JS fallback...")
+                        try:
+                            driver.execute_script("arguments[0].click();", first_post)
+                        except:
+                            print(f"  ❌ Click completely failed - trying next method...")
+                            continue
+                    
+                    time.sleep(3)
                 
-                time.sleep(4)  # Wait for page to load
-                
-                # Reset to normal timeout
-                driver.set_page_load_timeout(120)
-                
-                # Dismiss any modals
-                self.dismiss_modal(driver, max_attempts=2)
-                
-                # Find first clickable reel
-                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
-                
-                if not post_links:
-                    # Try also looking for regular posts
-                    post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
-                
-                if not post_links:
-                    print(f"    ⚠️ No posts found on {page_type} page")
-                    continue
-                
-                print(f"    ✅ Found {len(post_links)} posts on page")
-                
-                # For main page: hover first, then click (proven method from Option 4)
-                first_post = post_links[0]
-                first_post_url = first_post.get_attribute('href')
-                print(f"    🖱️ Clicking first post...")
-                
-                # Hover over first post before clicking (helps with detection)
-                try:
-                    ActionChains(driver).move_to_element(first_post).perform()
-                    time.sleep(0.5)
-                except:
-                    pass
-                
-                # Try clicking with JS fallback (more reliable on main page)
-                try:
-                    first_post.click()
-                except:
-                    # Try JavaScript click as fallback
-                    print(f"    ⚠️ Click failed, trying JS fallback...")
-                    driver.execute_script("arguments[0].click();", first_post)
-                
-                time.sleep(3)  # Wait for modal to load
-                
-                # Now navigate through posts using arrow keys
+                # Navigate through posts using arrow keys
                 body = driver.find_element(By.TAG_NAME, "body")
                 posts_processed = 0
-                consecutive_misses = 0
-                consecutive_no_dates = 0  # Track consecutive posts with no date found
-                max_consecutive_misses = 50  # Increased to allow more posts without matches
-                max_posts = min(len(hover_data) + 200, 2000)  # Limit to reasonable amount
+                max_posts = min(len(hover_data) + 200, 2000)
                 
-                print(f"    🔄 Navigating through posts...")
+                print(f"  🔄 Navigating through posts...")
                 
-                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+                while posts_processed < max_posts:
+                    # Check method timeout
+                    if time.time() - method_start_time > METHOD_TIMEOUT:
+                        print(f"  ⏱️ Method timeout ({METHOD_TIMEOUT}s) - trying next method...")
+                        break
+                    
+                    # Check consecutive failures
+                    if consecutive_no_dates >= MAX_CONSECUTIVE_NO_DATE:
+                        print(f"  ❌ Failed after {MAX_CONSECUTIVE_NO_DATE} consecutive NO DATE - trying next method...")
+                        break
+                    
+                    if consecutive_no_reel_id >= MAX_CONSECUTIVE_NO_REEL_ID:
+                        print(f"  ❌ Failed after {MAX_CONSECUTIVE_NO_REEL_ID} consecutive missing reel IDs - trying next method...")
+                        break
+                    
                     # Wait for content to load
                     time.sleep(1.5)
                     
@@ -1223,45 +1279,35 @@ class InstagramScraper:
                     if '/reel/' in current_url:
                         current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
                     elif '/p/' in current_url:
-                        # This is a regular post, not a reel
-                        current_reel_id = None
+                        # This is a regular post, not a reel - still extract ID for logging
+                        current_reel_id = current_url.split('/p/')[-1].rstrip('/').split('?')[0]
                     
-                    # Extract date for all posts (for debugging)
+                    # Track if we're getting reel IDs properly
+                    if current_reel_id:
+                        consecutive_no_reel_id = 0
+                    else:
+                        consecutive_no_reel_id += 1
+                    
+                    # Extract date
                     date_info = self.extract_date_from_current_view(driver)
                     
-                    # Show verbose output for debugging
-                    if verbose and posts_processed < 20:  # Show first 20 posts
+                    # Show verbose output
+                    if verbose and posts_processed < 20:
                         in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
-                        print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                        reel_display = current_reel_id if current_reel_id else 'POST'
+                        print(f"  [{posts_processed+1}] {reel_display} [{in_list}] → {date_str}")
                     
-                    # If we get 3 consecutive NO DATE on reels page, break and try main page
-                    if page_type == "reels" and not date_info.get('date'):
-                        consecutive_no_dates = consecutive_no_dates + 1 if 'consecutive_no_dates' in dir() else 1
-                        if consecutive_no_dates >= 3:
-                            print(f"    ⚠️ 3 consecutive NO DATE - switching to main page...")
-                            body.send_keys(Keys.ESCAPE)
-                            time.sleep(1)
-                            break
+                    # Track consecutive NO DATE
+                    if not date_info.get('date'):
+                        consecutive_no_dates += 1
                     else:
                         consecutive_no_dates = 0
                     
-                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
+                    # Store date if we found one for a reel we need
+                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in method_arrow_data:
                         if date_info.get('date'):
-                            arrow_data[current_reel_id] = date_info
-                            consecutive_misses = 0
-                            
-                            if test_mode:
-                                print(f"    ✅ [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
-                            elif len(arrow_data) % 10 == 0:
-                                print(f"    Progress: {len(arrow_data)}/{len(reel_ids_needed)} dates collected...")
-                        else:
-                            consecutive_misses += 1
-                    elif current_reel_id and current_reel_id not in reel_ids_needed:
-                        # Not a match but still found a reel
-                        consecutive_misses += 1
-                    else:
-                        consecutive_misses += 1
+                            method_arrow_data[current_reel_id] = date_info
                     
                     # Navigate to next post
                     body.send_keys(Keys.ARROW_RIGHT)
@@ -1269,66 +1315,55 @@ class InstagramScraper:
                     
                     # Progress update every 50 posts
                     if posts_processed % 50 == 0:
-                        print(f"    📊 Processed {posts_processed} posts, found {len(arrow_data)} matches...")
+                        print(f"  📊 Processed {posts_processed} posts, found {len(method_arrow_data)} matches...")
                     
                     # Check if we've collected all needed dates
-                    if len(arrow_data) >= len(reel_ids_needed):
-                        print(f"    ✅ Collected all {len(arrow_data)} dates!")
+                    if len(method_arrow_data) >= len(reel_ids_needed):
+                        print(f"  ✅ Success! Found {len(method_arrow_data)}/{len(reel_ids_needed)} dates")
                         break
                 
-                # Close the modal/overlay by pressing Escape
+                # Close the modal/overlay
                 try:
                     body.send_keys(Keys.ESCAPE)
                     time.sleep(1)
                 except:
                     pass
                 
-                print(f"    📊 Collected {len(arrow_data)} dates from {page_type} page (processed {posts_processed} posts)")
+                # Report method results
+                dates_found = len(method_arrow_data)
+                success_rate = dates_found / len(reel_ids_needed) if reel_ids_needed else 0
+                print(f"  📊 {method_name} result: {dates_found}/{len(reel_ids_needed)} dates ({success_rate:.0%})")
+                
+                # Merge this method's data into arrow_data
+                for reel_id, data in method_arrow_data.items():
+                    if reel_id not in arrow_data:
+                        arrow_data[reel_id] = data
+                
+                # Track best method
+                if dates_found > len(best_method_data):
+                    best_method_data = method_arrow_data.copy()
+                    best_method_name = method_name
                 
             except Exception as e:
-                import traceback
                 error_msg = str(e)
-                
-                # Check if this is a timeout error
-                if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                    print(f"    ⏱️ Timeout on {page_type} page - trying recovery...")
-                    
-                    # Try to recover: navigate to a simple page first
-                    try:
-                        driver.set_page_load_timeout(15)  # Short timeout
-                        driver.get("about:blank")
-                        time.sleep(1)
-                        driver.set_page_load_timeout(120)  # Reset timeout
-                        
-                        # If we have reels data, we can continue with it
-                        if reels_page_data:
-                            print(f"    ✅ Using {len(reels_page_data)} dates from reels page backup")
-                            arrow_data = reels_page_data
-                        
-                    except:
-                        pass
+                if "timeout" in error_msg.lower():
+                    print(f"  ⏱️ Timeout on {method_name} - trying next method...")
                 else:
-                    print(f"    ❌ Error on {page_type} page: {error_msg[:60]}")
-                
-                if verbose:
-                    traceback.print_exc()
+                    print(f"  ❌ Error on {method_name}: {error_msg[:60]}")
                 continue
         
-        # Cross-validate if we have data from both reels and main pages
-        if reels_page_data and arrow_data != reels_page_data:
-            # Check for overlapping reel_ids and validate dates match
-            overlap = set(reels_page_data.keys()) & set(arrow_data.keys())
-            if overlap:
-                matches = sum(1 for r in overlap if reels_page_data[r].get('date') == arrow_data[r].get('date'))
-                if len(overlap) > 0:
-                    match_rate = matches / len(overlap) * 100
-                    print(f"    🔍 Cross-validation: {matches}/{len(overlap)} dates match ({match_rate:.0f}%)")
-                    
-                    # Merge: prefer main page data, fill in missing with reels data
-                    for reel_id, data in reels_page_data.items():
-                        if reel_id not in arrow_data:
-                            arrow_data[reel_id] = data
-                    print(f"    ✅ Merged: now have {len(arrow_data)} dates total")
+        # Use best method data if current arrow_data is worse
+        if len(best_method_data) > len(arrow_data):
+            arrow_data = best_method_data
+            print(f"\n  📦 Using best result from {best_method_name}: {len(arrow_data)} dates")
+        
+        # Cross-validate if we have data from multiple methods
+        total_dates = len(arrow_data)
+        success_rate = total_dates / len(reel_ids_needed) if reel_ids_needed else 0
+        print(f"\n  📊 Arrow scrape complete: {total_dates}/{len(reel_ids_needed)} dates ({success_rate:.0%})")
+        
+        # Check if we need to continue with cross-validation
+        reels_page_data = {}  # Placeholder for backward compatibility
         
         # Convert arrow_data dict to list format matching hover_data
         url_data = []

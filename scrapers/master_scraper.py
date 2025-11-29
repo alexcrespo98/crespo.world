@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import the actual scrapers from the same directory
-from insta_scraper import InstagramScraper, ACCOUNTS_TO_TRACK as INSTA_ACCOUNTS
+from instagram_scraper import InstagramScraper, ACCOUNTS_TO_TRACK as INSTA_ACCOUNTS
 from youtube_scrape import YoutubeScraper, ACCOUNTS_TO_TRACK as YOUTUBE_ACCOUNTS
 from tiktok_scraper import TikTokScraper
 
