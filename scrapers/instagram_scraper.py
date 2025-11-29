@@ -3636,7 +3636,7 @@ class InstagramScraper:
         self.ensure_packages()
         
         print("\n" + "="*70)
-        print("📸 Instagram Reels Analytics Tracker v4.0")
+        print("📸 Instagram Reels Analytics Tracker v5.0")
         print("="*70)
         
         browser_choice = self.select_browser()
