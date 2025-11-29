@@ -2,76 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ChemoCam - Crespo.World</title>
+<title>jacob's page in progress - Crespo.World</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: monospace; text-align: center; background: #000; color: #0f0; margin: 0; padding: 1em; }
-  h1 { font-size: 2em; margin-bottom: 0.2em; }
-  video { border: 3px solid #0f0; max-width: 90%; height: auto; transition: transform 0.3s; }
-  #chat-container { margin-top: 2em; max-width: 90%; margin-left: auto; margin-right: auto; text-align: left; }
-  #messages { border: 2px solid #0f0; padding: 1em; height: 200px; overflow-y: auto; background: #111; }
-  #chat-input { width: 100%; padding: 0.5em; margin-top: 0.5em; background: #000; color: #0f0; border: 2px solid #0f0; }
-  button { background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em 1em; margin: 0.5em; cursor: pointer; }
+  body { 
+    font-family: monospace; 
+    text-align: center; 
+    background: #000; 
+    color: #0f0; 
+    margin: 0; 
+    padding: 2em;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+  }
+  h1 { 
+    font-size: 2.5em; 
+    margin-bottom: 0.5em;
+    text-shadow: 0 0 10px #0f0;
+  }
+  nav {
+    margin-bottom: 2em;
+  }
+  nav a {
+    color: #0f0;
+    text-decoration: none;
+    margin: 0 1em;
+    font-weight: bold;
+  }
+  nav a:hover {
+    text-decoration: underline;
+  }
 </style>
 </head>
 <body>
 
-<h1>ChemoCam Live</h1>
-<video id="player" controls autoplay muted></video>
+<nav>
+  <a href="index.html">home</a>
+  <a href="chemocam.html">jacob's page in progress</a>
+  <a href="crespomize.html">crespomize</a>
+</nav>
 
-<div>
-  <button onclick="rotate(-90)">Rotate ⬅️</button>
-  <button onclick="rotate(90)">Rotate ➡️</button>
-</div>
-
-<div id="chat-container">
-  <h2>Chat</h2>
-  <div id="messages"></div>
-  <input type="text" id="chat-input" placeholder="Type a message and press Enter" />
-  <button onclick="clearChat()">Delete All</button>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-<script>
-const player = document.getElementById('player');
-const HLS_URL = 'https://inform-navigation-charleston-black.trycloudflare.com/stream/index.m3u8';
-let rotation = 0;
-
-// Load HLS stream directly
-if (Hls.isSupported()) {
-    const hls = new Hls();
-    hls.loadSource(HLS_URL);
-    hls.attachMedia(player);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
-} else if (player.canPlayType('application/vnd.apple.mpegurl')) {
-    player.src = HLS_URL;
-    player.addEventListener('loadedmetadata', () => player.play());
-}
-
-// Rotate function
-function rotate(deg) {
-    rotation = (rotation + deg) % 360;
-    player.style.transform = `rotate(${rotation}deg)`;
-}
-
-// Chat functionality (local only)
-const messages = document.getElementById('messages');
-const chatInput = document.getElementById('chat-input');
-
-chatInput.addEventListener('keydown', e => {
-    if(e.key === 'Enter' && chatInput.value.trim() !== '') {
-        const msg = document.createElement('div');
-        msg.textContent = chatInput.value;
-        messages.appendChild(msg);
-        messages.scrollTop = messages.scrollHeight;
-        chatInput.value = '';
-    }
-});
-
-function clearChat() {
-    messages.innerHTML = '';
-}
-</script>
+<h1>jacob's page in progress</h1>
 
 </body>
 </html>
