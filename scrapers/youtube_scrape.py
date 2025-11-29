@@ -5,6 +5,7 @@ YouTube Shorts/Videos Analytics Tracker v2.0
 - NEW: Master scraper integration support
 - NEW: Early termination detection with recovery option
 - NEW: Auto-detection when API quota is exhausted
+- NEW: LiveCounts. io integration for accurate subscriber counts
 - Uses YouTube Data API v3 (official, free, reliable)
 - Tracks multiple YouTube channels
 - Configurable scrape modes: test, custom, deep (unlimited)
@@ -26,7 +27,7 @@ import signal
 import traceback
 from pathlib import Path
 
-OUTPUT_EXCEL = "youtube_analytics_tracker.xlsx"
+OUTPUT_EXCEL = "youtube_analytics_tracker. xlsx"
 
 # YouTube channels to track
 ACCOUNTS_TO_TRACK = [
@@ -53,7 +54,7 @@ class YoutubeScraper:
         self.api_quota_limit = 10000  # YouTube daily limit
         
         # Set up signal handler for interrupts
-        signal.signal(signal.SIGINT, self.handle_interrupt)
+        signal.signal(signal. SIGINT, self. handle_interrupt)
         
     def handle_interrupt(self, signum, frame):
         """Handle Ctrl+C interrupt gracefully"""
@@ -126,7 +127,7 @@ class YoutubeScraper:
         if response.status_code == 403:
             data = response.json()
             if 'error' in data:
-                error_msg = data['error'].get('message', '')
+                error_msg = data['error']. get('message', '')
                 if 'quota' in error_msg.lower():
                     return True, "API quota exceeded"
         return False, None
@@ -144,6 +145,53 @@ class YoutubeScraper:
         
         if self.api_quota_used > self.api_quota_limit * 0.8:
             print(f"  ⚠️ API quota warning: {self.api_quota_used}/{self.api_quota_limit} units used")
+
+    def get_livecounts_subscribers(self, channel_id):
+        """Get real-time subscriber count from LiveCounts.io"""
+        try:
+            # Construct the LiveCounts. io API URL
+            api_url = f"https://api.livecounts.io/youtube/channel/{channel_id}"
+            
+            # Try the API with a short timeout
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537. 36'
+            }
+            
+            response = requests.get(api_url, headers=headers, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # LiveCounts. io may return data in different formats
+                if 'subscriberCount' in data:
+                    live_subscribers = int(data['subscriberCount'])
+                    print(f"  📊 LiveCounts.io: Got accurate subscriber count: {live_subscribers:,}")
+                    return live_subscribers
+                elif 'subscribers' in data:
+                    live_subscribers = int(data['subscribers'])
+                    print(f"  📊 LiveCounts.io: Got accurate subscriber count: {live_subscribers:,}")
+                    return live_subscribers
+                elif 'items' in data and len(data['items']) > 0:
+                    # Sometimes the data is wrapped
+                    item = data['items'][0]
+                    if 'subscriberCount' in item:
+                        live_subscribers = int(item['subscriberCount'])
+                        print(f"  📊 LiveCounts.io: Got accurate subscriber count: {live_subscribers:,}")
+                        return live_subscribers
+            
+            # If we get here, the API didn't work as expected
+            print(f"  ℹ️ LiveCounts. io: Unable to get real-time count (status: {response.status_code})")
+            return None
+            
+        except requests.exceptions. Timeout:
+            print(f"  ⏱️ LiveCounts.io: Request timed out")
+            return None
+        except requests.exceptions.ConnectionError:
+            print(f"  🔌 LiveCounts.io: Connection error")
+            return None
+        except Exception as e:
+            print(f"  ⚠️ LiveCounts. io error: {str(e)}")
+            return None
 
     def get_channel_info(self, channel_name):
         """Get channel ID, statistics, and uploads playlist"""
@@ -168,17 +216,30 @@ class YoutubeScraper:
         
         if 'items' in data and len(data['items']) > 0:
             item = data['items'][0]
+            channel_id = item['id']
+            
+            # Try to get accurate subscriber count from LiveCounts.io
+            live_subscribers = self. get_livecounts_subscribers(channel_id)
+            
+            # Use LiveCounts subscriber count if available, otherwise fall back to YouTube API
+            if live_subscribers is not None:
+                subscribers = live_subscribers
+                print(f"  ✅ Using LiveCounts. io subscriber count")
+            else:
+                subscribers = int(item['statistics']. get('subscriberCount', 0))
+                print(f"  ℹ️ Using YouTube API subscriber count (estimate)")
+            
             return {
-                'channel_id': item['id'],
+                'channel_id': channel_id,
                 'title': item['snippet']['title'],
-                'subscribers': int(item['statistics'].get('subscriberCount', 0)),
+                'subscribers': subscribers,
                 'total_views': int(item['statistics'].get('viewCount', 0)),
                 'total_videos': int(item['statistics'].get('videoCount', 0)),
                 'uploads_playlist': item['contentDetails']['relatedPlaylists']['uploads']
             }
         
         # Try search if handle doesn't work
-        url = "https://www.googleapis.com/youtube/v3/search"
+        url = "https://www.googleapis. com/youtube/v3/search"
         params = {
             'part': 'snippet',
             'q': channel_name,
@@ -209,16 +270,28 @@ class YoutubeScraper:
             }
             
             response = requests.get(url, params=params)
-            self.track_api_usage('channels')
+            self. track_api_usage('channels')
             
             data = response.json()
             
             if 'items' in data:
                 item = data['items'][0]
+                
+                # Try to get accurate subscriber count from LiveCounts.io
+                live_subscribers = self.get_livecounts_subscribers(channel_id)
+                
+                # Use LiveCounts subscriber count if available, otherwise fall back to YouTube API
+                if live_subscribers is not None:
+                    subscribers = live_subscribers
+                    print(f"  ✅ Using LiveCounts.io subscriber count")
+                else:
+                    subscribers = int(item['statistics'].get('subscriberCount', 0))
+                    print(f"  ℹ️ Using YouTube API subscriber count (estimate)")
+                
                 return {
                     'channel_id': item['id'],
                     'title': item['snippet']['title'],
-                    'subscribers': int(item['statistics'].get('subscriberCount', 0)),
+                    'subscribers': subscribers,
                     'total_views': int(item['statistics'].get('viewCount', 0)),
                     'total_videos': int(item['statistics'].get('videoCount', 0)),
                     'uploads_playlist': item['contentDetails']['relatedPlaylists']['uploads']
@@ -237,10 +310,10 @@ class YoutubeScraper:
         # For deep scrape, we'll keep going until we run out of videos
         target_videos = 999999 if deep_scrape else (max_videos or 30)
         
-        print(f"  📹 Fetching video list{'... (unlimited deep scrape)' if deep_scrape else f' (target: {target_videos})'}...")
+        print(f"  📹 Fetching video list{'...  (unlimited deep scrape)' if deep_scrape else f' (target: {target_videos})'}...")
         
         while len(all_video_ids) < target_videos:
-            url = "https://www.googleapis.com/youtube/v3/playlistItems"
+            url = "https://www.googleapis. com/youtube/v3/playlistItems"
             params = {
                 'part': 'contentDetails',
                 'playlistId': uploads_playlist,
@@ -251,7 +324,7 @@ class YoutubeScraper:
             if page_token:
                 params['pageToken'] = page_token
             
-            response = requests.get(url, params=params)
+            response = requests. get(url, params=params)
             self.track_api_usage('playlistItems')
             
             # Check for quota exhaustion
@@ -269,7 +342,7 @@ class YoutubeScraper:
             data = response.json()
             
             if 'error' in data:
-                print(f"  ⚠️ API Error: {data['error'].get('message', 'Unknown error')}")
+                print(f"  ⚠️ API Error: {data['error']. get('message', 'Unknown error')}")
                 early_termination = {
                     'reason': 'api_error',
                     'videos_scraped': len(all_video_ids),
@@ -280,7 +353,7 @@ class YoutubeScraper:
             
             if 'items' in data:
                 video_ids = [item['contentDetails']['videoId'] for item in data['items']]
-                all_video_ids.extend(video_ids)
+                all_video_ids. extend(video_ids)
                 page_count += 1
                 
                 # Progress update for deep scrape
@@ -311,7 +384,7 @@ class YoutubeScraper:
         for i in range(0, len(video_ids), 50):
             batch = video_ids[i:i+50]
             
-            url = "https://www.googleapis.com/youtube/v3/videos"
+            url = "https://www. googleapis.com/youtube/v3/videos"
             params = {
                 'part': 'snippet,statistics,contentDetails',
                 'id': ','.join(batch),
@@ -319,7 +392,7 @@ class YoutubeScraper:
             }
             
             response = requests.get(url, params=params)
-            self.track_api_usage('videos')
+            self. track_api_usage('videos')
             
             # Check for quota exhaustion
             quota_exceeded, msg = self.check_api_quota(response)
@@ -338,7 +411,7 @@ class YoutubeScraper:
                 for item in data['items']:
                     # Parse duration
                     duration = item['contentDetails']['duration']
-                    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
+                    match = re.match(r'PT(? :(\d+)H)?(? :(\d+)M)?(? :(\d+)S)?', duration)
                     if match:
                         hours = int(match.group(1) or 0)
                         minutes = int(match.group(2) or 0)
@@ -355,12 +428,12 @@ class YoutubeScraper:
                     
                     # Parse published date
                     published_str = snippet['publishedAt']
-                    published_date = datetime.fromisoformat(published_str.replace('Z', '+00:00'))
+                    published_date = datetime.fromisoformat(published_str. replace('Z', '+00:00'))
                     
                     all_videos.append({
                         'video_id': item['id'],
                         'title': snippet['title'],
-                        'date': published_date.strftime('%Y-%m-%d %H:%M:%S'),
+                        'date': published_date. strftime('%Y-%m-%d %H:%M:%S'),
                         'date_display': published_date.strftime('%b %d, %Y'),
                         'date_timestamp': published_date,
                         'duration': total_seconds,
@@ -380,7 +453,7 @@ class YoutubeScraper:
     def scrape_youtube_channel(self, channel_name, max_videos=30, deep_scrape=False, test_mode=False):
         """Scrape a single YouTube channel"""
         print(f"  📺 Getting channel info...")
-        channel_info = self.get_channel_info(channel_name)
+        channel_info = self. get_channel_info(channel_name)
         
         if not channel_info:
             print(f"  ❌ Channel not found or API issue: {channel_name}")
@@ -397,7 +470,7 @@ class YoutubeScraper:
         
         if not video_ids:
             print(f"  ⚠️ No videos found")
-            return [], channel_info['subscribers'], channel_info.get('total_views', 0)
+            return [], channel_info['subscribers'], channel_info. get('total_views', 0)
         
         # Get detailed video info
         print(f"  📊 Getting detailed stats for {len(video_ids)} videos...")
@@ -434,7 +507,7 @@ class YoutubeScraper:
         total_likes = sum(v['likes'] for v in videos)
         
         # Count shorts vs regular videos
-        shorts_count = sum(1 for v in videos if v.get('is_short', False))
+        shorts_count = sum(1 for v in videos if v. get('is_short', False))
         print(f"  📱 Content breakdown: {shorts_count} Shorts, {len(videos) - shorts_count} regular videos")
         
         return videos, channel_info['subscribers'], total_likes
@@ -455,7 +528,7 @@ class YoutubeScraper:
         import pandas as pd
         
         if existing_df is not None and not existing_df.empty:
-            df = existing_df.copy()
+            df = existing_df. copy()
         else:
             df = pd.DataFrame()
         
@@ -464,7 +537,7 @@ class YoutubeScraper:
             df[timestamp_col] = None
         
         # Add channel-level metrics
-        df.loc["followers", timestamp_col] = subscribers
+        df. loc["followers", timestamp_col] = subscribers
         df.loc["total_likes", timestamp_col] = total_likes
         df.loc["posts_scraped", timestamp_col] = len(videos_data)
         
@@ -547,13 +620,13 @@ class YoutubeScraper:
         
         for channel, termination_info in self.early_terminations.items():
             print(f"\n@{channel}:")
-            print(f"  Reason: {termination_info['reason'].replace('_', ' ').title()}")
+            print(f"  Reason: {termination_info['reason']. replace('_', ' ').title()}")
             print(f"  Videos scraped: {termination_info['videos_scraped']}")
             if 'message' in termination_info:
                 print(f"  Message: {termination_info['message']}")
         
-        if 'quota_exceeded' in str(self.early_terminations.values()):
-            print("\n⚠️ API quota exceeded. YouTube allows 10,000 units per day.")
+        if 'quota_exceeded' in str(self.early_terminations. values()):
+            print("\n⚠️ API quota exceeded.  YouTube allows 10,000 units per day.")
             print("   Try again tomorrow or use a different API key.")
             return
         
@@ -561,7 +634,7 @@ class YoutubeScraper:
         
         if retry == 'y':
             print("\n🔄 Attempting to get more videos...")
-            for channel in self.early_terminations.keys():
+            for channel in self.early_terminations. keys():
                 print(f"\n📺 Re-attempting @{channel}...")
                 try:
                     videos_data, subscribers, total_likes = self.scrape_youtube_channel(
@@ -573,7 +646,7 @@ class YoutubeScraper:
                     
                     if len(videos_data) > self.early_terminations[channel]['videos_scraped']:
                         print(f"  ✅ Got {len(videos_data) - self.early_terminations[channel]['videos_scraped']} additional videos!")
-                        existing_df = all_account_data.get(channel)
+                        existing_df = all_account_data. get(channel)
                         df = self.create_dataframe_for_account(
                             videos_data, subscribers, total_likes, timestamp_col, existing_df
                         )
@@ -609,7 +682,7 @@ class YoutubeScraper:
                     return 30, False, False
                     
             elif choice == '2':
-                confirm = input("\n⚠️ Deep scrape will fetch ALL videos. This may use significant API quota. Continue? (y/n): ").strip().lower()
+                confirm = input("\n⚠️ Deep scrape will fetch ALL videos.  This may use significant API quota. Continue? (y/n): ").strip().lower()
                 if confirm == 'y':
                     return None, True, False
                     
@@ -631,7 +704,7 @@ class YoutubeScraper:
         
         # Test API key
         print("\n🔑 Testing API key...")
-        test_url = f"https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=popdartsgame&key={API_KEY}"
+        test_url = f"https://www.googleapis.com/youtube/v3/channels? part=id&forHandle=popdartsgame&key={API_KEY}"
         try:
             test_response = requests.get(test_url)
             if test_response.status_code == 200:
@@ -711,7 +784,7 @@ class YoutubeScraper:
                         print(f"   Total likes: {total_likes:,}" if total_likes else "   Total likes: N/A")
                         
                         if videos_data:
-                            shorts_count = sum(1 for v in videos_data if v.get('is_short', False))
+                            shorts_count = sum(1 for v in videos_data if v. get('is_short', False))
                             print(f"   Shorts: {shorts_count}, Regular videos: {len(videos_data) - shorts_count}")
                             avg_views = sum(v['views'] for v in videos_data) / len(videos_data)
                             avg_engagement = sum(v['engagement'] for v in videos_data) / len(videos_data)
@@ -778,7 +851,7 @@ class YoutubeScraper:
             
             if self.early_terminations:
                 print("\n⚠️  Early terminations:")
-                for channel, info in self.early_terminations.items():
+                for channel, info in self.early_terminations. items():
                     print(f"  @{channel}: {info['reason']} at {info['videos_scraped']} videos")
             
             print("\n" + "="*70 + "\n")
@@ -824,7 +897,7 @@ class YoutubeScraper:
         # Filter by date and convert to format expected by master scraper
         videos = []
         for video in videos_data:
-            if video.get('date_timestamp'):
+            if video. get('date_timestamp'):
                 if video['date_timestamp'] >= start_date:
                     videos.append({
                         'id': video['video_id'],
