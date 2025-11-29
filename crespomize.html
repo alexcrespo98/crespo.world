@@ -506,13 +506,15 @@
         let minVal = parseInt(rangeMin.value);
         let maxVal = parseInt(rangeMax.value);
         
-        // Prevent handles from crossing
+        // Prevent handles from crossing and ensure values are within bounds
         if (minVal > maxVal - 1) {
           if (this.lastChanged === 'min') {
-            minVal = maxVal - 1;
+            minVal = Math.min(maxVal - 1, 99);
+            minVal = Math.max(minVal, 0);
             rangeMin.value = minVal;
           } else {
-            maxVal = minVal + 1;
+            maxVal = Math.min(minVal + 1, 100);
+            maxVal = Math.max(maxVal, 1);
             rangeMax.value = maxVal;
           }
         }
@@ -605,8 +607,9 @@
           if (days === 'all') {
             startDate = this.dataDateRange.min;
           } else {
-            startDate = new Date();
-            startDate.setDate(startDate.getDate() - days);
+            // Create a new date by subtracting milliseconds (more robust than setDate)
+            const daysInMs = days * 24 * 60 * 60 * 1000;
+            startDate = new Date(now.getTime() - daysInMs);
             if (startDate < this.dataDateRange.min) {
               startDate = this.dataDateRange.min;
             }
@@ -1276,10 +1279,13 @@
               // Find the most recent non-empty likes value for this post up to this column
               let mostRecentLikes = 0;
               for (let prevColIdx = colIdx; prevColIdx >= 0; prevColIdx--) {
-                const value = parseInt(likesRow[prevColIdx + 1]) || 0;
-                if (value > 0) {
-                  mostRecentLikes = value;
-                  break;
+                // Check array bounds before accessing
+                if (prevColIdx + 1 < likesRow.length) {
+                  const value = parseInt(likesRow[prevColIdx + 1]) || 0;
+                  if (value > 0) {
+                    mostRecentLikes = value;
+                    break;
+                  }
                 }
               }
               columnTotalLikes += mostRecentLikes;
@@ -1445,8 +1451,9 @@
           return videos;
         }
         
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+        // Create cutoff date using milliseconds (more robust than setDate for month/year boundaries)
+        const daysInMs = timeRangeDays * 24 * 60 * 60 * 1000;
+        const cutoffDate = new Date(Date.now() - daysInMs);
         
         return videos.filter(v => v.date >= cutoffDate);
       },
