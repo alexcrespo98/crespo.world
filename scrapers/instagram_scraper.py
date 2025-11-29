@@ -1299,12 +1299,20 @@ class InstagramScraper:
                     # Extract date
                     date_info = self.extract_date_from_current_view(driver)
                     
+                    # Store date if we found one for a reel we need
+                    found_new_match = False
+                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in method_arrow_data:
+                        if date_info.get('date'):
+                            method_arrow_data[current_reel_id] = date_info
+                            found_new_match = True
+                    
                     # Show verbose output (first 20, then every 50th)
                     if verbose and (posts_processed < 20 or posts_processed % 50 == 0):
                         in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
                         reel_display = current_reel_id if current_reel_id else 'POST'
-                        print(f"  [{posts_processed+1}] {reel_display} [{in_list}] → {date_str}")
+                        matches_str = f"({len(method_arrow_data)}/{len(reel_ids_needed)} dates)"
+                        print(f"  [{posts_processed+1}] {reel_display} [{in_list}] → {date_str} {matches_str}")
                     
                     # Track consecutive NO DATE
                     if not date_info.get('date'):
@@ -1312,18 +1320,13 @@ class InstagramScraper:
                     else:
                         consecutive_no_dates = 0
                     
-                    # Store date if we found one for a reel we need
-                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in method_arrow_data:
-                        if date_info.get('date'):
-                            method_arrow_data[current_reel_id] = date_info
-                    
                     # Navigate to next post
                     body.send_keys(Keys.ARROW_RIGHT)
                     posts_processed += 1
                     
                     # Progress update every 50 posts (if not already shown in verbose)
                     if posts_processed % 50 == 0 and not verbose:
-                        print(f"  📊 Processed {posts_processed} posts, found {len(method_arrow_data)} matches...")
+                        print(f"  📊 Processed {posts_processed} posts, found {len(method_arrow_data)}/{len(reel_ids_needed)} dates...")
                     
                     # Check if we've collected all needed dates
                     if len(method_arrow_data) >= len(reel_ids_needed):
