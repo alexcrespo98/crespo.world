@@ -399,7 +399,7 @@
 <body>
   <nav>
     <a href="index.html">home</a>
-    <a href="chemocam.html">jacob's page in progress</a>
+    <a href="chemocam.html">chemocam</a>
     <a href="crespomize.html">crespomize</a>
   </nav>
 
@@ -512,6 +512,7 @@
       trendlineSmoothnessLevel: {},
       chartModeStates: {},
       allPlatformsData: {},
+      allVideosUnfiltered: [],
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -926,12 +927,20 @@
           }
         };
         
+        // Also store unfiltered videos for cumulative calculations with historical context
+        this.allVideosUnfiltered = [];
+        
         // Load Instagram data
         try {
           const igResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.instagram}/export?format=xlsx`);
           const igBuffer = await igResponse.arrayBuffer();
           const igWorkbook = XLSX.read(igBuffer, { type: 'array' });
           this.allPlatformsData.instagram = this.processWorkbookData(igWorkbook, 'instagram', timeRangeDays);
+          // Store unfiltered videos
+          const igUnfiltered = this.processWorkbookData(igWorkbook, 'instagram', 'all');
+          if (igUnfiltered && igUnfiltered.videos) {
+            this.allVideosUnfiltered = this.allVideosUnfiltered.concat(igUnfiltered.videos);
+          }
         } catch (error) {
           console.error('Error loading Instagram data:', error);
         }
@@ -942,6 +951,11 @@
           const ttBuffer = await ttResponse.arrayBuffer();
           const ttWorkbook = XLSX.read(ttBuffer, { type: 'array' });
           this.allPlatformsData.tiktok = this.processWorkbookData(ttWorkbook, 'tiktok', timeRangeDays);
+          // Store unfiltered videos
+          const ttUnfiltered = this.processWorkbookData(ttWorkbook, 'tiktok', 'all');
+          if (ttUnfiltered && ttUnfiltered.videos) {
+            this.allVideosUnfiltered = this.allVideosUnfiltered.concat(ttUnfiltered.videos);
+          }
         } catch (error) {
           console.error('Error loading TikTok data:', error);
         }
@@ -952,6 +966,11 @@
           const ytBuffer = await ytResponse.arrayBuffer();
           const ytWorkbook = XLSX.read(ytBuffer, { type: 'array' });
           this.allPlatformsData.youtube = this.processWorkbookData(ytWorkbook, 'youtube', timeRangeDays);
+          // Store unfiltered videos
+          const ytUnfiltered = this.processWorkbookData(ytWorkbook, 'youtube', 'all');
+          if (ytUnfiltered && ytUnfiltered.videos) {
+            this.allVideosUnfiltered = this.allVideosUnfiltered.concat(ytUnfiltered.videos);
+          }
         } catch (error) {
           console.error('Error loading YouTube data:', error);
         }
@@ -1083,8 +1102,14 @@
       processData(timeRangeDays) {
         if (this.isMoonMediaTotal) {
           this.accountData = this.parseMoonMediaTotal(timeRangeDays);
+          // Also store unfiltered videos for cumulative calculations with historical context
+          const unfilteredData = this.parseMoonMediaTotal('all');
+          this.allVideosUnfiltered = unfilteredData.videos || [];
         } else {
           this.accountData = this.parseAccountData(this.selectedAccount, timeRangeDays);
+          // Also store unfiltered videos for cumulative calculations with historical context
+          const unfilteredData = this.parseAccountData(this.selectedAccount, 'all');
+          this.allVideosUnfiltered = unfilteredData.videos || [];
         }
       },
       
@@ -1780,17 +1805,40 @@
       },
       
       // Calculate cumulative data from video data
-      calculateCumulativeData(data) {
+      calculateCumulativeData(data, historicalSum = 0) {
         if (!data || data.length === 0) return [];
         
         // Sort by date first
         const sortedData = [...data].sort((a, b) => new Date(a.x) - new Date(b.x));
         
-        let cumulative = 0;
+        // Start cumulative from historical sum (all data before the selected time range)
+        let cumulative = historicalSum;
         return sortedData.map(point => {
           cumulative += point.y;
           return { x: point.x, y: cumulative };
         });
+      },
+      
+      // Calculate the sum of a metric for all videos before a given date
+      calculateHistoricalSum(allVideos, metricKey, startDate) {
+        if (!allVideos || allVideos.length === 0 || !startDate) return 0;
+        
+        return allVideos
+          .filter(v => v.date && new Date(v.date) < new Date(startDate))
+          .reduce((sum, v) => sum + (v[metricKey] || 0), 0);
+      },
+      
+      // Get the start date for the current time range filter
+      getTimeRangeStartDate() {
+        if (this.selectedTimeRange === 'all') return null;
+        
+        if (this.selectedTimeRange === 'custom') {
+          return this.customStartDate;
+        }
+        
+        // For preset time ranges (30, 180, 365 days)
+        const daysInMs = this.selectedTimeRange * 24 * 60 * 60 * 1000;
+        return new Date(Date.now() - daysInMs);
       },
       
       // Calculate smoothed curve for cumulative data using exponential smoothing
@@ -1827,7 +1875,7 @@
         const newMode = currentMode === 'average' ? 'cumulative' : 'average';
         this.chartModeStates[chartId] = newMode;
         
-        // Get the original video data
+        // Get the filtered video data (currently displayed)
         const videos = this.isAllPlatforms ? 
           [...(this.allPlatformsData.instagram?.videos || []), 
            ...(this.allPlatformsData.tiktok?.videos || []),
@@ -1840,7 +1888,23 @@
         let newData;
         if (newMode === 'cumulative') {
           const rawData = videos.map(v => ({ x: v.date, y: v[metricKey] }));
-          newData = this.calculateCumulativeData(rawData);
+          
+          // Calculate historical sum (all data before the selected time range)
+          const startDate = this.getTimeRangeStartDate();
+          let historicalSum = 0;
+          
+          if (startDate) {
+            // Get all unfiltered videos
+            const allVideos = this.isAllPlatforms ?
+              [...(this.allPlatformsData.instagram?.videos || []),
+               ...(this.allPlatformsData.tiktok?.videos || []),
+               ...(this.allPlatformsData.youtube?.videos || [])] :
+              (this.allVideosUnfiltered || []);
+            
+            historicalSum = this.calculateHistoricalSum(allVideos, metricKey, startDate);
+          }
+          
+          newData = this.calculateCumulativeData(rawData, historicalSum);
         } else {
           newData = videos.map(v => ({ x: v.date, y: v[metricKey] }));
         }
