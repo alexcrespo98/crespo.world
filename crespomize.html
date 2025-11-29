@@ -560,33 +560,80 @@
       },
       
       // Initialize slider with data range
-      initializeSliderWithData() {
-        // This will be called after we know the data range
-        // For now, use a default range
+      initializeSliderWithData(minDate = null, maxDate = null) {
+        // Use provided dates or fallback to defaults
         const now = new Date();
-        const yearAgo = new Date();
-        yearAgo. setFullYear(yearAgo. getFullYear() - 10); // Fallback to 10 years
+        let actualMin = minDate;
+        let actualMax = maxDate || now;
         
-        this.dataDateRange.min = yearAgo;
-        this.dataDateRange.max = now;
+        // If no min date provided, use a reasonable default (10 years back)
+        if (!actualMin) {
+          actualMin = new Date();
+          actualMin.setFullYear(actualMin.getFullYear() - 10);
+        }
         
-        document.getElementById('minDateLabel').textContent = this.formatDate(yearAgo);
-        document.getElementById('maxDateLabel').textContent = this.formatDate(now);
+        this.dataDateRange.min = actualMin;
+        this.dataDateRange.max = actualMax;
+        
+        document.getElementById('minDateLabel').textContent = this.formatDate(actualMin);
+        document.getElementById('maxDateLabel').textContent = this.formatDate(actualMax);
         
         // Initialize slider to full range
         document.getElementById('rangeMin').value = 0;
         document.getElementById('rangeMax').value = 100;
         
-        this.customDateRange.start = yearAgo;
-        this.customDateRange.end = now;
+        this.customDateRange.start = actualMin;
+        this.customDateRange.end = actualMax;
         
-        document.getElementById('selectedStartDate').textContent = this.formatDate(yearAgo);
-        document.getElementById('selectedEndDate').textContent = this.formatDate(now);
+        document.getElementById('selectedStartDate').textContent = this.formatDate(actualMin);
+        document.getElementById('selectedEndDate').textContent = this.formatDate(actualMax);
         
         // Update slider range highlight
         const sliderRange = document.getElementById('sliderRange');
         sliderRange.style.left = '0%';
         sliderRange.style.width = '100%';
+      },
+      
+      // Update slider range with actual data dates
+      updateSliderWithDataRange(videos, totalLikesHistory = [], followersHistory = []) {
+        let minDate = null;
+        let maxDate = null;
+        
+        // Extract dates from videos
+        if (videos && videos.length > 0) {
+          const videoDates = videos.filter(v => v.date && this.isValidDate(v.date)).map(v => v.date);
+          if (videoDates.length > 0) {
+            minDate = new Date(Math.min(...videoDates.map(d => d.getTime())));
+            maxDate = new Date(Math.max(...videoDates.map(d => d.getTime())));
+          }
+        }
+        
+        // Also consider totalLikesHistory dates (may go back further)
+        if (totalLikesHistory && totalLikesHistory.length > 0) {
+          const historyDates = totalLikesHistory.filter(h => h.date && this.isValidDate(h.date)).map(h => h.date);
+          if (historyDates.length > 0) {
+            const historyMin = new Date(Math.min(...historyDates.map(d => d.getTime())));
+            const historyMax = new Date(Math.max(...historyDates.map(d => d.getTime())));
+            if (!minDate || historyMin < minDate) minDate = historyMin;
+            if (!maxDate || historyMax > maxDate) maxDate = historyMax;
+          }
+        }
+        
+        // Also consider followersHistory dates
+        if (followersHistory && followersHistory.length > 0) {
+          const historyDates = followersHistory.filter(h => h.date && this.isValidDate(h.date)).map(h => h.date);
+          if (historyDates.length > 0) {
+            const historyMin = new Date(Math.min(...historyDates.map(d => d.getTime())));
+            const historyMax = new Date(Math.max(...historyDates.map(d => d.getTime())));
+            if (!minDate || historyMin < minDate) minDate = historyMin;
+            if (!maxDate || historyMax > maxDate) maxDate = historyMax;
+          }
+        }
+        
+        // If we found valid dates, update the slider
+        if (minDate && maxDate) {
+          this.initializeSliderWithData(minDate, maxDate);
+        }
       },
         
       
@@ -683,20 +730,76 @@
       },
       
       // Platform selection
-      selectPlatform(platform) {
+      async selectPlatform(platform) {
         this.selectedPlatform = platform;
         this.isAllPlatforms = (platform === 'all');
         
         document.getElementById('step0').classList.add('hidden');
         
         if (this.isAllPlatforms) {
-          // Skip account selection for all platforms
+          // Show loading while fetching data to determine date range
+          document.getElementById('loading').classList.remove('hidden');
+          document.getElementById('loading').textContent = 'loading data for date range...';
+          
+          // Load all platforms data with 'all' time range to get date range
+          await this.loadAllPlatformsDataForDateRange();
+          
+          document.getElementById('loading').classList.add('hidden');
+          document.getElementById('loading').textContent = 'loading data...';
           document.getElementById('step2').classList.remove('hidden');
-          this.initializeSliderWithData();
         } else {
           document.getElementById('step1').classList.remove('hidden');
           this.loadSheetData();
         }
+      },
+      
+      // Load all platforms data just to determine date range
+      async loadAllPlatformsDataForDateRange() {
+        let allVideos = [];
+        let allTotalLikesHistory = [];
+        let allFollowersHistory = [];
+        
+        // Load Instagram data
+        try {
+          const igResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.instagram}/export?format=xlsx`);
+          const igBuffer = await igResponse.arrayBuffer();
+          const igWorkbook = XLSX.read(igBuffer, { type: 'array' });
+          const igData = this.processWorkbookData(igWorkbook, 'instagram', 'all');
+          if (igData && igData.videos) {
+            allVideos = allVideos.concat(igData.videos);
+          }
+        } catch (error) {
+          console.error('Error loading Instagram data for date range:', error);
+        }
+        
+        // Load TikTok data
+        try {
+          const ttResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.tiktok}/export?format=xlsx`);
+          const ttBuffer = await ttResponse.arrayBuffer();
+          const ttWorkbook = XLSX.read(ttBuffer, { type: 'array' });
+          const ttData = this.processWorkbookData(ttWorkbook, 'tiktok', 'all');
+          if (ttData && ttData.videos) {
+            allVideos = allVideos.concat(ttData.videos);
+          }
+        } catch (error) {
+          console.error('Error loading TikTok data for date range:', error);
+        }
+        
+        // Load YouTube data
+        try {
+          const ytResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.youtube}/export?format=xlsx`);
+          const ytBuffer = await ytResponse.arrayBuffer();
+          const ytWorkbook = XLSX.read(ytBuffer, { type: 'array' });
+          const ytData = this.processWorkbookData(ytWorkbook, 'youtube', 'all');
+          if (ytData && ytData.videos) {
+            allVideos = allVideos.concat(ytData.videos);
+          }
+        } catch (error) {
+          console.error('Error loading YouTube data for date range:', error);
+        }
+        
+        // Update slider with the extracted date range
+        this.updateSliderWithDataRange(allVideos, allTotalLikesHistory, allFollowersHistory);
       },
       
       // Account selection
@@ -705,7 +808,22 @@
         this.isMoonMediaTotal = (account === 'MOONMEDIA_TOTAL');
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
-        this.initializeSliderWithData();
+        
+        // Parse data with 'all' time range to extract the full date range
+        const fullData = this.isMoonMediaTotal 
+          ? this.parseMoonMediaTotal('all')
+          : this.parseAccountData(this.selectedAccount, 'all');
+        
+        // Update slider with actual data date range
+        if (fullData) {
+          this.updateSliderWithDataRange(
+            fullData.videos || [], 
+            fullData.totalLikesHistory || [], 
+            fullData.followersHistory || []
+          );
+        } else {
+          this.initializeSliderWithData();
+        }
       },
       
       // Time range selection
@@ -1349,6 +1467,9 @@
         let followersByTimestamp = {};
         let likesByTimestamp = {};
         
+        // Track last known likes value for each account for cumulative calculation
+        let lastKnownLikesByAccount = {};
+        
         accounts.forEach(sheetName => {
           const data = this.parseAccountData(sheetName, timeRangeDays);
           totalFollowers += data.followers;
@@ -1371,6 +1492,7 @@
             followersByTimestamp[dateKey].accountCount += 1;
           });
           
+          // For likes, store per-account values to enable cumulative calculation
           data.totalLikesHistory.forEach(item => {
             if (!this.isValidDate(item.date)) return;
             
@@ -1378,28 +1500,48 @@
             if (!likesByTimestamp[dateKey]) {
               likesByTimestamp[dateKey] = { 
                 date: item.date, 
-                total: 0, 
-                accountCount: 0 
+                accountValues: {} 
               };
             }
-            likesByTimestamp[dateKey].total += item.value;
-            likesByTimestamp[dateKey].accountCount += 1;
+            likesByTimestamp[dateKey].accountValues[sheetName] = item.value;
           });
         });
         
         const totalAccountCount = accounts.length;
         
+        // Followers: only include timestamps where ALL accounts have data (as per exception)
         const followersHistory = Object.values(followersByTimestamp)
           .filter(item => item.accountCount === totalAccountCount)
           .map(item => ({ date: item.date, value: item.total }))
           .filter(item => this.isValidDate(item.date) && item.value > 0)
           .sort((a, b) => a.date - b.date);
         
-        const totalLikesHistory = Object.values(likesByTimestamp)
-          .filter(item => item.accountCount === totalAccountCount)
-          .map(item => ({ date: item.date, value: item.total }))
-          .filter(item => this.isValidDate(item.date) && item.value > 0)
+        // Total Likes: include ALL timestamps, using last known value for missing accounts
+        // Sort timestamps chronologically first
+        const sortedLikesTimestamps = Object.values(likesByTimestamp)
+          .filter(item => this.isValidDate(item.date))
           .sort((a, b) => a.date - b.date);
+        
+        // Build cumulative total likes history
+        const totalLikesHistory = [];
+        accounts.forEach(acc => { lastKnownLikesByAccount[acc] = 0; });
+        
+        sortedLikesTimestamps.forEach(item => {
+          // Update last known values for accounts that have data at this timestamp
+          Object.keys(item.accountValues).forEach(acc => {
+            lastKnownLikesByAccount[acc] = item.accountValues[acc];
+          });
+          
+          // Sum all last known values (ensures cumulative behavior)
+          const cumulativeTotal = Object.values(lastKnownLikesByAccount).reduce((sum, val) => sum + val, 0);
+          
+          if (cumulativeTotal > 0) {
+            totalLikesHistory.push({
+              date: item.date,
+              value: cumulativeTotal
+            });
+          }
+        });
         
         allVideos.sort((a, b) => a.date - b.date);
         
