@@ -488,6 +488,16 @@
         youtube: '1yRLZpJLdaB9oPZtjcwIeJx-6q8lGF2dO'
       },
       
+      // Smoothness constants for exponential smoothing
+      SMOOTHNESS: {
+        MIN_LEVEL: 1,
+        MAX_LEVEL: 10,
+        DEFAULT_LEVEL: 5,
+        MAX_ALPHA: 0.5,    // Most responsive (smoothness level 1)
+        MIN_ALPHA: 0.05,   // Smoothest (smoothness level 10)
+        ALPHA_RANGE: 0.45  // MAX_ALPHA - MIN_ALPHA
+      },
+      
       // State variables
       selectedPlatform: '',
       workbookData: null,
@@ -1784,12 +1794,13 @@
       },
       
       // Calculate smoothed curve for cumulative data using exponential smoothing
-      calculateSmoothedCurve(data, smoothnessLevel = 5) {
+      calculateSmoothedCurve(data, smoothnessLevel = this.SMOOTHNESS.DEFAULT_LEVEL) {
         if (!data || data.length === 0) return [];
         
-        // Smoothness level: 1 = most responsive, 10 = smoothest
-        // Alpha ranges from 0.5 (responsive) to 0.05 (smooth)
-        const alpha = 0.5 - ((smoothnessLevel - 1) / 9) * 0.45;
+        // Smoothness level: MIN_LEVEL = most responsive, MAX_LEVEL = smoothest
+        // Alpha ranges from MAX_ALPHA (responsive) to MIN_ALPHA (smooth)
+        const levelRange = this.SMOOTHNESS.MAX_LEVEL - this.SMOOTHNESS.MIN_LEVEL;
+        const alpha = this.SMOOTHNESS.MAX_ALPHA - ((smoothnessLevel - this.SMOOTHNESS.MIN_LEVEL) / levelRange) * this.SMOOTHNESS.ALPHA_RANGE;
         
         const result = [];
         let smoothedValue = data[0].y;
@@ -1845,7 +1856,7 @@
         if (trendlineDataset && this.trendlineStates[chartId]) {
           if (newMode === 'cumulative') {
             // Use smoothed curve for cumulative mode
-            const smoothnessLevel = this.trendlineSmoothnessLevel[chartId] || 5;
+            const smoothnessLevel = this.trendlineSmoothnessLevel[chartId] || this.SMOOTHNESS.DEFAULT_LEVEL;
             trendlineDataset.data = this.calculateSmoothedCurve(newData, smoothnessLevel);
           } else {
             // Use moving average for average mode
@@ -1962,11 +1973,14 @@
         if (currentMode === 'cumulative') {
           // Adjust smoothness level for cumulative mode
           if (this.trendlineSmoothnessLevel[chartId] === undefined) {
-            this.trendlineSmoothnessLevel[chartId] = 5;
+            this.trendlineSmoothnessLevel[chartId] = this.SMOOTHNESS.DEFAULT_LEVEL;
           }
           
           this.trendlineSmoothnessLevel[chartId] += direction;
-          this.trendlineSmoothnessLevel[chartId] = Math.max(1, Math.min(10, this.trendlineSmoothnessLevel[chartId]));
+          this.trendlineSmoothnessLevel[chartId] = Math.max(
+            this.SMOOTHNESS.MIN_LEVEL, 
+            Math.min(this.SMOOTHNESS.MAX_LEVEL, this.trendlineSmoothnessLevel[chartId])
+          );
           
           const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
           if (!dataDataset) return;
@@ -2186,7 +2200,7 @@
           
           // Initialize mode state
           this.chartModeStates[chartId] = 'average';
-          this.trendlineSmoothnessLevel[chartId] = 5;
+          this.trendlineSmoothnessLevel[chartId] = this.SMOOTHNESS.DEFAULT_LEVEL;
         }
         
         if (includeTrendline) {
