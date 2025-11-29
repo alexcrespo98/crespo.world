@@ -303,6 +303,30 @@
       background: #333;
       color: #666;
     }
+    .mode-toggle-badge {
+      display: inline-block;
+      background: #00d2d3;
+      color: #000;
+      padding: 0.3em 0.6em;
+      border-radius: 3px;
+      font-size: 0.8em;
+      margin-left: 0.5em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+      user-select: none;
+    }
+    .mode-toggle-badge:hover {
+      background: #00e5e6;
+      box-shadow: 0 0 10px #00d2d3;
+    }
+    .mode-toggle-badge.cumulative {
+      background: #ff6b6b;
+    }
+    .mode-toggle-badge.cumulative:hover {
+      background: #ff8080;
+      box-shadow: 0 0 10px #ff6b6b;
+    }
     .smoothness-controls {
       display: inline-block;
       margin-left: 0.3em;
@@ -375,9 +399,8 @@
 <body>
   <nav>
     <a href="index.html">home</a>
-    <a href="chemocam.html">chemocam</a>
+    <a href="chemocam.html">jacob's page in progress</a>
     <a href="crespomize.html">crespomize</a>
-    <a href="instalogin.html">instalogin</a>
   </nav>
 
   <h1>crespomize analytics</h1>
@@ -476,6 +499,8 @@
       chartInstances: {},
       trendlineStates: {},
       trendlineDaysAverage: {},
+      trendlineSmoothnessLevel: {},
+      chartModeStates: {},
       allPlatformsData: {},
       
       // Custom date range slider state
@@ -1744,6 +1769,123 @@
         return result;
       },
       
+      // Calculate cumulative data from video data
+      calculateCumulativeData(data) {
+        if (!data || data.length === 0) return [];
+        
+        // Sort by date first
+        const sortedData = [...data].sort((a, b) => new Date(a.x) - new Date(b.x));
+        
+        let cumulative = 0;
+        return sortedData.map(point => {
+          cumulative += point.y;
+          return { x: point.x, y: cumulative };
+        });
+      },
+      
+      // Calculate smoothed curve for cumulative data using exponential smoothing
+      calculateSmoothedCurve(data, smoothnessLevel = 5) {
+        if (!data || data.length === 0) return [];
+        
+        // Smoothness level: 1 = most responsive, 10 = smoothest
+        // Alpha ranges from 0.5 (responsive) to 0.05 (smooth)
+        const alpha = 0.5 - ((smoothnessLevel - 1) / 9) * 0.45;
+        
+        const result = [];
+        let smoothedValue = data[0].y;
+        
+        for (let i = 0; i < data.length; i++) {
+          if (i === 0) {
+            result.push({ x: data[i].x, y: data[i].y });
+          } else {
+            smoothedValue = alpha * data[i].y + (1 - alpha) * smoothedValue;
+            result.push({ x: data[i].x, y: smoothedValue });
+          }
+        }
+        
+        return result;
+      },
+      
+      // Toggle between Average and Cumulative modes
+      toggleChartMode(chartId, metricKey) {
+        const chart = this.chartInstances[chartId];
+        if (!chart) return;
+        
+        // Toggle mode state
+        const currentMode = this.chartModeStates[chartId] || 'average';
+        const newMode = currentMode === 'average' ? 'cumulative' : 'average';
+        this.chartModeStates[chartId] = newMode;
+        
+        // Get the original video data
+        const videos = this.isAllPlatforms ? 
+          [...(this.allPlatformsData.instagram?.videos || []), 
+           ...(this.allPlatformsData.tiktok?.videos || []),
+           ...(this.allPlatformsData.youtube?.videos || [])] :
+          this.accountData.videos;
+        
+        if (!videos || videos.length === 0) return;
+        
+        // Recalculate data based on mode
+        let newData;
+        if (newMode === 'cumulative') {
+          const rawData = videos.map(v => ({ x: v.date, y: v[metricKey] }));
+          newData = this.calculateCumulativeData(rawData);
+        } else {
+          newData = videos.map(v => ({ x: v.date, y: v[metricKey] }));
+        }
+        
+        // Update main dataset
+        const mainDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
+        if (mainDataset) {
+          mainDataset.data = newData;
+        }
+        
+        // Update trendline if visible
+        const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
+        if (trendlineDataset && this.trendlineStates[chartId]) {
+          if (newMode === 'cumulative') {
+            // Use smoothed curve for cumulative mode
+            const smoothnessLevel = this.trendlineSmoothnessLevel[chartId] || 5;
+            trendlineDataset.data = this.calculateSmoothedCurve(newData, smoothnessLevel);
+          } else {
+            // Use moving average for average mode
+            const days = this.trendlineDaysAverage[chartId] || 7;
+            trendlineDataset.data = this.calculateMovingAverageByDays(newData, days);
+          }
+        }
+        
+        chart.update();
+        
+        // Update mode badge
+        const badge = document.querySelector(`[data-mode-id="${chartId}"]`);
+        if (badge) {
+          if (newMode === 'cumulative') {
+            badge.classList.add('cumulative');
+            badge.textContent = 'CUMULATIVE';
+          } else {
+            badge.classList.remove('cumulative');
+            badge.textContent = 'AVERAGE';
+          }
+        }
+        
+        // Update smoothness controls visibility - show for cumulative, hide for average
+        const smoothnessControls = document.querySelector(`[data-smoothness-controls="${chartId}"]`);
+        const daysDisplay = document.querySelector(`[data-days-display="${chartId}"]`);
+        if (smoothnessControls && this.trendlineStates[chartId]) {
+          if (newMode === 'cumulative') {
+            // Switch to smoothness level display
+            if (daysDisplay) {
+              daysDisplay.textContent = this.trendlineSmoothnessLevel[chartId] || 5;
+            }
+          } else {
+            // Switch to days display
+            if (daysDisplay) {
+              daysDisplay.textContent = this.trendlineDaysAverage[chartId] || 7;
+            }
+          }
+        }
+      },
+      
       // Chart manipulation functions
       toggleLogScale(chartId) {
         const chart = this.chartInstances[chartId];
@@ -1815,31 +1957,64 @@
         const chart = this.chartInstances[chartId];
         if (!chart) return;
         
-        if (this.trendlineDaysAverage[chartId] === undefined) {
-          this.trendlineDaysAverage[chartId] = 7;
-        }
+        const currentMode = this.chartModeStates[chartId] || 'average';
         
-        this.trendlineDaysAverage[chartId] += direction;
-        this.trendlineDaysAverage[chartId] = Math.max(1, this.trendlineDaysAverage[chartId]);
-        
-        const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
-        if (!dataDataset) return;
-        
-        const trendlineData = this.calculateMovingAverageByDays(
-          dataDataset.data, 
-          this.trendlineDaysAverage[chartId]
-        );
-        
-        const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
-        if (trendlineDataset) {
-          trendlineDataset.data = trendlineData;
-        }
-        
-        chart.update();
-        
-        const display = document.querySelector(`[data-days-display="${chartId}"]`);
-        if (display) {
-          display.textContent = this.trendlineDaysAverage[chartId];
+        if (currentMode === 'cumulative') {
+          // Adjust smoothness level for cumulative mode
+          if (this.trendlineSmoothnessLevel[chartId] === undefined) {
+            this.trendlineSmoothnessLevel[chartId] = 5;
+          }
+          
+          this.trendlineSmoothnessLevel[chartId] += direction;
+          this.trendlineSmoothnessLevel[chartId] = Math.max(1, Math.min(10, this.trendlineSmoothnessLevel[chartId]));
+          
+          const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
+          if (!dataDataset) return;
+          
+          const trendlineData = this.calculateSmoothedCurve(
+            dataDataset.data, 
+            this.trendlineSmoothnessLevel[chartId]
+          );
+          
+          const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
+          if (trendlineDataset) {
+            trendlineDataset.data = trendlineData;
+          }
+          
+          chart.update();
+          
+          const display = document.querySelector(`[data-days-display="${chartId}"]`);
+          if (display) {
+            display.textContent = this.trendlineSmoothnessLevel[chartId];
+          }
+        } else {
+          // Adjust days for average mode
+          if (this.trendlineDaysAverage[chartId] === undefined) {
+            this.trendlineDaysAverage[chartId] = 7;
+          }
+          
+          this.trendlineDaysAverage[chartId] += direction;
+          this.trendlineDaysAverage[chartId] = Math.max(1, this.trendlineDaysAverage[chartId]);
+          
+          const dataDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
+          if (!dataDataset) return;
+          
+          const trendlineData = this.calculateMovingAverageByDays(
+            dataDataset.data, 
+            this.trendlineDaysAverage[chartId]
+          );
+          
+          const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
+          if (trendlineDataset) {
+            trendlineDataset.data = trendlineData;
+          }
+          
+          chart.update();
+          
+          const display = document.querySelector(`[data-days-display="${chartId}"]`);
+          if (display) {
+            display.textContent = this.trendlineDaysAverage[chartId];
+          }
         }
       },
       
@@ -1982,7 +2157,7 @@
         });
       },
       
-      createTimeBasedChart(container, title, videos, datasets, useLog, chartId, includeTrendline = false) {
+      createTimeBasedChart(container, title, videos, datasets, useLog, chartId, includeTrendline = false, metricKey = null) {
         const chartDiv = document.createElement('div');
         chartDiv.className = 'chart-container';
         
@@ -1999,6 +2174,20 @@
         scaleBadge.onclick = () => this.toggleLogScale(chartId);
         
         header.appendChild(scaleBadge);
+        
+        // Add mode toggle for time-series charts with metric data
+        if (metricKey && includeTrendline) {
+          const modeBadge = document.createElement('span');
+          modeBadge.className = 'mode-toggle-badge';
+          modeBadge.textContent = 'AVERAGE';
+          modeBadge.setAttribute('data-mode-id', chartId);
+          modeBadge.onclick = () => this.toggleChartMode(chartId, metricKey);
+          header.appendChild(modeBadge);
+          
+          // Initialize mode state
+          this.chartModeStates[chartId] = 'average';
+          this.trendlineSmoothnessLevel[chartId] = 5;
+        }
         
         if (includeTrendline) {
           const trendlineBadge = document.createElement('span');
@@ -2292,6 +2481,8 @@
         this.chartInstances = {};
         this.trendlineStates = {};
         this.trendlineDaysAverage = {};
+        this.chartModeStates = {};
+        this.trendlineSmoothnessLevel = {};
         
         const statsContainer = document.getElementById('statsSummary');
         const chartsContainer = document.getElementById('chartsList');
@@ -2344,11 +2535,12 @@
         statsContainer.innerHTML = statsHTML;
         
         // Create charts
+        // Followers Over Time (first chart)
         if (this.accountData.followersHistory && this.accountData.followersHistory.length > 0) {
           const followerValues = this.accountData.followersHistory.map(h => h.value);
           const useLogFollowers = this.shouldUseLogScale(followerValues);
           
-          this.createLineChart(chartsContainer, 'Followers Growth', 
+          this.createLineChart(chartsContainer, 'Followers Over Time', 
             this.accountData.followersHistory,
             [{
               label: 'Followers',
@@ -2364,25 +2556,7 @@
           );
         }
         
-        if (this.accountData.totalLikesHistory && this.accountData.totalLikesHistory.length > 0) {
-          const likesHistoryValues = this.accountData.totalLikesHistory.map(h => h.value);
-          const useLogLikesHistory = this.shouldUseLogScale(likesHistoryValues);
-          
-          this.createLineChart(chartsContainer, 'Total Likes Growth',
-            this.accountData.totalLikesHistory,
-            [{
-              label: 'Total Likes',
-              data: this.accountData.totalLikesHistory.map(h => ({ x: h.date, y: h.value })),
-              borderColor: '#e91e63',
-              backgroundColor: 'rgba(233, 30, 99, 0.1)',
-              borderWidth: 3,
-              tension: 0.4,
-              fill: true
-            }],
-            useLogLikesHistory,
-            'likes-history'
-          );
-        }
+        // NOTE: "Total Likes Growth" chart has been removed per requirements
         
         if (this.accountData.videos.length > 0) {
           const viewsData = this.accountData.videos.map(v => v.views);
@@ -2390,21 +2564,7 @@
           const useLogViews = this.shouldUseLogScale(viewsData);
           const useLogLikes = this.shouldUseLogScale(likesData);
           
-          this.createTimeBasedChart(chartsContainer, 'Views Over Time',
-            this.accountData.videos,
-            [{
-              label: 'Views',
-              data: this.accountData.videos.map(v => ({ x: v.date, y: v.views })),
-              borderColor: '#00d2d3',
-              backgroundColor: 'rgba(0, 210, 211, 0.7)',
-              pointRadius: 4,
-              pointHoverRadius: 6
-            }],
-            useLogViews,
-            'views-time',
-            true
-          );
-          
+          // Likes Over Time - with mode toggle
           this.createTimeBasedChart(chartsContainer, 'Likes Over Time',
             this.accountData.videos,
             [{
@@ -2417,24 +2577,28 @@
             }],
             useLogLikes,
             'likes-time',
-            true
+            true,
+            'likes'
           );
           
-          this.createTimeBasedChart(chartsContainer, 'Engagement Rate Over Time',
+          // Views Over Time - with mode toggle
+          this.createTimeBasedChart(chartsContainer, 'Views Over Time',
             this.accountData.videos,
             [{
-              label: 'Engagement %',
-              data: this.accountData.videos.map(v => ({ x: v.date, y: v.engagement })),
-              borderColor: '#2ecc71',
-              backgroundColor: 'rgba(46, 204, 113, 0.7)',
+              label: 'Views',
+              data: this.accountData.videos.map(v => ({ x: v.date, y: v.views })),
+              borderColor: '#00d2d3',
+              backgroundColor: 'rgba(0, 210, 211, 0.7)',
               pointRadius: 4,
               pointHoverRadius: 6
             }],
-            false,
-            'engagement-time',
-            true
+            useLogViews,
+            'views-time',
+            true,
+            'views'
           );
           
+          // Comments Over Time - with mode toggle
           const commentsData = this.accountData.videos.map(v => v.comments);
           const useLogComments = this.shouldUseLogScale(commentsData);
           
@@ -2450,9 +2614,11 @@
             }],
             useLogComments,
             'comments-time',
-            true
+            true,
+            'comments'
           );
           
+          // Shares Over Time (TikTok only) - with mode toggle
           if (this.selectedPlatform === 'tiktok') {
             const sharesData = this.accountData.videos.map(v => v.shares);
             const useLogShares = this.shouldUseLogScale(sharesData);
@@ -2469,9 +2635,26 @@
               }],
               useLogShares,
               'shares-time',
-              true
+              true,
+              'shares'
             );
           }
+          
+          // Engagement Rate Over Time (no mode toggle - doesn't make sense for cumulative)
+          this.createTimeBasedChart(chartsContainer, 'Engagement Rate Over Time',
+            this.accountData.videos,
+            [{
+              label: 'Engagement %',
+              data: this.accountData.videos.map(v => ({ x: v.date, y: v.engagement })),
+              borderColor: '#2ecc71',
+              backgroundColor: 'rgba(46, 204, 113, 0.7)',
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }],
+            false,
+            'engagement-time',
+            true
+          );
           
           // Create correlation chart
           this.createCorrelationChart(chartsContainer);
@@ -2484,6 +2667,8 @@
         this.chartInstances = {};
         this.trendlineStates = {};
         this.trendlineDaysAverage = {};
+        this.chartModeStates = {};
+        this.trendlineSmoothnessLevel = {};
         
         const statsContainer = document.getElementById('statsSummary');
         const platformBreakdown = document.getElementById('platformBreakdown');
