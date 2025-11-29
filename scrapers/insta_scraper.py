@@ -1147,8 +1147,23 @@ class InstagramScraper:
             
             try:
                 # Use shorter timeout for page load to avoid long hangs
-                driver.set_page_load_timeout(30)  # 30 second timeout
-                driver.get(page_url)
+                driver.set_page_load_timeout(20)  # 20 second timeout (reduced from 30)
+                
+                try:
+                    driver.get(page_url)
+                except Exception as timeout_err:
+                    if "timeout" in str(timeout_err).lower():
+                        print(f"    ⏱️ Timeout loading {page_type} page - skipping to next method...")
+                        # Reset timeout and try recovery
+                        driver.set_page_load_timeout(120)
+                        try:
+                            driver.get("about:blank")
+                            time.sleep(1)
+                        except:
+                            pass
+                        continue
+                    raise timeout_err
+                
                 time.sleep(4)  # Wait for page to load
                 
                 # Reset to normal timeout
