@@ -144,6 +144,123 @@
       gap: 1em;
       margin: 1em 0;
     }
+    .time-range-buttons button.active {
+      background: #0f0;
+      color: #000;
+      box-shadow: 0 0 15px #0f0;
+    }
+    .custom-date-slider-container {
+      margin: 2em 0 1em 0;
+      padding: 1.5em;
+      border: 1px solid #0f0;
+      border-radius: 5px;
+      background: #0a0a0a;
+    }
+    .custom-date-slider-label {
+      margin-bottom: 1em;
+      color: #0f0;
+      font-size: 0.9em;
+    }
+    .dual-slider-wrapper {
+      position: relative;
+      height: 40px;
+      margin: 1em 0;
+    }
+    .slider-track {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 100%;
+      height: 6px;
+      background: #333;
+      border-radius: 3px;
+    }
+    .slider-range {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 6px;
+      background: #0f0;
+      border-radius: 3px;
+    }
+    .range-input {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 100%;
+      height: 6px;
+      background: none;
+      pointer-events: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .range-input::-webkit-slider-thumb {
+      pointer-events: all;
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #0f0;
+      border: 3px solid #000;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px #0f0;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .range-input::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 15px #0f0;
+    }
+    .range-input::-moz-range-thumb {
+      pointer-events: all;
+      width: 20px;
+      height: 20px;
+      background: #0f0;
+      border: 3px solid #000;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px #0f0;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .range-input::-moz-range-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 15px #0f0;
+    }
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.5em;
+      font-size: 0.85em;
+      color: #0f0;
+    }
+    .slider-date-display {
+      text-align: center;
+      margin-top: 1em;
+      font-size: 1em;
+      color: #0f0;
+      background: #000;
+      padding: 0.5em 1em;
+      border: 1px solid #0f0;
+      border-radius: 3px;
+      display: inline-block;
+    }
+    .slider-apply-btn {
+      margin-top: 1em;
+      background: #0f0;
+      color: #000;
+      border: 2px solid #0f0;
+      padding: 0.6em 1.5em;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.9em;
+      font-weight: bold;
+      transition: all 0.3s;
+      border-radius: 3px;
+    }
+    .slider-apply-btn:hover {
+      background: #00ff7f;
+      box-shadow: 0 0 15px #0f0;
+    }
     .scale-badge {
       display: inline-block;
       background: #0f0;
@@ -289,11 +406,33 @@
     <!-- Step 2: Time range selection -->
     <div id="step2" class="step hidden">
       <div class="question">select time range for analysis:</div>
-      <div class="time-range-buttons">
-        <button onclick="app.selectTimeRange('all')">All Time</button>
-        <button onclick="app.selectTimeRange(365)">1 Year</button>
-        <button onclick="app.selectTimeRange(180)">6 Months</button>
-        <button onclick="app.selectTimeRange(30)">1 Month</button>
+      <div class="time-range-buttons" id="timeRangeButtons">
+        <button id="btn-all" onclick="app.selectPresetTimeRange('all')">All Time</button>
+        <button id="btn-365" onclick="app.selectPresetTimeRange(365)">1 Year</button>
+        <button id="btn-180" onclick="app.selectPresetTimeRange(180)">6 Months</button>
+        <button id="btn-30" onclick="app.selectPresetTimeRange(30)">1 Month</button>
+      </div>
+      
+      <!-- Custom Date Range Slider -->
+      <div class="custom-date-slider-container" id="customDateSliderContainer">
+        <div class="custom-date-slider-label">or choose a custom date range:</div>
+        <div class="dual-slider-wrapper">
+          <div class="slider-track"></div>
+          <div class="slider-range" id="sliderRange"></div>
+          <input type="range" class="range-input" id="rangeMin" min="0" max="100" value="0">
+          <input type="range" class="range-input" id="rangeMax" min="0" max="100" value="100">
+        </div>
+        <div class="slider-labels">
+          <span id="minDateLabel">--</span>
+          <span id="maxDateLabel">--</span>
+        </div>
+        <div style="text-align: center;">
+          <div class="slider-date-display">
+            <span id="selectedStartDate">--</span> to <span id="selectedEndDate">--</span>
+          </div>
+          <br>
+          <button class="slider-apply-btn" onclick="app.applyCustomDateRange()">Apply Custom Range</button>
+        </div>
       </div>
     </div>
 
@@ -339,9 +478,189 @@
       trendlineDaysAverage: {},
       allPlatformsData: {},
       
+      // Custom date range slider state
+      dataDateRange: { min: null, max: null },
+      customDateRange: { start: null, end: null },
+      
       // Initialize the application
       init() {
         this.setupEventListeners();
+        this.setupSliderListeners();
+      },
+      
+      // Setup slider event listeners
+      setupSliderListeners() {
+        const rangeMin = document.getElementById('rangeMin');
+        const rangeMax = document.getElementById('rangeMax');
+        
+        rangeMin.addEventListener('input', () => this.updateSlider());
+        rangeMax.addEventListener('input', () => this.updateSlider());
+      },
+      
+      // Update the slider UI
+      updateSlider() {
+        const rangeMin = document.getElementById('rangeMin');
+        const rangeMax = document.getElementById('rangeMax');
+        const sliderRange = document.getElementById('sliderRange');
+        
+        let minVal = parseInt(rangeMin.value);
+        let maxVal = parseInt(rangeMax.value);
+        
+        // Prevent handles from crossing
+        if (minVal > maxVal - 1) {
+          if (this.lastChanged === 'min') {
+            minVal = maxVal - 1;
+            rangeMin.value = minVal;
+          } else {
+            maxVal = minVal + 1;
+            rangeMax.value = maxVal;
+          }
+        }
+        
+        this.lastChanged = (document.activeElement === rangeMin) ? 'min' : 'max';
+        
+        // Update the range highlight
+        const percent1 = minVal;
+        const percent2 = maxVal;
+        sliderRange.style.left = percent1 + '%';
+        sliderRange.style.width = (percent2 - percent1) + '%';
+        
+        // Calculate and display dates
+        if (this.dataDateRange.min && this.dataDateRange.max) {
+          const totalDays = Math.floor((this.dataDateRange.max - this.dataDateRange.min) / (1000 * 60 * 60 * 24));
+          
+          const startDays = Math.floor(totalDays * (minVal / 100));
+          const endDays = Math.floor(totalDays * (maxVal / 100));
+          
+          const startDate = new Date(this.dataDateRange.min);
+          startDate.setDate(startDate.getDate() + startDays);
+          
+          const endDate = new Date(this.dataDateRange.min);
+          endDate.setDate(endDate.getDate() + endDays);
+          
+          this.customDateRange.start = startDate;
+          this.customDateRange.end = endDate;
+          
+          document.getElementById('selectedStartDate').textContent = this.formatDate(startDate);
+          document.getElementById('selectedEndDate').textContent = this.formatDate(endDate);
+        }
+        
+        // Clear active state from preset buttons
+        document.querySelectorAll('#timeRangeButtons button').forEach(btn => {
+          btn.classList.remove('active');
+        });
+      },
+      
+      // Format date for display
+      formatDate(date) {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+      },
+      
+      // Initialize slider with data range
+      initializeSliderWithData() {
+        // This will be called after we know the data range
+        // For now, use a default range
+        const now = new Date();
+        const yearAgo = new Date();
+        yearAgo.setFullYear(yearAgo.getFullYear() - 2); // Default to 2 years range
+        
+        this.dataDateRange.min = yearAgo;
+        this.dataDateRange.max = now;
+        
+        document.getElementById('minDateLabel').textContent = this.formatDate(yearAgo);
+        document.getElementById('maxDateLabel').textContent = this.formatDate(now);
+        
+        // Initialize slider to full range
+        document.getElementById('rangeMin').value = 0;
+        document.getElementById('rangeMax').value = 100;
+        
+        this.customDateRange.start = yearAgo;
+        this.customDateRange.end = now;
+        
+        document.getElementById('selectedStartDate').textContent = this.formatDate(yearAgo);
+        document.getElementById('selectedEndDate').textContent = this.formatDate(now);
+        
+        // Update slider range highlight
+        const sliderRange = document.getElementById('sliderRange');
+        sliderRange.style.left = '0%';
+        sliderRange.style.width = '100%';
+      },
+      
+      // Select preset time range (from button click)
+      selectPresetTimeRange(days) {
+        // Update active button state
+        document.querySelectorAll('#timeRangeButtons button').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        
+        const btnId = days === 'all' ? 'btn-all' : `btn-${days}`;
+        document.getElementById(btnId).classList.add('active');
+        
+        // Update slider to match preset
+        if (this.dataDateRange.min && this.dataDateRange.max) {
+          const now = new Date();
+          let startDate;
+          
+          if (days === 'all') {
+            startDate = this.dataDateRange.min;
+          } else {
+            startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            if (startDate < this.dataDateRange.min) {
+              startDate = this.dataDateRange.min;
+            }
+          }
+          
+          const totalDays = Math.floor((this.dataDateRange.max - this.dataDateRange.min) / (1000 * 60 * 60 * 24));
+          const startDays = Math.floor((startDate - this.dataDateRange.min) / (1000 * 60 * 60 * 24));
+          
+          const minPercent = totalDays > 0 ? Math.round((startDays / totalDays) * 100) : 0;
+          const maxPercent = 100;
+          
+          document.getElementById('rangeMin').value = minPercent;
+          document.getElementById('rangeMax').value = maxPercent;
+          
+          this.customDateRange.start = startDate;
+          this.customDateRange.end = now;
+          
+          document.getElementById('selectedStartDate').textContent = this.formatDate(startDate);
+          document.getElementById('selectedEndDate').textContent = this.formatDate(now);
+          
+          const sliderRange = document.getElementById('sliderRange');
+          sliderRange.style.left = minPercent + '%';
+          sliderRange.style.width = (maxPercent - minPercent) + '%';
+        }
+        
+        // Apply the selection
+        this.selectTimeRange(days);
+      },
+      
+      // Apply custom date range
+      applyCustomDateRange() {
+        if (!this.customDateRange.start || !this.customDateRange.end) {
+          return;
+        }
+        
+        // Calculate days from start to end
+        const daysDiff = Math.floor((this.customDateRange.end - this.customDateRange.start) / (1000 * 60 * 60 * 24));
+        
+        // Store custom range for filtering
+        this.selectedTimeRange = 'custom';
+        this.customStartDate = this.customDateRange.start;
+        this.customEndDate = this.customDateRange.end;
+        
+        document.getElementById('step2').classList.add('hidden');
+        document.getElementById('loading').classList.remove('hidden');
+        
+        if (this.isAllPlatforms) {
+          this.loadAllPlatformsData('custom');
+        } else {
+          setTimeout(() => {
+            this.processData('custom');
+            this.finalizeDataDisplay('custom');
+          }, 1000);
+        }
       },
       
       // Setup all event listeners
@@ -369,6 +688,7 @@
         if (this.isAllPlatforms) {
           // Skip account selection for all platforms
           document.getElementById('step2').classList.remove('hidden');
+          this.initializeSliderWithData();
         } else {
           document.getElementById('step1').classList.remove('hidden');
           this.loadSheetData();
@@ -381,6 +701,7 @@
         this.isMoonMediaTotal = (account === 'MOONMEDIA_TOTAL');
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
+        this.initializeSliderWithData();
       },
       
       // Time range selection
@@ -421,6 +742,9 @@
         else if (days === 365) rangeText = '(Last 1 Year)';
         else if (days === 180) rangeText = '(Last 6 Months)';
         else if (days === 30) rangeText = '(Last 1 Month)';
+        else if (days === 'custom' && this.customStartDate && this.customEndDate) {
+          rangeText = `(${this.formatDate(this.customStartDate)} - ${this.formatDate(this.customEndDate)})`;
+        }
         document.getElementById('timeRangeLabel').textContent = rangeText;
         
         if (this.isAllPlatforms) {
@@ -907,23 +1231,64 @@
           }
         }
         
-        // Calculate total likes history
+        // Calculate total likes history using only the most recent scrape data per post
+        // First, build a map of video IDs to their likes rows
+        const likesRowsMap = new Map();
+        const postDatesMap = new Map();
+        
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          const rowName = row[0];
+          
+          if (rowName && rowName.startsWith('reel_') && rowName.endsWith('_likes')) {
+            const parts = rowName.split('_');
+            const videoId = parts.slice(1, -1).join('_');
+            likesRowsMap.set(videoId, row);
+          }
+          
+          if (rowName && rowName.startsWith('reel_') && rowName.endsWith('_date')) {
+            const parts = rowName.split('_');
+            const videoId = parts.slice(1, -1).join('_');
+            // Find the post date (most recent non-empty value)
+            for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
+              const cellValue = row[colIdx];
+              if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+                postDatesMap.set(videoId, new Date(cellValue));
+                break;
+              }
+            }
+          }
+        }
+        
+        // For each scrape timestamp (column), calculate total likes using only the most recent data per post
         for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+          const scrapeDate = new Date(headers[colIdx]);
+          if (!this.isValidDate(scrapeDate)) continue;
+          
           let columnTotalLikes = 0;
           
-          for (let i = 1; i < jsonData.length; i++) {
-            const row = jsonData[i];
-            const rowName = row[0];
+          // For each post, get the most recent likes value up to this column
+          for (const [videoId, likesRow] of likesRowsMap) {
+            const postDate = postDatesMap.get(videoId);
             
-            if (rowName && rowName.startsWith('reel_') && rowName.endsWith('_likes')) {
-              const value = parseInt(row[colIdx + 1]) || 0;
-              columnTotalLikes += value;
+            // Only include posts that existed by this scrape date
+            if (postDate && postDate <= scrapeDate) {
+              // Find the most recent non-empty likes value for this post up to this column
+              let mostRecentLikes = 0;
+              for (let prevColIdx = colIdx; prevColIdx >= 0; prevColIdx--) {
+                const value = parseInt(likesRow[prevColIdx + 1]) || 0;
+                if (value > 0) {
+                  mostRecentLikes = value;
+                  break;
+                }
+              }
+              columnTotalLikes += mostRecentLikes;
             }
           }
           
           if (columnTotalLikes > 0) {
             totalLikesHistory.push({
-              date: new Date(headers[colIdx]),
+              date: scrapeDate,
               value: columnTotalLikes
             });
           }
@@ -1071,6 +1436,14 @@
       
       filterDataByTimeRange(videos, timeRangeDays) {
         if (timeRangeDays === 'all') return videos;
+        
+        // Handle custom date range
+        if (timeRangeDays === 'custom') {
+          if (this.customStartDate && this.customEndDate) {
+            return videos.filter(v => v.date >= this.customStartDate && v.date <= this.customEndDate);
+          }
+          return videos;
+        }
         
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
