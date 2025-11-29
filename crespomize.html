@@ -2790,9 +2790,22 @@
         
         // Combined statistics
         const combined = this.allPlatformsData.combined;
+        
+        // Calculate total comments across all platforms
+        const allVideos = [
+          ...(this.allPlatformsData.instagram?.videos || []),
+          ...(this.allPlatformsData.tiktok?.videos || []),
+          ...(this.allPlatformsData.youtube?.videos || [])
+        ];
+        const totalComments = allVideos.reduce((sum, v) => sum + (v.comments || 0), 0);
+        
+        // Calculate average engagement
+        const avgEngagement = allVideos.length > 0 ? 
+          allVideos.reduce((sum, v) => sum + (v.engagement || 0), 0) / allVideos.length : 0;
+        
         statsContainer.innerHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
+            <h4>FOLLOWERS/SUBS</h4>
             <div class="value">${this.formatNumber(combined.totalFollowers)}</div>
           </div>
           <div class="stat-card">
@@ -2804,6 +2817,10 @@
             <div class="value">${this.formatNumber(combined.totalViews)}</div>
           </div>
           <div class="stat-card">
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          </div>
+          <div class="stat-card">
             <h4>TOTAL POSTS</h4>
             <div class="value">${combined.totalPosts}</div>
           </div>
@@ -2812,19 +2829,22 @@
             <div class="value">${combined.viewsPerSecond.toFixed(2)}</div>
           </div>
           <div class="stat-card">
-            <h4>AVG VIEWS/SEC</h4>
-            <div class="value">${combined.viewsPerSecond > 0 ? 
-              combined.viewsPerSecond.toFixed(2) : 'N/A'}</div>
+            <h4>AVG ENGAGEMENT</h4>
+            <div class="value">${avgEngagement.toFixed(2)}%</div>
+          </div>
+          <div class="stat-card">
+            <h4>PLATFORMS</h4>
+            <div class="value">3</div>
           </div>
         `;
         
-        // Platform breakdown
+        // Platform breakdown - use appropriate terminology for each platform
         let breakdownHTML = '<h3 style="color: #ffff00;">Platform Breakdown</h3><div class="stats-summary">';
         
         const platforms = [
-          { key: 'instagram', name: 'Instagram' },
-          { key: 'tiktok', name: 'TikTok' },
-          { key: 'youtube', name: 'YouTube' }
+          { key: 'instagram', name: 'Instagram', followerTerm: 'Followers' },
+          { key: 'tiktok', name: 'TikTok', followerTerm: 'Followers' },
+          { key: 'youtube', name: 'YouTube', followerTerm: 'Subscribers' }
         ];
         
         platforms.forEach(platform => {
@@ -2833,7 +2853,7 @@
             breakdownHTML += `
               <div class="platform-stats">
                 <h3>${platform.name}</h3>
-                <div>Followers: ${this.formatNumber(data.followers)}</div>
+                <div>${platform.followerTerm}: ${this.formatNumber(data.followers)}</div>
                 <div>Likes: ${this.formatNumber(data.totalLikes)}</div>
                 <div>Views: ${this.formatNumber(data.totalViews)}</div>
                 <div>Posts: ${data.postsScraped}</div>
@@ -2883,7 +2903,7 @@
         
         const comparisonCtx = comparisonCanvas.getContext('2d');
         
-        new Chart(comparisonCtx, {
+        this.chartInstances['platform-comparison'] = new Chart(comparisonCtx, {
           type: 'bar',
           data: {
             labels: platformNames,
@@ -2903,7 +2923,7 @@
                 borderWidth: 2
               },
               {
-                label: 'Followers',
+                label: 'Followers/Subscribers',
                 data: platformFollowers,
                 backgroundColor: '#9b59b6',
                 borderColor: '#9b59b6',
@@ -2955,6 +2975,267 @@
             }
           }
         });
+        
+        // Combine all videos from all platforms for time-series charts
+        const allVideos = [
+          ...(this.allPlatformsData.instagram?.videos || []),
+          ...(this.allPlatformsData.tiktok?.videos || []),
+          ...(this.allPlatformsData.youtube?.videos || [])
+        ].filter(v => v.date);
+        
+        // Sort by date
+        allVideos.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        if (allVideos.length > 0) {
+          // Combined Views Over Time
+          const viewsData = allVideos.map(v => v.views || 0);
+          const useLogViews = this.shouldUseLogScale(viewsData);
+          
+          this.createTimeBasedChart(container, 'Combined Views Over Time',
+            allVideos,
+            [{
+              label: 'Views',
+              data: allVideos.map(v => ({ x: v.date, y: v.views || 0 })),
+              borderColor: '#00d2d3',
+              backgroundColor: 'rgba(0, 210, 211, 0.7)',
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }],
+            useLogViews,
+            'all-views-time',
+            true,
+            'views'
+          );
+          
+          // Combined Likes Over Time
+          const likesData = allVideos.map(v => v.likes || 0);
+          const useLogLikes = this.shouldUseLogScale(likesData);
+          
+          this.createTimeBasedChart(container, 'Combined Likes Over Time',
+            allVideos,
+            [{
+              label: 'Likes',
+              data: allVideos.map(v => ({ x: v.date, y: v.likes || 0 })),
+              borderColor: '#ff6b6b',
+              backgroundColor: 'rgba(255, 107, 107, 0.7)',
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }],
+            useLogLikes,
+            'all-likes-time',
+            true,
+            'likes'
+          );
+          
+          // Combined Comments Over Time
+          const commentsData = allVideos.map(v => v.comments || 0);
+          const useLogComments = this.shouldUseLogScale(commentsData);
+          
+          this.createTimeBasedChart(container, 'Combined Comments Over Time',
+            allVideos,
+            [{
+              label: 'Comments',
+              data: allVideos.map(v => ({ x: v.date, y: v.comments || 0 })),
+              borderColor: '#1abc9c',
+              backgroundColor: 'rgba(26, 188, 156, 0.7)',
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }],
+            useLogComments,
+            'all-comments-time',
+            true,
+            'comments'
+          );
+        }
+        
+        // Create platform-specific growth comparison charts
+        this.createPlatformGrowthChart(container);
+      },
+      
+      // Create platform growth comparison chart
+      createPlatformGrowthChart(container) {
+        // Gather videos with platform info for stacked visualization
+        const platformColors = {
+          instagram: { border: '#E1306C', bg: 'rgba(225, 48, 108, 0.7)' },
+          tiktok: { border: '#00f2ea', bg: 'rgba(0, 242, 234, 0.7)' },
+          youtube: { border: '#FF0000', bg: 'rgba(255, 0, 0, 0.7)' }
+        };
+        
+        const datasets = [];
+        
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          const data = this.allPlatformsData[platform];
+          if (data && data.videos && data.videos.length > 0) {
+            const sortedVideos = [...data.videos].sort((a, b) => new Date(a.date) - new Date(b.date));
+            datasets.push({
+              label: platform.charAt(0).toUpperCase() + platform.slice(1) + ' Views',
+              data: sortedVideos.map(v => ({ x: v.date, y: v.views || 0 })),
+              borderColor: platformColors[platform].border,
+              backgroundColor: platformColors[platform].bg,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              tension: 0.3
+            });
+          }
+        });
+        
+        if (datasets.length > 0) {
+          const chartDiv = document.createElement('div');
+          chartDiv.className = 'chart-container';
+          
+          const canvas = document.createElement('canvas');
+          canvas.id = 'platform-views-comparison';
+          
+          const header = document.createElement('h3');
+          header.textContent = 'Views by Platform Over Time';
+          
+          const scaleBadge = document.createElement('span');
+          scaleBadge.className = 'scale-badge';
+          scaleBadge.textContent = 'LOG SCALE';
+          scaleBadge.setAttribute('data-chart-id', 'platform-views-comparison');
+          scaleBadge.onclick = () => this.toggleLogScale('platform-views-comparison');
+          header.appendChild(scaleBadge);
+          
+          chartDiv.appendChild(header);
+          chartDiv.appendChild(canvas);
+          container.appendChild(chartDiv);
+          
+          const ctx = canvas.getContext('2d');
+          
+          this.chartInstances['platform-views-comparison'] = new Chart(ctx, {
+            type: 'scatter',
+            data: { datasets },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              aspectRatio: 2.5,
+              interaction: {
+                mode: 'index',
+                intersect: false,
+              },
+              plugins: {
+                legend: {
+                  display: true,
+                  labels: {
+                    color: '#0f0',
+                    font: { family: 'monospace', size: 12 }
+                  }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  titleColor: '#0f0',
+                  bodyColor: '#0f0',
+                  borderColor: '#0f0',
+                  borderWidth: 1,
+                  callbacks: {
+                    label: (context) => {
+                      return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
+                    }
+                  }
+                }
+              },
+              scales: {
+                x: {
+                  type: 'time',
+                  time: {
+                    unit: 'day',
+                    displayFormats: { day: 'MMM d, yyyy' }
+                  },
+                  ticks: { color: '#0f0', font: { family: 'monospace' } },
+                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                },
+                y: {
+                  type: 'logarithmic',
+                  ticks: {
+                    color: '#0f0',
+                    font: { family: 'monospace' },
+                    callback: (value) => {
+                      return this.formatNumber(value);
+                    }
+                  },
+                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                }
+              }
+            }
+          });
+        }
+        
+        // Create posts per platform pie chart
+        this.createPostsDistributionChart(container);
+      },
+      
+      // Create posts distribution pie chart
+      createPostsDistributionChart(container) {
+        const platformNames = [];
+        const postsCounts = [];
+        const colors = ['#E1306C', '#00f2ea', '#FF0000'];
+        
+        ['instagram', 'tiktok', 'youtube'].forEach((platform, index) => {
+          if (this.allPlatformsData[platform]) {
+            platformNames.push(platform.charAt(0).toUpperCase() + platform.slice(1));
+            postsCounts.push(this.allPlatformsData[platform].postsScraped || 0);
+          }
+        });
+        
+        if (postsCounts.some(c => c > 0)) {
+          const chartDiv = document.createElement('div');
+          chartDiv.className = 'chart-container';
+          chartDiv.style.maxWidth = '500px';
+          chartDiv.style.margin = '0 auto';
+          
+          const canvas = document.createElement('canvas');
+          canvas.id = 'posts-distribution';
+          
+          const header = document.createElement('h3');
+          header.textContent = 'Content Distribution by Platform';
+          
+          chartDiv.appendChild(header);
+          chartDiv.appendChild(canvas);
+          container.appendChild(chartDiv);
+          
+          const ctx = canvas.getContext('2d');
+          
+          this.chartInstances['posts-distribution'] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+              labels: platformNames,
+              datasets: [{
+                data: postsCounts,
+                backgroundColor: colors.slice(0, platformNames.length),
+                borderColor: '#000',
+                borderWidth: 2
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: {
+                legend: {
+                  display: true,
+                  position: 'bottom',
+                  labels: {
+                    color: '#0f0',
+                    font: { family: 'monospace', size: 12 }
+                  }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  titleColor: '#0f0',
+                  bodyColor: '#0f0',
+                  borderColor: '#0f0',
+                  borderWidth: 1,
+                  callbacks: {
+                    label: (context) => {
+                      const total = postsCounts.reduce((a, b) => a + b, 0);
+                      const percentage = ((context.parsed / total) * 100).toFixed(1);
+                      return `${context.label}: ${context.parsed} posts (${percentage}%)`;
+                    }
+                  }
+                }
+              }
+            }
+          });
+        }
       }
     };
     
