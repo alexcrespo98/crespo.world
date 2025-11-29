@@ -2404,6 +2404,392 @@ class InstagramScraper:
         
         return arrow_data, page_type_used
     
+    def run_arrow_scrape_optimization(self, driver, username, max_reels=25):
+        """
+        Arrow Scrape Optimization Mode - Tests multiple main page scraping methods.
+        This mode specifically tests the MAIN PAGE arrow scrape with different approaches
+        to find what works best when the /reels/ page stops working.
+        
+        Methods tested:
+        A) Standard: Navigate to main page → click first post → arrow navigate
+        B) Hover first: Hover over post → click → arrow navigate  
+        C) JavaScript click: Use JS to click instead of Selenium click
+        D) Scroll into view first: Scroll post into center → click → navigate
+        E) Direct URL: Go directly to first reel URL then navigate
+        """
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+        import json
+        
+        print("\n" + "="*70)
+        print("🔧 ARROW SCRAPE OPTIMIZATION MODE: @" + username)
+        print("="*70)
+        print("\nThis mode tests multiple MAIN PAGE arrow scrape methods.")
+        print("It will help identify which approach works best when /reels/ fails.")
+        print("\nMethods to test:")
+        print("  A) Standard click → arrow navigate")
+        print("  B) Hover first → click → arrow navigate")
+        print("  C) JavaScript click → arrow navigate")
+        print("  D) Scroll into view → click → arrow navigate")
+        print("  E) Direct URL → arrow navigate")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results = {
+            "test_config": {
+                "account": username,
+                "posts_to_test": max_reels,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            },
+            "methods": {}
+        }
+        
+        # First, get a list of reel IDs from hover scrape (quick pass)
+        print("\n📍 STEP 0: Quick hover scrape to get reel IDs...")
+        profile_url = f"https://www.instagram.com/{username}/reels/"
+        driver.get(profile_url)
+        time.sleep(5)
+        self.dismiss_modal(driver, max_attempts=2)
+        
+        reel_ids = []
+        post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+        for link in post_links[:max_reels]:
+            try:
+                url = link.get_attribute('href')
+                if url and '/reel/' in url:
+                    reel_id = url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                    if reel_id not in reel_ids:
+                        reel_ids.append(reel_id)
+            except:
+                pass
+        
+        print(f"   Found {len(reel_ids)} reel IDs to look for")
+        results["reel_ids_expected"] = reel_ids[:max_reels]
+        
+        # =====================================================================
+        # METHOD A: Standard click (current approach)
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD A: Standard click → arrow navigate")
+        print("-"*50)
+        
+        method_a_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="A_standard_click",
+            hover_first=False,
+            js_click=False,
+            scroll_first=False
+        )
+        results["methods"]["A_standard_click"] = method_a_results
+        
+        # =====================================================================
+        # METHOD B: Hover first then click
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD B: Hover first → click → arrow navigate")
+        print("-"*50)
+        
+        method_b_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="B_hover_first",
+            hover_first=True,
+            js_click=False,
+            scroll_first=False
+        )
+        results["methods"]["B_hover_first"] = method_b_results
+        
+        # =====================================================================
+        # METHOD C: JavaScript click
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD C: JavaScript click → arrow navigate")
+        print("-"*50)
+        
+        method_c_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="C_js_click",
+            hover_first=False,
+            js_click=True,
+            scroll_first=False
+        )
+        results["methods"]["C_js_click"] = method_c_results
+        
+        # =====================================================================
+        # METHOD D: Scroll into view first
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD D: Scroll into view → click → arrow navigate")
+        print("-"*50)
+        
+        method_d_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="D_scroll_first",
+            hover_first=False,
+            js_click=False,
+            scroll_first=True
+        )
+        results["methods"]["D_scroll_first"] = method_d_results
+        
+        # =====================================================================
+        # METHOD E: Direct URL navigation
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD E: Direct URL → arrow navigate")
+        print("-"*50)
+        
+        method_e_results = self._test_direct_url_method(driver, username, reel_ids, max_reels)
+        results["methods"]["E_direct_url"] = method_e_results
+        
+        # =====================================================================
+        # Summary
+        # =====================================================================
+        print("\n" + "="*70)
+        print("📊 ARROW SCRAPE OPTIMIZATION RESULTS")
+        print("="*70)
+        
+        best_method = None
+        best_count = 0
+        
+        for method_name, method_data in results["methods"].items():
+            count = method_data.get("dates_found", 0)
+            success_rate = (count / max_reels * 100) if max_reels > 0 else 0
+            print(f"\n  {method_name}:")
+            print(f"    Dates found: {count}/{max_reels} ({success_rate:.1f}%)")
+            print(f"    Status: {method_data.get('status', 'unknown')}")
+            if method_data.get("error"):
+                print(f"    Error: {method_data['error']}")
+            
+            if count > best_count:
+                best_count = count
+                best_method = method_name
+        
+        results["summary"] = {
+            "best_method": best_method,
+            "best_count": best_count,
+            "best_success_rate": (best_count / max_reels * 100) if max_reels > 0 else 0
+        }
+        
+        print(f"\n  🏆 BEST METHOD: {best_method} ({best_count}/{max_reels} dates)")
+        
+        # Save results to JSON
+        output_file = f"arrow_optimization_{timestamp}.json"
+        with open(output_file, 'w') as f:
+            json.dump(results, f, indent=2)
+        
+        print(f"\n📊 Results saved to: {output_file}")
+        print("\nPlease share this file so we can identify the best approach!")
+    
+    def _test_main_page_method(self, driver, username, reel_ids, max_reels, 
+                                method_name, hover_first=False, js_click=False, scroll_first=False):
+        """Test a specific main page arrow scrape method."""
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+        
+        result = {
+            "dates_found": 0,
+            "dates": {},
+            "status": "unknown",
+            "error": None
+        }
+        
+        try:
+            # Navigate to main profile page
+            page_url = f"https://www.instagram.com/{username}/"
+            print(f"    Navigating to main page...")
+            
+            driver.set_page_load_timeout(30)
+            try:
+                driver.get(page_url)
+            except Exception as e:
+                if "timeout" in str(e).lower():
+                    print(f"    ⏱️ Timeout loading main page")
+                    result["status"] = "timeout_loading_page"
+                    result["error"] = str(e)
+                    return result
+                raise
+            
+            time.sleep(4)
+            driver.set_page_load_timeout(120)
+            self.dismiss_modal(driver, max_attempts=2)
+            
+            # Find posts
+            post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+            if not post_links:
+                print(f"    ⚠️ No posts found on main page")
+                result["status"] = "no_posts_found"
+                return result
+            
+            print(f"    ✅ Found {len(post_links)} posts")
+            
+            first_post = post_links[0]
+            
+            # Apply the specific method's approach
+            if scroll_first:
+                print(f"    📜 Scrolling post into view...")
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_post)
+                time.sleep(1)
+            
+            if hover_first:
+                print(f"    🖱️ Hovering over post first...")
+                actions = ActionChains(driver)
+                actions.move_to_element(first_post).perform()
+                time.sleep(1.5)
+            
+            # Click the post
+            print(f"    🖱️ Clicking first post...")
+            try:
+                if js_click:
+                    driver.execute_script("arguments[0].click();", first_post)
+                else:
+                    first_post.click()
+            except Exception as click_error:
+                print(f"    ⚠️ Click failed, trying JS fallback...")
+                driver.execute_script("arguments[0].click();", first_post)
+            
+            time.sleep(3)
+            
+            # Navigate through posts
+            body = driver.find_element(By.TAG_NAME, "body")
+            posts_processed = 0
+            dates_found = {}
+            
+            print(f"    🔄 Navigating through posts...")
+            
+            while posts_processed < max_reels + 10:
+                time.sleep(1.5)
+                
+                current_url = driver.current_url
+                current_reel_id = None
+                
+                if '/reel/' in current_url:
+                    current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                elif '/p/' in current_url:
+                    current_reel_id = current_url.split('/p/')[-1].rstrip('/').split('?')[0]
+                
+                # Extract date
+                date_info = self.extract_date_from_current_view(driver)
+                date_str = date_info.get('date_display', 'NO DATE') if date_info.get('date') else 'NO DATE'
+                
+                in_list = "✓" if current_reel_id and current_reel_id in reel_ids else "✗"
+                print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                
+                if current_reel_id and current_reel_id in reel_ids and date_info.get('date'):
+                    dates_found[current_reel_id] = date_info
+                
+                # Navigate to next
+                body.send_keys(Keys.ARROW_RIGHT)
+                posts_processed += 1
+                
+                # Check if we have enough
+                if len(dates_found) >= max_reels:
+                    break
+            
+            # Close modal
+            try:
+                body.send_keys(Keys.ESCAPE)
+            except:
+                pass
+            
+            result["dates_found"] = len(dates_found)
+            result["dates"] = {k: v.get('date_display', '') for k, v in dates_found.items()}
+            result["status"] = "success"
+            
+            print(f"    📊 Found {len(dates_found)}/{max_reels} dates")
+            
+        except Exception as e:
+            import traceback
+            result["status"] = "error"
+            result["error"] = str(e)
+            print(f"    ❌ Error: {str(e)}")
+        
+        return result
+    
+    def _test_direct_url_method(self, driver, username, reel_ids, max_reels):
+        """Test direct URL navigation method."""
+        from selenium.webdriver.common.keys import Keys
+        
+        result = {
+            "dates_found": 0,
+            "dates": {},
+            "status": "unknown",
+            "error": None
+        }
+        
+        try:
+            if not reel_ids:
+                result["status"] = "no_reel_ids"
+                return result
+            
+            # Go directly to the first reel
+            first_reel_url = f"https://www.instagram.com/{username}/reel/{reel_ids[0]}/"
+            print(f"    📎 Navigating directly to first reel: {reel_ids[0]}")
+            
+            driver.set_page_load_timeout(30)
+            try:
+                driver.get(first_reel_url)
+            except Exception as e:
+                if "timeout" in str(e).lower():
+                    print(f"    ⏱️ Timeout loading reel URL")
+                    result["status"] = "timeout"
+                    result["error"] = str(e)
+                    return result
+                raise
+            
+            time.sleep(3)
+            driver.set_page_load_timeout(120)
+            self.dismiss_modal(driver, max_attempts=2)
+            
+            # Navigate through posts
+            body = driver.find_element(By.TAG_NAME, "body")
+            posts_processed = 0
+            dates_found = {}
+            
+            print(f"    🔄 Navigating through posts...")
+            
+            while posts_processed < max_reels + 10:
+                time.sleep(1.5)
+                
+                current_url = driver.current_url
+                current_reel_id = None
+                
+                if '/reel/' in current_url:
+                    current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                
+                # Extract date
+                date_info = self.extract_date_from_current_view(driver)
+                date_str = date_info.get('date_display', 'NO DATE') if date_info.get('date') else 'NO DATE'
+                
+                in_list = "✓" if current_reel_id and current_reel_id in reel_ids else "✗"
+                print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                
+                if current_reel_id and current_reel_id in reel_ids and date_info.get('date'):
+                    dates_found[current_reel_id] = date_info
+                
+                # Navigate to next
+                body.send_keys(Keys.ARROW_RIGHT)
+                posts_processed += 1
+                
+                if len(dates_found) >= max_reels:
+                    break
+            
+            # Close modal
+            try:
+                body.send_keys(Keys.ESCAPE)
+            except:
+                pass
+            
+            result["dates_found"] = len(dates_found)
+            result["dates"] = {k: v.get('date_display', '') for k, v in dates_found.items()}
+            result["status"] = "success"
+            
+            print(f"    📊 Found {len(dates_found)}/{max_reels} dates")
+            
+        except Exception as e:
+            result["status"] = "error"
+            result["error"] = str(e)
+            print(f"    ❌ Error: {str(e)}")
+        
+        return result
+
     def run_enhanced_test_mode(self, driver, username, max_reels=50):
         """
         Enhanced Test Mode - Optimized scraping with outlier detection and pinned post identification.
@@ -3160,20 +3546,21 @@ class InstagramScraper:
         print("\n1. Custom scrape (default: 100 posts)")
         print("2. Deep scrape (back 2 years)")
         print("3. Test mode (50 reels on @popdartsgame with diagnostics)")
+        print("4. Arrow scrape optimization (test main page methods)")
         print()
         while True:
-            choice = input("Enter your choice (1, 2, or 3): ").strip()
+            choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
             if choice == '1' or choice == '':
                 num_input = input("\nHow many posts per account? (default 100): ").strip()
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False, False, False
+                        return num_posts, False, False, False, False, False
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
                     print("Invalid input. Using default: 100")
-                    return 100, False, False, False, False
+                    return 100, False, False, False, False, False
             elif choice == '2':
                 print("\n⚠️  Deep scrape options:")
                 print("   a) 2 years back (default)")
@@ -3184,20 +3571,22 @@ class InstagramScraper:
                     confirm = input("\n🔥 DEEP DEEP mode will scrape ALL available posts. This takes significantly longer. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep deep mode selected - will scrape ALL available posts!")
-                        return None, True, False, True, False  # deep_scrape=True, deep_deep=True
+                        return None, True, False, True, False, False  # deep_scrape=True, deep_deep=True
                     else:
                         continue
                 else:
                     confirm = input("\n⚠️  Deep scrape will go back 2 years. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep mode selected - will scrape back 2 years")
-                        return None, True, False, False, False  # deep_scrape=True, deep_deep=False
+                        return None, True, False, False, False, False  # deep_scrape=True, deep_deep=False
                     else:
                         continue
             elif choice == '3':
-                return 50, False, False, False, True  # Test mode with 50 posts and diagnostics
+                return 50, False, False, False, True, False  # Test mode with 50 posts and diagnostics
+            elif choice == '4':
+                return 25, False, False, False, False, True  # Arrow scrape optimization mode
             else:
-                print("Invalid choice. Please enter 1, 2, or 3.")
+                print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
     def run(self):
         """Main execution function"""
@@ -3210,7 +3599,22 @@ class InstagramScraper:
         print("="*70)
         
         browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode = self.get_scrape_mode()
+        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode = self.get_scrape_mode()
+        
+        # Handle arrow optimization mode (test main page methods)
+        if arrow_optimization_mode:
+            self.driver = self.setup_driver(browser=browser_choice)
+            try:
+                self.run_arrow_scrape_optimization(self.driver, "popdartsgame", max_reels=25)
+            finally:
+                if self.driver:
+                    self.driver.quit()
+                if self.incognito_driver:
+                    try:
+                        self.incognito_driver.quit()
+                    except:
+                        pass
+            return
         
         # Handle test mode (enhanced diagnostics on @popdartsgame)
         if enhanced_test_mode:
