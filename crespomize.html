@@ -1079,8 +1079,6 @@
         const headers = jsonData[0].slice(1);
         let followersHistory = [];
         let totalLikesHistory = [];
-        let followers = null;
-        let totalLikes = null;
         
         const allVideosMap = new Map();
         const allUniqueVideoIds = new Set();
@@ -1097,18 +1095,12 @@
               date: new Date(headers[idx]),
               value: parseInt(val) || 0
             })).filter(item => this.isValidDate(item.date));
-            
-            followers = followersHistory.length > 0 ? 
-              followersHistory[followersHistory.length - 1].value : 0;
               
           } else if (rowName === 'total_likes') {
             totalLikesHistory = row.slice(1).map((val, idx) => ({
               date: new Date(headers[idx]),
               value: parseInt(val) || 0
             })).filter(item => this.isValidDate(item.date));
-            
-            totalLikes = totalLikesHistory.length > 0 ? 
-              totalLikesHistory[totalLikesHistory.length - 1].value : 0;
               
           } else if (rowName.startsWith('post_') || rowName.startsWith('video_') || rowName.startsWith('short_')) {
             const parts = rowName.split('_');
@@ -1141,6 +1133,12 @@
         followersHistory = this.interpolateHistoricalData(followersHistory);
         totalLikesHistory = this.interpolateHistoricalData(totalLikesHistory);
         
+        // Get latest non-zero values after interpolation
+        const followers = followersHistory.length > 0 ? 
+          followersHistory[followersHistory.length - 1].value : 0;
+        const totalLikes = totalLikesHistory.length > 0 ? 
+          totalLikesHistory[totalLikesHistory.length - 1].value : 0;
+        
         const videosData = Array.from(allVideosMap.values());
         let cleanVideos = videosData.filter(v => v.Date || v.date).map(v => {
           const dateObj = new Date(v.Date || v.date);
@@ -1162,8 +1160,8 @@
         cleanVideos = this.filterDataByTimeRange(cleanVideos, timeRangeDays);
         
         return {
-          followers: parseInt(followers) || 0,
-          totalLikes: parseInt(totalLikes) || 0,
+          followers: followers,
+          totalLikes: totalLikes,
           postsScraped: allUniqueVideoIds.size,
           videos: cleanVideos,
           followersHistory: followersHistory.filter(item => item.value > 0),
@@ -1186,8 +1184,6 @@
         const headers = jsonData[0].slice(1);
         let followersHistory = [];
         let totalLikesHistory = [];
-        let followers = null;
-        let totalLikes = null;
         
         const allVideosMap = new Map();
         const allUniqueVideoIds = new Set();
@@ -1203,18 +1199,12 @@
               date: new Date(headers[idx]),
               value: parseInt(val) || 0
             })).filter(item => this.isValidDate(item.date));
-            
-            followers = followersHistory.length > 0 ? 
-              followersHistory[followersHistory.length - 1].value : 0;
               
           } else if (rowName === 'total_likes') {
             totalLikesHistory = row.slice(1).map((val, idx) => ({
               date: new Date(headers[idx]),
               value: parseInt(val) || 0
             })).filter(item => this.isValidDate(item.date));
-            
-            totalLikes = totalLikesHistory.length > 0 ? 
-              totalLikesHistory[totalLikesHistory.length - 1].value : 0;
               
           } else if (rowName.startsWith('post_')) {
             const parts = rowName.split('_');
@@ -1247,6 +1237,12 @@
         followersHistory = this.interpolateHistoricalData(followersHistory);
         totalLikesHistory = this.interpolateHistoricalData(totalLikesHistory);
         
+        // Get latest non-zero values after interpolation
+        const followers = followersHistory.length > 0 ? 
+          followersHistory[followersHistory.length - 1].value : 0;
+        const totalLikes = totalLikesHistory.length > 0 ? 
+          totalLikesHistory[totalLikesHistory.length - 1].value : 0;
+        
         const videosData = Array.from(allVideosMap.values());
         let cleanVideos = videosData.filter(v => v.Date).map(v => {
           const dateObj = new Date(v.Date);
@@ -1268,8 +1264,8 @@
         cleanVideos = this.filterDataByTimeRange(cleanVideos, timeRangeDays);
         
         return {
-          followers: parseInt(followers) || 0,
-          totalLikes: parseInt(totalLikes) || 0,
+          followers: followers,
+          totalLikes: totalLikes,
           postsScraped: allUniqueVideoIds.size,
           videos: cleanVideos,
           followersHistory: followersHistory.filter(item => item.value > 0),
@@ -1292,7 +1288,6 @@
         const headers = jsonData[0].slice(1);
         let followersHistory = [];
         let totalLikesHistory = [];
-        let followers = null;
         
         const allVideosMap = new Map();
         const allUniqueVideoIds = new Set();
@@ -1308,9 +1303,6 @@
               date: new Date(headers[idx]),
               value: parseInt(val) || 0
             })).filter(item => this.isValidDate(item.date));
-            
-            followers = followersHistory.length > 0 ? 
-              followersHistory[followersHistory.length - 1].value : 0;
               
           } else if (rowName.startsWith('reel_')) {
             const parts = rowName.split('_');
@@ -1423,6 +1415,12 @@
         followersHistory = this.interpolateHistoricalData(followersHistory);
         totalLikesHistory = this.interpolateHistoricalData(totalLikesHistory);
         
+        // Get latest non-zero values after interpolation
+        const followers = followersHistory.length > 0 ? 
+          followersHistory[followersHistory.length - 1].value : 0;
+        const totalLikes = totalLikesHistory.length > 0 ? 
+          totalLikesHistory[totalLikesHistory.length - 1].value : 0;
+        
         const videosData = Array.from(allVideosMap.values());
         let cleanVideos = videosData.filter(v => v.Date).map(v => {
           const dateObj = new Date(v.Date);
@@ -1443,11 +1441,8 @@
         
         cleanVideos = this.filterDataByTimeRange(cleanVideos, timeRangeDays);
         
-        const totalLikes = totalLikesHistory.length > 0 ? 
-          totalLikesHistory[totalLikesHistory.length - 1].value : 0;
-        
         return {
-          followers: parseInt(followers) || 0,
+          followers: followers,
           totalLikes: totalLikes,
           postsScraped: allUniqueVideoIds.size,
           videos: cleanVideos,
