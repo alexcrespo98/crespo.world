@@ -592,8 +592,7 @@
             <div class="dpad-empty"></div>
             
             <button class="remote-btn" data-cmd="AAAAAQAAAAEAAAB2Aw==" title="Left">◀</button>
-            <button class="remote-btn dpad-center" data-cmd="AAAAAQAAAAEAAAB0Aw==" data-cmd="AAAAAQAAAAEAAABlAw==" title="Select">OK</button>
-            <button class="remote-btn" data-cmd="AAAAAQAAAAEAAABlAw==" title="Right" style="display:none;"></button>
+            <button class="remote-btn dpad-center" data-cmd="AAAAAQAAAAEAAABlAw==" title="Select">OK</button>
             <button class="remote-btn" data-cmd="AAAAAQAAAAEAAABnAw==" title="Right">▶</button>
             
             <div class="dpad-empty"></div>
@@ -1038,13 +1037,8 @@
       SonyTV.launchVanderpumpRules();
     }
     
-    // Fix the D-pad center button command (Select/Enter)
+    // Initialize on DOM ready
     document.addEventListener('DOMContentLoaded', () => {
-      const centerBtn = document.querySelector('.dpad-center');
-      if (centerBtn) {
-        centerBtn.dataset.cmd = 'AAAAAQAAAAEAAABlAw=='; // DpadCenter / Enter
-      }
-      
       // Setup Vanderpump button
       const vanderpumpBtn = document.getElementById('vanderpumpBtn');
       if (vanderpumpBtn) {
