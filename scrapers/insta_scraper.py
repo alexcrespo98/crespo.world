@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """
-Instagram Reels Analytics Tracker v4.0
-- Hover-first mode - hover scrape runs first, then individual URL scrape for dates
-- Cross-validation between hover and URL data with outlier detection
-- Logarithmic correlation-based outlier resolution (uses views-likes relationship)
-- Auto-detection when running out of posts (no more infinite waiting)
-- Interrupt handler (Ctrl+C saves backup file)
-- Master scraper integration support
-- Updates Excel with separate tabs per account
-- Auto-uploads to Google Drive
-- Deep scrape goes back 2 years or to beginning of account
-- Better debugging for hover scrape comment extraction
-"""
+Instagram Reels Analytics Tracker v5.0
+hopefully this sucker works, everything is so janky
+it hover scrapes each posts extracts urls and views as well as likes and comments (not 100% reliable). then it scrapes the reels hovers 
+over the first, post then clicks it then and does the right arrow input and reads each post for date, also gets likes and comments sometimes. 
+sometimes it fails so you do it again on the main channel instead but that also has individual posts. it can detect issues, sometimes it misreads the views
+as likes and sometimes at zero, i dont know but i hope this works next week. i dont know what is redundant in here theres no way it should be 4000 lines lol
+""
 
 import sys
 import subprocess
@@ -72,6 +67,12 @@ import random
 class InstagramScraper:
     # Cross-validation outlier threshold (percentage difference to flag as outlier)
     OUTLIER_THRESHOLD_PCT = 20.0
+    
+    # Enhanced test mode constants
+    DISCREPANCY_THRESHOLD_PCT = 10.0  # Threshold for flagging discrepancies between methods
+    MAX_ARROW_POSTS_OFFSET = 200  # Extra posts to process beyond target in arrow scrape
+    MAX_ARROW_POSTS_CAP = 2000  # Maximum posts to process in arrow scrape
+    POST_TIMEOUT_SECONDS = 10  # Maximum time allowed per post for any method (skip if exceeded)
     
     def __init__(self):
         self.driver = None
@@ -169,30 +170,12 @@ class InstagramScraper:
         return total_delay
 
     def check_for_rate_limit(self, driver):
-        """Check if we've hit a 429 rate limit"""
-        try:
-            page_source = driver.page_source.lower()
-            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
-            
-            rate_limit_indicators = [
-                "rate limit",
-                "too many requests",
-                "please wait",
-                "try again later",
-                "something went wrong"
-            ]
-            
-            for indicator in rate_limit_indicators:
-                if indicator in page_source or indicator in body_text:
-                    return True
-            
-            # Check for 429 in network (if visible in page)
-            if "429" in page_source:
-                return True
-                
-        except:
-            pass
-        
+        """Check if we've hit a 429 rate limit - DISABLED due to false positives"""
+        # Rate limit detection is disabled because Instagram pages often contain
+        # phrases that trigger false positives. The scraper works fine even when
+        # this was triggering. If you see actual rate limiting (blank pages, 
+        # redirect to login), the driver.get() call will fail and be caught by
+        # the exception handler instead.
         return False
 
     def setup_incognito_driver(self):
@@ -987,17 +970,71 @@ class InstagramScraper:
                     parent = post_link.find_element(By.XPATH, "..")
                     views = self.extract_views_from_container(parent)
                     
+                    # ===== Method A (standard hover - 1.1s) =====
+                    likes_a = None
+                    comments_a = None
                     try:
                         actions = ActionChains(driver)
                         actions.move_to_element(parent).perform()
                         time.sleep(1.1)
-                        likes, comments = self.extract_hover_overlay_data(
+                        likes_a, comments_a = self.extract_hover_overlay_data(
                             parent, 
-                            test_mode=test_mode and len(hover_data) < max_reels, 
+                            test_mode=False, 
                             reel_id=post_id
                         )
                     except:
-                        likes, comments = None, None
+                        pass
+                    
+                    # ===== Method A+ (optimized hover - 1.5s with re-trigger) =====
+                    likes_a_plus = None
+                    comments_a_plus = None
+                    try:
+                        # Move away briefly then back (helps trigger overlay refresh)
+                        actions = ActionChains(driver)
+                        actions.move_by_offset(10, 10).perform()
+                        time.sleep(0.3)
+                        actions.move_to_element(parent).perform()
+                        time.sleep(1.5)
+                        likes_a_plus, comments_a_plus = self.extract_hover_overlay_data(
+                            parent, 
+                            test_mode=False, 
+                            reel_id=post_id
+                        )
+                    except:
+                        pass
+                    
+                    # Use best available values with disagreement resolution
+                    likes = likes_a_plus if likes_a_plus is not None else likes_a
+                    comments = comments_a_plus if comments_a_plus is not None else comments_a
+                    
+                    # If methods disagree on likes, use higher value (usually more accurate)
+                    if likes_a is not None and likes_a_plus is not None and likes_a != likes_a_plus:
+                        likes = max(likes_a, likes_a_plus)
+                    
+                    # VALIDATION: Check if likes == views (extraction error)
+                    # Views and likes being exactly equal is extremely rare and usually means
+                    # the views value was incorrectly captured as likes
+                    extraction_error_detected = False
+                    if views and likes and views == likes:
+                        extraction_error_detected = True
+                        # Try to use alternative value if different
+                        if likes_a is not None and likes_a_plus is not None:
+                            if likes_a != likes_a_plus:
+                                if likes_a != views:
+                                    likes = likes_a
+                                    print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views, corrected to {likes_a}")
+                                elif likes_a_plus != views:
+                                    likes = likes_a_plus
+                                    print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views, corrected to {likes_a_plus}")
+                                else:
+                                    likes = None  # Both are wrong
+                                    print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views (will salvage)")
+                            else:
+                                likes = None  # Both methods gave same wrong value
+                                print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views (will salvage)")
+                        else:
+                            likes = None  # Set to None - will be salvaged later
+                            print(f"    ⚠️ [{len(hover_data)+1}] {post_id}: EXTRACTION ERROR - likes={views} equals views (will salvage)")
                     
                     # Apply 2-year cutoff only for deep_scrape (not deep_deep)
                     if deep_scrape and not deep_deep and len(hover_data) > 730:
@@ -1019,6 +1056,7 @@ class InstagramScraper:
                     if len(hover_data) % 10 == 0:
                         self.partial_scrape_data = {'hover_data': hover_data.copy()}
                     
+                    # Verbose output for progress
                     if test_mode and len(hover_data) <= max_reels:
                         # Format output to distinguish N/A from 0
                         views_str = 'N/A' if views is None else str(views)
@@ -1027,6 +1065,16 @@ class InstagramScraper:
                         print(f"    [{len(hover_data)}] {post_id}: views={views_str}, likes={likes_str}, comments={comments_str}")
                     elif not test_mode and len(hover_data) % 25 == 0:
                         print(f"    Progress: {len(hover_data)}/{target_reels} reels")
+                    
+                    # Show missing data warnings (will be salvaged later)
+                    if not extraction_error_detected and (likes is None or comments is None):
+                        missing = []
+                        if likes is None:
+                            missing.append("likes")
+                        if comments is None:
+                            missing.append("comments")
+                        if missing:
+                            print(f"    ⚠️ [{len(hover_data)}] {post_id}: Missing {', '.join(missing)} (will salvage)")
                     
                     time.sleep(0.24)
                 except Exception as e:
@@ -1058,7 +1106,8 @@ class InstagramScraper:
         1. Go to /reels/ page, click first reel
         2. Navigate through reels using right arrow key
         3. Extract date info from each reel
-        4. If /reels/ fails, fallback to main profile page
+        4. If /reels/ fails, fallback to main profile page (fresh start)
+        5. Keep reels data as backup for cross-validation
         """
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.common.action_chains import ActionChains
@@ -1071,6 +1120,7 @@ class InstagramScraper:
         # Build set of reel IDs we need to find dates for
         reel_ids_needed = {reel['reel_id'] for reel in hover_data}
         arrow_data = {}  # reel_id -> date data
+        reels_page_data = {}  # Keep reels page data as backup
         
         # Try /reels/ page first, then main profile as fallback
         pages_to_try = [
@@ -1085,9 +1135,34 @@ class InstagramScraper:
             page_type = "reels" if "/reels/" in page_url else "main"
             print(f"    📄 Trying {page_type} page...")
             
+            # Save reels page data before trying main page
+            if page_type == "main" and arrow_data:
+                reels_page_data = arrow_data.copy()
+                print(f"    📦 Keeping {len(reels_page_data)} dates from reels page as backup")
+            
             try:
-                driver.get(page_url)
+                # Use shorter timeout for page load to avoid long hangs
+                driver.set_page_load_timeout(20)  # 20 second timeout (reduced from 30)
+                
+                try:
+                    driver.get(page_url)
+                except Exception as timeout_err:
+                    if "timeout" in str(timeout_err).lower():
+                        print(f"    ⏱️ Timeout loading {page_type} page - skipping to next method...")
+                        # Reset timeout and try recovery
+                        driver.set_page_load_timeout(120)
+                        try:
+                            driver.get("about:blank")
+                            time.sleep(1)
+                        except:
+                            pass
+                        continue
+                    raise timeout_err
+                
                 time.sleep(4)  # Wait for page to load
+                
+                # Reset to normal timeout
+                driver.set_page_load_timeout(120)
                 
                 # Dismiss any modals
                 self.dismiss_modal(driver, max_attempts=2)
@@ -1105,15 +1180,24 @@ class InstagramScraper:
                 
                 print(f"    ✅ Found {len(post_links)} posts on page")
                 
-                # Click the first post
+                # For main page: hover first, then click (proven method from Option 4)
                 first_post = post_links[0]
                 first_post_url = first_post.get_attribute('href')
                 print(f"    🖱️ Clicking first post...")
                 
+                # Hover over first post before clicking (helps with detection)
+                try:
+                    ActionChains(driver).move_to_element(first_post).perform()
+                    time.sleep(0.5)
+                except:
+                    pass
+                
+                # Try clicking with JS fallback (more reliable on main page)
                 try:
                     first_post.click()
                 except:
                     # Try JavaScript click as fallback
+                    print(f"    ⚠️ Click failed, trying JS fallback...")
                     driver.execute_script("arguments[0].click();", first_post)
                 
                 time.sleep(3)  # Wait for modal to load
@@ -1125,6 +1209,8 @@ class InstagramScraper:
                 consecutive_no_dates = 0  # Track consecutive posts with no date found
                 max_consecutive_misses = 50  # Increased to allow more posts without matches
                 max_posts = min(len(hover_data) + 200, 2000)  # Limit to reasonable amount
+                
+                print(f"    🔄 Navigating through posts...")
                 
                 while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
                     # Wait for content to load
@@ -1191,17 +1277,58 @@ class InstagramScraper:
                         break
                 
                 # Close the modal/overlay by pressing Escape
-                body.send_keys(Keys.ESCAPE)
-                time.sleep(1)
+                try:
+                    body.send_keys(Keys.ESCAPE)
+                    time.sleep(1)
+                except:
+                    pass
                 
                 print(f"    📊 Collected {len(arrow_data)} dates from {page_type} page (processed {posts_processed} posts)")
                 
             except Exception as e:
                 import traceback
-                print(f"    ❌ Error on {page_type} page: {str(e)}")
+                error_msg = str(e)
+                
+                # Check if this is a timeout error
+                if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                    print(f"    ⏱️ Timeout on {page_type} page - trying recovery...")
+                    
+                    # Try to recover: navigate to a simple page first
+                    try:
+                        driver.set_page_load_timeout(15)  # Short timeout
+                        driver.get("about:blank")
+                        time.sleep(1)
+                        driver.set_page_load_timeout(120)  # Reset timeout
+                        
+                        # If we have reels data, we can continue with it
+                        if reels_page_data:
+                            print(f"    ✅ Using {len(reels_page_data)} dates from reels page backup")
+                            arrow_data = reels_page_data
+                        
+                    except:
+                        pass
+                else:
+                    print(f"    ❌ Error on {page_type} page: {error_msg[:60]}")
+                
                 if verbose:
                     traceback.print_exc()
                 continue
+        
+        # Cross-validate if we have data from both reels and main pages
+        if reels_page_data and arrow_data != reels_page_data:
+            # Check for overlapping reel_ids and validate dates match
+            overlap = set(reels_page_data.keys()) & set(arrow_data.keys())
+            if overlap:
+                matches = sum(1 for r in overlap if reels_page_data[r].get('date') == arrow_data[r].get('date'))
+                if len(overlap) > 0:
+                    match_rate = matches / len(overlap) * 100
+                    print(f"    🔍 Cross-validation: {matches}/{len(overlap)} dates match ({match_rate:.0f}%)")
+                    
+                    # Merge: prefer main page data, fill in missing with reels data
+                    for reel_id, data in reels_page_data.items():
+                        if reel_id not in arrow_data:
+                            arrow_data[reel_id] = data
+                    print(f"    ✅ Merged: now have {len(arrow_data)} dates total")
         
         # Convert arrow_data dict to list format matching hover_data
         url_data = []
@@ -1764,6 +1891,90 @@ class InstagramScraper:
         final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
         pinned_count = 0  # Pinned detection not available in hover-first mode
         
+        # Step 5: Salvage scrape for posts missing critical data (likes, comments)
+        posts_needing_salvage = [d for d in final_data if d.get('likes') is None or d.get('comments') is None]
+        
+        if posts_needing_salvage and len(posts_needing_salvage) <= 10:
+            # Only salvage if there are a reasonable number of missing posts (avoid long delays)
+            print(f"\n  🔧 Salvaging {len(posts_needing_salvage)} posts with missing data...")
+            
+            for item in posts_needing_salvage:
+                reel_id = item['reel_id']
+                reel_url = f"https://www.instagram.com/reel/{reel_id}/"
+                missing = []
+                if item.get('likes') is None:
+                    missing.append('likes')
+                if item.get('comments') is None:
+                    missing.append('comments')
+                
+                try:
+                    # Add jitter before request (1-3 seconds)
+                    self.add_jitter(base_delay=1.0, max_jitter=2.0)
+                    
+                    # Navigate to the specific post
+                    driver.get(reel_url)
+                    time.sleep(2)
+                    
+                    # Extract data from the post page
+                    salvage_data = self.extract_date_from_current_view(driver)
+                    
+                    # Update with recovered data - with outlier validation
+                    if 'likes' in missing and salvage_data.get('likes') is not None:
+                        recovered_likes = salvage_data['likes']
+                        views = item.get('views')
+                        
+                        # Validate recovered likes isn't an outlier
+                        is_valid = True
+                        rejection_reason = None
+                        
+                        # Check 1: likes shouldn't equal views (extraction error)
+                        if views and recovered_likes == views:
+                            is_valid = False
+                            rejection_reason = "equals views"
+                        
+                        # Check 2: likes shouldn't be within 5% of views (extraction error)
+                        elif views and abs(recovered_likes - views) / views < 0.05:
+                            is_valid = False
+                            rejection_reason = f"too close to views ({recovered_likes} vs {views})"
+                        
+                        # Check 3: likes shouldn't be > views (impossible)
+                        elif views and recovered_likes > views:
+                            is_valid = False
+                            rejection_reason = f"exceeds views ({recovered_likes} > {views})"
+                        
+                        # Check 4: likes shouldn't be implausibly low (< 0.1% of views when views > 1000)
+                        elif views and views > 1000 and recovered_likes < views * 0.001:
+                            is_valid = False
+                            rejection_reason = f"implausibly low ({recovered_likes} for {views} views)"
+                        
+                        if is_valid:
+                            item['likes'] = recovered_likes
+                            print(f"    ✅ Recovered likes={recovered_likes:,} for {reel_id}")
+                        else:
+                            print(f"    ⚠️ Rejected salvaged likes={recovered_likes} for {reel_id}: {rejection_reason}")
+                            # Try again with a different extraction method
+                            time.sleep(1)
+                            body_text = driver.find_element(By.TAG_NAME, "body").text
+                            # Look for "X likes" pattern
+                            likes_match = re.search(r'(\d[\d,.]*)\s*likes?', body_text)
+                            if likes_match:
+                                alt_likes = self.parse_number(likes_match.group(1))
+                                if alt_likes and (not views or (alt_likes != views and alt_likes < views)):
+                                    item['likes'] = alt_likes
+                                    print(f"    ✅ Recovered likes={alt_likes:,} via alt method for {reel_id}")
+                    
+                    if 'comments' in missing and salvage_data.get('comments') is not None:
+                        item['comments'] = salvage_data['comments']
+                        print(f"    ✅ Recovered comments={salvage_data['comments']:,} for {reel_id}")
+                    
+                except Exception as e:
+                    print(f"    ❌ Salvage failed for {reel_id}: {str(e)[:40]}")
+                    continue
+            
+            # Go back to profile page
+            driver.get(f"https://www.instagram.com/{username}/reels/")
+            time.sleep(2)
+        
         if exact_followers:
             followers = exact_followers
         else:
@@ -1861,27 +2072,1501 @@ class InstagramScraper:
             print(f"❌ Upload error: {e}")
             return False
 
+    # =====================================================================
+    # ENHANCED TEST MODE - Multi-Method Diagnostic Analysis
+    # =====================================================================
+    
+    def hover_method_a_current(self, parent, reel_id):
+        """
+        Method A - Current baseline hover overlay extraction.
+        Uses the existing extract_hover_overlay_data logic.
+        Returns (likes, comments, views) for consistency with other methods.
+        """
+        likes, comments = self.extract_hover_overlay_data(parent, test_mode=False, reel_id=reel_id)
+        # Views are extracted separately in the main loop, so return None here
+        return likes, comments, None
+    
+    def hover_method_b_alt_selectors(self, driver, parent, reel_id):
+        """
+        Method B - Alternative CSS selector strategy.
+        Tries different CSS selectors and XPath patterns for metrics.
+        """
+        views = None
+        likes = None
+        comments = None
+        
+        try:
+            # Try specific Instagram class selectors for metrics
+            overlay_selectors = [
+                ".x1lliihq.x1plvlek.xryxfnj",  # Common metric container
+                "span[class*='x1lliihq']",
+                "div[class*='_aacl']",
+            ]
+            
+            for selector in overlay_selectors:
+                try:
+                    elements = parent.find_elements(By.CSS_SELECTOR, selector)
+                    for elem in elements:
+                        text = elem.text.strip()
+                        if text:
+                            parsed = self.parse_number(text)
+                            if parsed is not None:
+                                if views is None:
+                                    views = parsed
+                                elif likes is None:
+                                    likes = parsed
+                                elif comments is None:
+                                    comments = parsed
+                except:
+                    continue
+            
+            # Try XPath for structured data
+            if likes is None:
+                try:
+                    like_xpaths = [
+                        ".//span[contains(@class, 'like')]//span",
+                        ".//button[contains(@class, 'like')]//span",
+                        ".//*[contains(text(), 'like')]",
+                    ]
+                    for xpath in like_xpaths:
+                        elems = parent.find_elements(By.XPATH, xpath)
+                        for elem in elems:
+                            text = elem.text
+                            if text:
+                                match = re.search(r'([\d,.]+[KMB]?)', text)
+                                if match:
+                                    likes = self.parse_number(match.group(1))
+                                    break
+                        if likes is not None:
+                            break
+                except:
+                    pass
+            
+            # Try XPath for comments
+            if comments is None:
+                try:
+                    comment_xpaths = [
+                        ".//span[contains(@class, 'comment')]//span",
+                        ".//*[contains(text(), 'comment')]",
+                    ]
+                    for xpath in comment_xpaths:
+                        elems = parent.find_elements(By.XPATH, xpath)
+                        for elem in elems:
+                            text = elem.text
+                            if text:
+                                match = re.search(r'([\d,.]+[KMB]?)', text)
+                                if match:
+                                    comments = self.parse_number(match.group(1))
+                                    break
+                        if comments is not None:
+                            break
+                except:
+                    pass
+                    
+        except Exception as e:
+            pass
+        
+        return likes, comments, views
+    
+    def hover_method_c_body_regex(self, driver, parent, reel_id):
+        """
+        Method C - Body text regex extraction.
+        Uses comprehensive regex patterns on overlay text.
+        """
+        views = None
+        likes = None
+        comments = None
+        
+        try:
+            overlay_text = parent.text
+            
+            # Comprehensive regex patterns for views
+            view_patterns = [
+                r'([\d,.]+[KMB]?)\s*(?:views?|plays?)',
+                r'(?:views?|plays?)\s*([\d,.]+[KMB]?)',
+            ]
+            for pattern in view_patterns:
+                match = re.search(pattern, overlay_text, re.IGNORECASE)
+                if match:
+                    views = self.parse_number(match.group(1))
+                    break
+            
+            # Comprehensive regex patterns for likes
+            like_patterns = [
+                r'and\s+([\d,.]+[KMB]?)\s+others',  # "and X others"
+                r'([\d,.]+[KMB]?)\s*likes?',
+                r'liked\s+by\s+.*?and\s+([\d,.]+[KMB]?)',
+                r'❤️?\s*([\d,.]+[KMB]?)',
+            ]
+            for pattern in like_patterns:
+                match = re.search(pattern, overlay_text, re.IGNORECASE)
+                if match:
+                    likes = self.parse_number(match.group(1))
+                    break
+            
+            # Comprehensive regex patterns for comments
+            comment_patterns = [
+                r'view\s+all\s+([\d,.]+[KMB]?)\s+comments?',
+                r'([\d,.]+[KMB]?)\s+comments?',
+                r'💬\s*([\d,.]+[KMB]?)',
+                r'comments?\s*[:\s]*([\d,.]+[KMB]?)',
+            ]
+            for pattern in comment_patterns:
+                match = re.search(pattern, overlay_text, re.IGNORECASE)
+                if match:
+                    comments = self.parse_number(match.group(1))
+                    break
+            
+            # Handle edge cases
+            if comments is None:
+                if re.search(r'\b0\s+comments?\b', overlay_text, re.IGNORECASE):
+                    comments = 0
+                elif re.search(r'\bno\s+comments?\b', overlay_text, re.IGNORECASE):
+                    comments = 0
+            
+            # Try to extract views from first standalone number if not found
+            if views is None:
+                lines = overlay_text.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if re.match(r'^[\d,.]+[KMB]?$', line):
+                        views = self.parse_number(line)
+                        break
+                        
+        except Exception as e:
+            pass
+        
+        return likes, comments, views
+    
+    def hover_method_d_click_through(self, driver, reel_url, reel_id, timeout=None):
+        """
+        Method D - Click-through method.
+        Actually navigates to the post to extract data, then returns.
+        Returns (likes, comments, views, elapsed_time).
+        If timeout is provided, returns early if exceeded.
+        """
+        import time as time_module
+        
+        start_time = time_module.time()
+        timeout = timeout or self.POST_TIMEOUT_SECONDS
+        
+        views = None
+        likes = None  
+        comments = None
+        
+        try:
+            # Navigate to the reel
+            driver.get(reel_url)
+            time.sleep(2)
+            
+            # Check timeout after navigation
+            elapsed = time_module.time() - start_time
+            if elapsed > timeout:
+                return likes, comments, views, elapsed
+            
+            # Extract data from full post view
+            data = self.extract_date_from_current_view(driver)
+            likes = data.get('likes')
+            comments = data.get('comments')
+            
+            # Check timeout before view extraction
+            elapsed = time_module.time() - start_time
+            if elapsed > timeout:
+                return likes, comments, views, elapsed
+            
+            # Try to get views from the post page
+            try:
+                body_text = driver.find_element(By.TAG_NAME, "body").text
+                view_patterns = [
+                    r'([\d,.]+[KMB]?)\s*(?:views?|plays?)',
+                    r'(?:views?|plays?)\s*([\d,.]+[KMB]?)',
+                ]
+                for pattern in view_patterns:
+                    match = re.search(pattern, body_text, re.IGNORECASE)
+                    if match:
+                        views = self.parse_number(match.group(1))
+                        break
+            except:
+                pass
+            
+        except Exception as e:
+            pass
+        finally:
+            # Always try to navigate back
+            try:
+                driver.back()
+                time.sleep(1.5)
+            except:
+                pass
+        
+        elapsed = time_module.time() - start_time
+        return likes, comments, views, elapsed
+    
+    def arrow_scrape_with_fallback(self, driver, username, hover_data):
+        """
+        Arrow scrape for dates with reels page default and main profile fallback.
+        Returns arrow_data dict and metadata about which page was used.
+        """
+        from selenium.webdriver.common.keys import Keys
+        
+        reel_ids_needed = {reel['reel_id'] for reel in hover_data}
+        arrow_data = {}
+        page_type_used = None
+        
+        # Try /reels/ page first, then main profile as fallback
+        pages_to_try = [
+            (f"https://www.instagram.com/{username}/reels/", "reels"),
+            (f"https://www.instagram.com/{username}/", "main")
+        ]
+        
+        for page_url, page_type in pages_to_try:
+            if len(arrow_data) >= len(reel_ids_needed):
+                break
+            
+            print(f"    📄 Trying {page_type} page...")
+            
+            try:
+                driver.get(page_url)
+                time.sleep(4)
+                self.dismiss_modal(driver, max_attempts=2)
+                
+                # Find clickable posts
+                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+                
+                if not post_links:
+                    post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+                
+                if not post_links:
+                    print(f"    ⚠️ No posts found on {page_type} page")
+                    continue
+                
+                print(f"    ✅ Found {len(post_links)} posts on {page_type} page")
+                page_type_used = page_type
+                
+                # Click first post
+                first_post = post_links[0]
+                try:
+                    first_post.click()
+                except:
+                    driver.execute_script("arguments[0].click();", first_post)
+                
+                time.sleep(3)
+                
+                # Navigate through posts
+                body = driver.find_element(By.TAG_NAME, "body")
+                posts_processed = 0
+                consecutive_misses = 0
+                consecutive_no_dates = 0
+                max_consecutive_misses = 50
+                max_posts = min(len(hover_data) + self.MAX_ARROW_POSTS_OFFSET, self.MAX_ARROW_POSTS_CAP)
+                
+                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+                    time.sleep(1.5)
+                    
+                    current_url = driver.current_url
+                    current_reel_id = None
+                    
+                    if '/reel/' in current_url:
+                        current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                    
+                    date_info = self.extract_date_from_current_view(driver)
+                    
+                    # Check for consecutive NO DATE failures on reels page
+                    if page_type == "reels" and not date_info.get('date'):
+                        consecutive_no_dates += 1
+                        if consecutive_no_dates >= 3:
+                            print(f"    ⚠️ 3 consecutive NO DATE - switching to main page...")
+                            body.send_keys(Keys.ESCAPE)
+                            time.sleep(1)
+                            break
+                    else:
+                        consecutive_no_dates = 0
+                    
+                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
+                        if date_info.get('date'):
+                            arrow_data[current_reel_id] = date_info
+                            consecutive_misses = 0
+                        else:
+                            consecutive_misses += 1
+                    else:
+                        consecutive_misses += 1
+                    
+                    body.send_keys(Keys.ARROW_RIGHT)
+                    posts_processed += 1
+                    
+                    if len(arrow_data) >= len(reel_ids_needed):
+                        print(f"    ✅ Collected all {len(arrow_data)} dates!")
+                        break
+                
+                # Close modal
+                body.send_keys(Keys.ESCAPE)
+                time.sleep(1)
+                
+                print(f"    📊 Collected {len(arrow_data)} dates from {page_type} page")
+                
+            except Exception as e:
+                print(f"    ❌ Error on {page_type} page: {str(e)}")
+                continue
+        
+        return arrow_data, page_type_used
+    
+    def run_arrow_scrape_optimization(self, driver, username, max_reels=25):
+        """
+        Arrow Scrape Optimization Mode - Tests multiple main page scraping methods.
+        This mode specifically tests the MAIN PAGE arrow scrape with different approaches
+        to find what works best when the /reels/ page stops working.
+        
+        Methods tested:
+        A) Standard: Navigate to main page → click first post → arrow navigate
+        B) Hover first: Hover over post → click → arrow navigate  
+        C) JavaScript click: Use JS to click instead of Selenium click
+        D) Scroll into view first: Scroll post into center → click → navigate
+        E) Direct URL: Go directly to first reel URL then navigate
+        """
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+        import json
+        
+        print("\n" + "="*70)
+        print("🔧 ARROW SCRAPE OPTIMIZATION MODE: @" + username)
+        print("="*70)
+        print("\nThis mode tests multiple MAIN PAGE arrow scrape methods.")
+        print("It will help identify which approach works best when /reels/ fails.")
+        print("\nMethods to test:")
+        print("  A) Standard click → arrow navigate")
+        print("  B) Hover first → click → arrow navigate")
+        print("  C) JavaScript click → arrow navigate")
+        print("  D) Scroll into view → click → arrow navigate")
+        print("  E) Direct URL → arrow navigate")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results = {
+            "test_config": {
+                "account": username,
+                "posts_to_test": max_reels,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            },
+            "methods": {}
+        }
+        
+        # First, get a list of reel IDs from hover scrape (quick pass)
+        print("\n📍 STEP 0: Quick hover scrape to get reel IDs...")
+        profile_url = f"https://www.instagram.com/{username}/reels/"
+        driver.get(profile_url)
+        time.sleep(5)
+        self.dismiss_modal(driver, max_attempts=2)
+        
+        reel_ids = []
+        post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+        for link in post_links[:max_reels]:
+            try:
+                url = link.get_attribute('href')
+                if url and '/reel/' in url:
+                    reel_id = url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                    if reel_id not in reel_ids:
+                        reel_ids.append(reel_id)
+            except:
+                pass
+        
+        print(f"   Found {len(reel_ids)} reel IDs to look for")
+        results["reel_ids_expected"] = reel_ids[:max_reels]
+        
+        # =====================================================================
+        # METHOD A: Standard click (current approach)
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD A: Standard click → arrow navigate")
+        print("-"*50)
+        
+        method_a_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="A_standard_click",
+            hover_first=False,
+            js_click=False,
+            scroll_first=False
+        )
+        results["methods"]["A_standard_click"] = method_a_results
+        
+        # =====================================================================
+        # METHOD B: Hover first then click
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD B: Hover first → click → arrow navigate")
+        print("-"*50)
+        
+        method_b_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="B_hover_first",
+            hover_first=True,
+            js_click=False,
+            scroll_first=False
+        )
+        results["methods"]["B_hover_first"] = method_b_results
+        
+        # =====================================================================
+        # METHOD C: JavaScript click
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD C: JavaScript click → arrow navigate")
+        print("-"*50)
+        
+        method_c_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="C_js_click",
+            hover_first=False,
+            js_click=True,
+            scroll_first=False
+        )
+        results["methods"]["C_js_click"] = method_c_results
+        
+        # =====================================================================
+        # METHOD D: Scroll into view first
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD D: Scroll into view → click → arrow navigate")
+        print("-"*50)
+        
+        method_d_results = self._test_main_page_method(
+            driver, username, reel_ids, max_reels,
+            method_name="D_scroll_first",
+            hover_first=False,
+            js_click=False,
+            scroll_first=True
+        )
+        results["methods"]["D_scroll_first"] = method_d_results
+        
+        # =====================================================================
+        # METHOD E: Direct URL navigation
+        # =====================================================================
+        print("\n" + "-"*50)
+        print("📍 METHOD E: Direct URL → arrow navigate")
+        print("-"*50)
+        
+        method_e_results = self._test_direct_url_method(driver, username, reel_ids, max_reels)
+        results["methods"]["E_direct_url"] = method_e_results
+        
+        # =====================================================================
+        # Summary
+        # =====================================================================
+        print("\n" + "="*70)
+        print("📊 ARROW SCRAPE OPTIMIZATION RESULTS")
+        print("="*70)
+        
+        best_method = None
+        best_count = 0
+        
+        for method_name, method_data in results["methods"].items():
+            count = method_data.get("dates_found", 0)
+            success_rate = (count / max_reels * 100) if max_reels > 0 else 0
+            print(f"\n  {method_name}:")
+            print(f"    Dates found: {count}/{max_reels} ({success_rate:.1f}%)")
+            print(f"    Status: {method_data.get('status', 'unknown')}")
+            if method_data.get("error"):
+                print(f"    Error: {method_data['error']}")
+            
+            if count > best_count:
+                best_count = count
+                best_method = method_name
+        
+        results["summary"] = {
+            "best_method": best_method,
+            "best_count": best_count,
+            "best_success_rate": (best_count / max_reels * 100) if max_reels > 0 else 0
+        }
+        
+        print(f"\n  🏆 BEST METHOD: {best_method} ({best_count}/{max_reels} dates)")
+        
+        # Save results to JSON
+        output_file = f"arrow_optimization_{timestamp}.json"
+        with open(output_file, 'w') as f:
+            json.dump(results, f, indent=2)
+        
+        print(f"\n📊 Results saved to: {output_file}")
+        print("\nPlease share this file so we can identify the best approach!")
+    
+    def _test_main_page_method(self, driver, username, reel_ids, max_reels, 
+                                method_name, hover_first=False, js_click=False, scroll_first=False):
+        """Test a specific main page arrow scrape method."""
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+        
+        result = {
+            "dates_found": 0,
+            "dates": {},
+            "status": "unknown",
+            "error": None
+        }
+        
+        try:
+            # Navigate to main profile page
+            page_url = f"https://www.instagram.com/{username}/"
+            print(f"    Navigating to main page...")
+            
+            driver.set_page_load_timeout(30)
+            try:
+                driver.get(page_url)
+            except Exception as e:
+                if "timeout" in str(e).lower():
+                    print(f"    ⏱️ Timeout loading main page")
+                    result["status"] = "timeout_loading_page"
+                    result["error"] = str(e)
+                    return result
+                raise
+            
+            time.sleep(4)
+            driver.set_page_load_timeout(120)
+            self.dismiss_modal(driver, max_attempts=2)
+            
+            # Find posts
+            post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+            if not post_links:
+                print(f"    ⚠️ No posts found on main page")
+                result["status"] = "no_posts_found"
+                return result
+            
+            print(f"    ✅ Found {len(post_links)} posts")
+            
+            first_post = post_links[0]
+            
+            # Apply the specific method's approach
+            if scroll_first:
+                print(f"    📜 Scrolling post into view...")
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_post)
+                time.sleep(1)
+            
+            if hover_first:
+                print(f"    🖱️ Hovering over post first...")
+                actions = ActionChains(driver)
+                actions.move_to_element(first_post).perform()
+                time.sleep(1.5)
+            
+            # Click the post
+            print(f"    🖱️ Clicking first post...")
+            try:
+                if js_click:
+                    driver.execute_script("arguments[0].click();", first_post)
+                else:
+                    first_post.click()
+            except Exception as click_error:
+                print(f"    ⚠️ Click failed, trying JS fallback...")
+                driver.execute_script("arguments[0].click();", first_post)
+            
+            time.sleep(3)
+            
+            # Navigate through posts
+            body = driver.find_element(By.TAG_NAME, "body")
+            posts_processed = 0
+            dates_found = {}
+            
+            print(f"    🔄 Navigating through posts...")
+            
+            while posts_processed < max_reels + 10:
+                time.sleep(1.5)
+                
+                current_url = driver.current_url
+                current_reel_id = None
+                
+                if '/reel/' in current_url:
+                    current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                elif '/p/' in current_url:
+                    current_reel_id = current_url.split('/p/')[-1].rstrip('/').split('?')[0]
+                
+                # Extract date
+                date_info = self.extract_date_from_current_view(driver)
+                date_str = date_info.get('date_display', 'NO DATE') if date_info.get('date') else 'NO DATE'
+                
+                in_list = "✓" if current_reel_id and current_reel_id in reel_ids else "✗"
+                print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                
+                if current_reel_id and current_reel_id in reel_ids and date_info.get('date'):
+                    dates_found[current_reel_id] = date_info
+                
+                # Navigate to next
+                body.send_keys(Keys.ARROW_RIGHT)
+                posts_processed += 1
+                
+                # Check if we have enough
+                if len(dates_found) >= max_reels:
+                    break
+            
+            # Close modal
+            try:
+                body.send_keys(Keys.ESCAPE)
+            except:
+                pass
+            
+            result["dates_found"] = len(dates_found)
+            result["dates"] = {k: v.get('date_display', '') for k, v in dates_found.items()}
+            result["status"] = "success"
+            
+            print(f"    📊 Found {len(dates_found)}/{max_reels} dates")
+            
+        except Exception as e:
+            import traceback
+            result["status"] = "error"
+            result["error"] = str(e)
+            print(f"    ❌ Error: {str(e)}")
+        
+        return result
+    
+    def _test_direct_url_method(self, driver, username, reel_ids, max_reels):
+        """Test direct URL navigation method."""
+        from selenium.webdriver.common.keys import Keys
+        
+        result = {
+            "dates_found": 0,
+            "dates": {},
+            "status": "unknown",
+            "error": None
+        }
+        
+        try:
+            if not reel_ids:
+                result["status"] = "no_reel_ids"
+                return result
+            
+            # Go directly to the first reel
+            first_reel_url = f"https://www.instagram.com/{username}/reel/{reel_ids[0]}/"
+            print(f"    📎 Navigating directly to first reel: {reel_ids[0]}")
+            
+            driver.set_page_load_timeout(30)
+            try:
+                driver.get(first_reel_url)
+            except Exception as e:
+                if "timeout" in str(e).lower():
+                    print(f"    ⏱️ Timeout loading reel URL")
+                    result["status"] = "timeout"
+                    result["error"] = str(e)
+                    return result
+                raise
+            
+            time.sleep(3)
+            driver.set_page_load_timeout(120)
+            self.dismiss_modal(driver, max_attempts=2)
+            
+            # Navigate through posts
+            body = driver.find_element(By.TAG_NAME, "body")
+            posts_processed = 0
+            dates_found = {}
+            
+            print(f"    🔄 Navigating through posts...")
+            
+            while posts_processed < max_reels + 10:
+                time.sleep(1.5)
+                
+                current_url = driver.current_url
+                current_reel_id = None
+                
+                if '/reel/' in current_url:
+                    current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                
+                # Extract date
+                date_info = self.extract_date_from_current_view(driver)
+                date_str = date_info.get('date_display', 'NO DATE') if date_info.get('date') else 'NO DATE'
+                
+                in_list = "✓" if current_reel_id and current_reel_id in reel_ids else "✗"
+                print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
+                
+                if current_reel_id and current_reel_id in reel_ids and date_info.get('date'):
+                    dates_found[current_reel_id] = date_info
+                
+                # Navigate to next
+                body.send_keys(Keys.ARROW_RIGHT)
+                posts_processed += 1
+                
+                if len(dates_found) >= max_reels:
+                    break
+            
+            # Close modal
+            try:
+                body.send_keys(Keys.ESCAPE)
+            except:
+                pass
+            
+            result["dates_found"] = len(dates_found)
+            result["dates"] = {k: v.get('date_display', '') for k, v in dates_found.items()}
+            result["status"] = "success"
+            
+            print(f"    📊 Found {len(dates_found)}/{max_reels} dates")
+            
+        except Exception as e:
+            result["status"] = "error"
+            result["error"] = str(e)
+            print(f"    ❌ Error: {str(e)}")
+        
+        return result
+
+    def run_enhanced_test_mode(self, driver, username, max_reels=50):
+        """
+        Enhanced Test Mode - Optimized scraping with outlier detection and pinned post identification.
+        - Uses Method A (proven) + Method A+ (optimized variant)
+        - Detects pinned posts (out of chronological sequence)
+        - Finds outliers (likes > views, or off the logarithmic trend)
+        - Smart disagreement resolution using statistical analysis
+        - Outputs test.xlsx file for analysis
+        """
+        import pandas as pd
+        import math
+        
+        print("\n" + "="*70)
+        print("🧪 ENHANCED TEST MODE: @" + username + f" ({max_reels} posts)")
+        print("="*70)
+        print("\nThis mode will:")
+        print("  • Run hover scrape with Method A + optimized variant")
+        print("  • Run arrow scrape for dates (with reels→main fallback)")
+        print("  • Detect pinned posts (out of chronological sequence)")
+        print("  • Find outliers (likes > views, off logarithmic trend)")
+        print("  • Smart disagreement resolution")
+        print("  • Output test.xlsx file for analysis")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp_col = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Get follower count using existing API method
+        print("\n📍 STEP 0: Getting Follower Count")
+        print("   Using exact follower count API...")
+        followers = self.get_exact_follower_count(username)
+        if followers:
+            print(f"   ✅ Exact follower count: {followers:,}")
+        else:
+            print("   ⚠️ Could not get exact follower count")
+        
+        # =====================================================================
+        # STEP 1: Hover Scrape with multiple passes to skip no posts
+        # =====================================================================
+        print("\n📍 STEP 1: Hover Scrape (Method A + optimized variants)")
+        print("   Scrolling through grid and hovering over posts...")
+        print("   Running multiple passes to ensure no posts are skipped...")
+        
+        profile_url = f"https://www.instagram.com/{username}/reels/"
+        driver.get(profile_url)
+        time.sleep(5)
+        self.dismiss_modal(driver, max_attempts=2)
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(2)
+        
+        hover_data = []
+        method_a_results = []  # Standard Method A
+        method_a_plus_results = []  # Optimized variant with longer hover
+        processed_reel_ids = set()
+        fail_counter = 0
+        pass_number = 1
+        
+        while len(hover_data) < max_reels and fail_counter < 15:  # Increased fail threshold
+            post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+            new_this_cycle = False
+            
+            for post_link in post_links:
+                if len(hover_data) >= max_reels:
+                    break
+                
+                try:
+                    post_url = post_link.get_attribute('href')
+                    if not post_url or '/reel/' not in post_url:
+                        continue
+                    
+                    post_id = post_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+                    if post_id in processed_reel_ids:
+                        continue
+                    
+                    is_visible = driver.execute_script(
+                        "var rect = arguments[0].getBoundingClientRect();"
+                        "return (rect.top >= 0 && rect.top < window.innerHeight - 100);",
+                        post_link
+                    )
+                    
+                    if not is_visible:
+                        continue
+                    
+                    parent = post_link.find_element(By.XPATH, "..")
+                    
+                    # Get views from container first
+                    views = self.extract_views_from_container(parent)
+                    
+                    # ===== Method A (standard) =====
+                    likes_a = None
+                    comments_a = None
+                    views_a = None
+                    try:
+                        actions = ActionChains(driver)
+                        actions.move_to_element(parent).perform()
+                        time.sleep(1.2)  # Standard timing
+                        likes_a, comments_a, views_a = self.hover_method_a_current(parent, post_id)
+                    except:
+                        pass
+                    
+                    method_a_results.append({
+                        'reel_id': post_id,
+                        'views': views_a if views_a else views,
+                        'likes': likes_a,
+                        'comments': comments_a
+                    })
+                    
+                    # ===== Method A+ (optimized - longer hover, re-extract) =====
+                    likes_a_plus = None
+                    comments_a_plus = None
+                    views_a_plus = None
+                    try:
+                        # Move away briefly then back (helps trigger overlay refresh)
+                        actions = ActionChains(driver)
+                        actions.move_by_offset(10, 10).perform()
+                        time.sleep(0.3)
+                        actions.move_to_element(parent).perform()
+                        time.sleep(1.5)  # Longer hover time
+                        likes_a_plus, comments_a_plus, views_a_plus = self.hover_method_a_current(parent, post_id)
+                    except:
+                        pass
+                    
+                    method_a_plus_results.append({
+                        'reel_id': post_id,
+                        'views': views_a_plus if views_a_plus else views,
+                        'likes': likes_a_plus,
+                        'comments': comments_a_plus
+                    })
+                    
+                    # Use best available values (prefer non-None)
+                    final_views = views_a_plus or views_a or views
+                    final_likes = likes_a_plus if likes_a_plus is not None else likes_a
+                    final_comments = comments_a_plus if comments_a_plus is not None else comments_a
+                    
+                    # Check for disagreement and log it
+                    disagreement = None
+                    if likes_a is not None and likes_a_plus is not None and likes_a != likes_a_plus:
+                        # Use higher value (usually more accurate for likes)
+                        final_likes = max(likes_a, likes_a_plus)
+                        disagreement = f"likes: A={likes_a} vs A+={likes_a_plus} → used {final_likes}"
+                    
+                    # VALIDATION: Check if likes == views (likely extraction error)
+                    # Views and likes being exactly equal is extremely rare and usually means
+                    # the views value was incorrectly captured as likes
+                    likes_equals_views_error = False
+                    if final_views and final_likes and final_views == final_likes:
+                        likes_equals_views_error = True
+                        # Try to use the lower of the two method values if they differ
+                        if likes_a is not None and likes_a_plus is not None:
+                            if likes_a != likes_a_plus:
+                                # Use the one that's NOT equal to views
+                                if likes_a != final_views:
+                                    final_likes = likes_a
+                                elif likes_a_plus != final_views:
+                                    final_likes = likes_a_plus
+                                else:
+                                    # Both are wrong - set to None and flag
+                                    final_likes = None
+                            else:
+                                # Both methods gave same wrong value - set to None
+                                final_likes = None
+                        else:
+                            # Only one method available and it's wrong - set to None
+                            final_likes = None
+                        
+                        if final_likes is None:
+                            disagreement = f"⚠️ EXTRACTION ERROR: likes={final_views} equals views - reset to None"
+                        else:
+                            disagreement = f"⚠️ CORRECTED: likes was {final_views} (=views), now {final_likes}"
+                    
+                    hover_data.append({
+                        'reel_id': post_id,
+                        'url': post_url,
+                        'views': final_views,
+                        'likes': final_likes,
+                        'comments': final_comments,
+                        'position': len(hover_data) + 1,
+                        'method_a_likes': likes_a,
+                        'method_a_plus_likes': likes_a_plus,
+                        'disagreement': disagreement,
+                        'likes_equals_views_error': likes_equals_views_error
+                    })
+                    processed_reel_ids.add(post_id)
+                    new_this_cycle = True
+                    
+                    # Detailed progress output - show exactly what was found
+                    pos = len(hover_data)
+                    views_str = f"{final_views:,}" if final_views else "❌"
+                    likes_str = f"{final_likes:,}" if final_likes is not None else "❌"
+                    comments_str = f"{final_comments:,}" if final_comments is not None else "❌"
+                    
+                    # Build status indicators
+                    status = "✅" if (final_views and final_likes is not None and final_comments is not None) else "⚠️"
+                    
+                    print(f"   {status} [{pos}] {post_id}")
+                    print(f"      📊 views={views_str} | likes={likes_str} | comments={comments_str}")
+                    
+                    # Show method comparison if there was any difference
+                    if likes_a != likes_a_plus and likes_a is not None and likes_a_plus is not None:
+                        print(f"      🔄 Method comparison: A={likes_a} vs A+={likes_a_plus} → used {final_likes}")
+                    
+                    # Show extraction error if detected
+                    if likes_equals_views_error:
+                        print(f"      ⚠️ EXTRACTION ERROR: likes was same as views ({final_views}) - corrected")
+                    
+                    # Show if any data is missing
+                    if final_views is None:
+                        print(f"      ❌ Missing: views")
+                    if final_likes is None:
+                        print(f"      ❌ Missing: likes (will salvage)")
+                    if final_comments is None:
+                        print(f"      ❌ Missing: comments (will salvage)")
+                    
+                    time.sleep(0.2)
+                    
+                except Exception as e:
+                    continue
+            
+            if not new_this_cycle:
+                fail_counter += 1
+                # On fail, scroll back up a bit and try again (catch orphans)
+                if fail_counter % 3 == 0:
+                    driver.execute_script("window.scrollBy(0, -300);")
+                    time.sleep(0.5)
+                    pass_number += 1
+                    print(f"   📍 Pass {pass_number}: Scrolling back to catch any missed posts...")
+            else:
+                fail_counter = 0
+            
+            driver.execute_script("window.scrollBy(0, 500);")
+            time.sleep(0.6)
+        
+        # Summary of hover scrape
+        views_found = sum(1 for h in hover_data if h.get('views'))
+        likes_found = sum(1 for h in hover_data if h.get('likes') is not None)
+        comments_found = sum(1 for h in hover_data if h.get('comments') is not None)
+        disagreements = sum(1 for h in hover_data if h.get('disagreement'))
+        extraction_errors = sum(1 for h in hover_data if h.get('likes_equals_views_error'))
+        
+        print(f"\n   ✅ Hover scrape complete: {len(hover_data)} posts")
+        print(f"   ✅ Views found: {views_found}/{len(hover_data)}")
+        print(f"   ✅ Likes found: {likes_found}/{len(hover_data)}")
+        print(f"   ✅ Comments found: {comments_found}/{len(hover_data)}")
+        if disagreements > 0:
+            print(f"   ⚠️ Issues resolved: {disagreements}")
+        if extraction_errors > 0:
+            print(f"   🔧 Likes=Views errors corrected: {extraction_errors}")
+        
+        # =====================================================================
+        # STEP 2: Arrow Scrape for dates (with fallback)
+        # =====================================================================
+        print("\n📍 STEP 2: Arrow Scrape (extracting dates)")
+        print("   Trying /reels/ page first...")
+        
+        arrow_data, page_type_used = self.arrow_scrape_with_fallback(driver, username, hover_data)
+        
+        # Merge arrow scrape dates with hover data
+        for reel in hover_data:
+            reel_id = reel['reel_id']
+            if reel_id in arrow_data:
+                reel['date'] = arrow_data[reel_id].get('date')
+                reel['date_display'] = arrow_data[reel_id].get('date_display')
+                reel['date_timestamp'] = arrow_data[reel_id].get('date_timestamp')
+            else:
+                reel['date'] = None
+                reel['date_display'] = None
+                reel['date_timestamp'] = None
+        
+        dates_found = sum(1 for h in hover_data if h.get('date'))
+        print(f"\n   Page type used: {page_type_used or 'none'}")
+        print(f"   ✅ Extracted {dates_found}/{len(hover_data)} dates")
+        
+        # =====================================================================
+        # STEP 3: Detect Pinned Posts (out of chronological sequence)
+        # =====================================================================
+        print("\n📍 STEP 3: Detecting Pinned Posts")
+        
+        pinned_posts = []
+        posts_with_dates = [(i, h) for i, h in enumerate(hover_data) if h.get('date_timestamp')]
+        
+        if len(posts_with_dates) >= 2:
+            # Sort by date to find chronological order
+            sorted_by_date = sorted(posts_with_dates, key=lambda x: x[1]['date_timestamp'], reverse=True)
+            
+            for i, (orig_pos, reel) in enumerate(posts_with_dates):
+                # Check if this post is significantly out of order (more than 3 positions)
+                expected_pos = next((j for j, (_, r) in enumerate(sorted_by_date) if r['reel_id'] == reel['reel_id']), orig_pos)
+                if abs(orig_pos - expected_pos) > 3:
+                    pinned_posts.append({
+                        'reel_id': reel['reel_id'],
+                        'position': orig_pos + 1,
+                        'expected_position': expected_pos + 1,
+                        'date': reel.get('date_display'),
+                        'reason': 'Out of chronological sequence'
+                    })
+                    reel['is_pinned'] = True
+                else:
+                    reel['is_pinned'] = False
+        
+        # Also check first 3 posts - often pinned
+        for i, reel in enumerate(hover_data[:3]):
+            if reel.get('date_timestamp') and not reel.get('is_pinned'):
+                # If an early post has an old date, it might be pinned
+                if len(posts_with_dates) >= 5:
+                    avg_recent_date = sum(h['date_timestamp'].timestamp() for _, h in posts_with_dates[3:8] if h.get('date_timestamp')) / min(5, len(posts_with_dates) - 3)
+                    if reel['date_timestamp'].timestamp() < avg_recent_date - (30 * 24 * 60 * 60):  # 30 days older
+                        pinned_posts.append({
+                            'reel_id': reel['reel_id'],
+                            'position': i + 1,
+                            'date': reel.get('date_display'),
+                            'reason': 'Early position with old date (likely pinned)'
+                        })
+                        reel['is_pinned'] = True
+        
+        if pinned_posts:
+            print(f"   📌 Found {len(pinned_posts)} likely pinned posts:")
+            for p in pinned_posts:
+                print(f"      Position {p['position']}: {p['reel_id']} ({p['date']}) - {p['reason']}")
+        else:
+            print("   ✅ No pinned posts detected")
+        
+        # =====================================================================
+        # STEP 4: Find Outliers (likes > views, off logarithmic trend)
+        # =====================================================================
+        print("\n📍 STEP 4: Finding Outliers")
+        
+        outliers = []
+        
+        # Build logarithmic regression model for views vs likes
+        valid_pairs = [(h['views'], h['likes']) for h in hover_data 
+                       if h.get('views') and h.get('views') > 0 
+                       and h.get('likes') is not None and h['likes'] > 0]
+        
+        log_a, log_b = None, None
+        if len(valid_pairs) >= 5:
+            try:
+                log_views = [math.log(v) for v, l in valid_pairs]
+                log_likes = [math.log(l) for v, l in valid_pairs]
+                
+                n = len(valid_pairs)
+                sum_x = sum(log_views)
+                sum_y = sum(log_likes)
+                sum_xy = sum(x * y for x, y in zip(log_views, log_likes))
+                sum_xx = sum(x * x for x in log_views)
+                
+                denominator = n * sum_xx - sum_x * sum_x
+                if denominator != 0:
+                    log_a = (n * sum_xy - sum_x * sum_y) / denominator
+                    log_b = (sum_y - log_a * sum_x) / n
+                    print(f"   📈 Logarithmic model: log(likes) = {log_a:.3f} × log(views) + {log_b:.3f}")
+            except:
+                pass
+        
+        for i, reel in enumerate(hover_data):
+            views = reel.get('views')
+            likes = reel.get('likes')
+            outlier_reasons = []
+            
+            # Check 1: likes == views or very close (extraction error - views captured as likes)
+            # This is the main issue - when likes equals views, it's almost always wrong
+            if views and likes and views > 0:
+                # Check if likes is within 5% of views - this is almost always an extraction error
+                ratio = likes / views
+                if 0.95 <= ratio <= 1.05:
+                    outlier_reasons.append(f"likes ({likes}) ≈ views ({views}) - likely extraction error")
+            
+            # Check 2: likes > views (impossible/error)
+            if views and likes and likes > views:
+                outlier_reasons.append(f"likes ({likes}) > views ({views})")
+            
+            # Check 3: Zero likes but has views (missing data - will be salvaged)
+            if views and views > 1000 and (likes == 0 or likes is None):
+                outlier_reasons.append(f"no likes but {views} views")
+            
+            # NOTE: Removed the logarithmic outlier check - posts with unusual engagement 
+            # are valid, only flag actual extraction errors
+            
+            if outlier_reasons:
+                outliers.append({
+                    'reel_id': reel['reel_id'],
+                    'position': i + 1,
+                    'views': views,
+                    'likes': likes,
+                    'reasons': outlier_reasons
+                })
+                reel['is_outlier'] = True
+                reel['outlier_reasons'] = outlier_reasons
+            else:
+                reel['is_outlier'] = False
+        
+        if outliers:
+            print(f"   ⚠️ Found {len(outliers)} outliers:")
+            for o in outliers:
+                print(f"      Position {o['position']}: {o['reel_id']} - {', '.join(o['reasons'])}")
+        else:
+            print("   ✅ No outliers detected")
+        
+        # =====================================================================
+        # STEP 5: Check for orphans (missing posts in sequence)
+        # =====================================================================
+        print("\n📍 STEP 5: Checking for Orphans/Missing Posts")
+        
+        orphan_check = {
+            'total_posts': len(hover_data),
+            'with_views': views_found,
+            'with_likes': likes_found,
+            'with_comments': comments_found,
+            'with_dates': dates_found,
+            'complete_posts': sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None and h.get('date')),
+            'missing_views': [h['reel_id'] for h in hover_data if not h.get('views')],
+            'missing_likes': [h['reel_id'] for h in hover_data if h.get('likes') is None],
+            'missing_comments': [h['reel_id'] for h in hover_data if h.get('comments') is None],
+            'missing_dates': [h['reel_id'] for h in hover_data if not h.get('date')]
+        }
+        
+        if orphan_check['complete_posts'] == len(hover_data):
+            print(f"   ✅ All {len(hover_data)} posts complete - no orphans!")
+        else:
+            print(f"   📊 Complete posts: {orphan_check['complete_posts']}/{len(hover_data)}")
+            if orphan_check['missing_views']:
+                print(f"   ⚠️ Missing views: {orphan_check['missing_views'][:5]}{'...' if len(orphan_check['missing_views']) > 5 else ''}")
+            if orphan_check['missing_likes']:
+                print(f"   ⚠️ Missing likes: {orphan_check['missing_likes'][:5]}{'...' if len(orphan_check['missing_likes']) > 5 else ''}")
+            if orphan_check['missing_dates']:
+                print(f"   ⚠️ Missing dates: {orphan_check['missing_dates'][:5]}{'...' if len(orphan_check['missing_dates']) > 5 else ''}")
+        
+        # =====================================================================
+        # STEP 5.5: SALVAGE SCRAPE - Visit specific URLs for missing data
+        # =====================================================================
+        # Get list of posts that need salvaging (missing likes, comments, or dates)
+        posts_needing_salvage = []
+        for reel in hover_data:
+            needs_salvage = False
+            missing = []
+            if reel.get('likes') is None:
+                needs_salvage = True
+                missing.append('likes')
+            if reel.get('comments') is None:
+                needs_salvage = True
+                missing.append('comments')
+            if not reel.get('date'):
+                needs_salvage = True
+                missing.append('date')
+            if needs_salvage:
+                posts_needing_salvage.append({
+                    'reel': reel,
+                    'missing': missing
+                })
+        
+        salvage_stats = {'attempted': 0, 'likes_recovered': 0, 'comments_recovered': 0, 'dates_recovered': 0}
+        
+        if posts_needing_salvage:
+            print(f"\n📍 STEP 5.5: SALVAGE SCRAPE ({len(posts_needing_salvage)} posts need data)")
+            print(f"   🔧 Visiting individual URLs to recover missing data...")
+            print(f"   ⏱️ Adding jitter between requests to avoid detection...")
+            
+            for i, item in enumerate(posts_needing_salvage):
+                reel = item['reel']
+                missing = item['missing']
+                reel_id = reel['reel_id']
+                reel_url = reel.get('url') or f"https://www.instagram.com/reel/{reel_id}/"
+                
+                print(f"\n   [{i+1}/{len(posts_needing_salvage)}] Salvaging {reel_id}...")
+                print(f"      📍 URL: {reel_url}")
+                print(f"      ❓ Missing: {', '.join(missing)}")
+                
+                salvage_stats['attempted'] += 1
+                
+                try:
+                    # Add jitter before request (1-3 seconds)
+                    jitter_delay = self.add_jitter(base_delay=1.0, max_jitter=2.0)
+                    print(f"      ⏱️ Waited {jitter_delay:.1f}s (jitter)")
+                    
+                    # Navigate to the specific post
+                    driver.get(reel_url)
+                    time.sleep(2)
+                    
+                    # Extract data from the post page
+                    salvage_data = self.extract_date_from_current_view(driver)
+                    
+                    # Update reel with recovered data
+                    recovered = []
+                    
+                    if 'likes' in missing and salvage_data.get('likes') is not None:
+                        recovered_likes = salvage_data['likes']
+                        views = reel.get('views')
+                        
+                        # Validate recovered likes isn't an outlier
+                        is_valid = True
+                        rejection_reason = None
+                        
+                        # Check 1: likes shouldn't equal views (extraction error)
+                        if views and recovered_likes == views:
+                            is_valid = False
+                            rejection_reason = "equals views"
+                        
+                        # Check 2: likes shouldn't be within 5% of views (extraction error)
+                        elif views and abs(recovered_likes - views) / views < 0.05:
+                            is_valid = False
+                            rejection_reason = f"too close to views ({recovered_likes} vs {views})"
+                        
+                        # Check 3: likes shouldn't be > views (impossible)
+                        elif views and recovered_likes > views:
+                            is_valid = False
+                            rejection_reason = f"exceeds views ({recovered_likes} > {views})"
+                        
+                        # Check 4: likes shouldn't be implausibly low (< 0.1% of views when views > 1000)
+                        elif views and views > 1000 and recovered_likes < views * 0.001:
+                            is_valid = False
+                            rejection_reason = f"implausibly low ({recovered_likes} for {views} views)"
+                        
+                        if is_valid:
+                            reel['likes'] = recovered_likes
+                            salvage_stats['likes_recovered'] += 1
+                            recovered.append(f"likes={recovered_likes}")
+                        else:
+                            print(f"      ⚠️ Rejected salvaged likes={recovered_likes}: {rejection_reason}")
+                            # Try again with a different extraction method
+                            time.sleep(1)
+                            body_text = driver.find_element(By.TAG_NAME, "body").text
+                            # Look for "X likes" pattern
+                            likes_match = re.search(r'(\d[\d,.]*)\s*likes?', body_text)
+                            if likes_match:
+                                alt_likes = self.parse_number(likes_match.group(1))
+                                if alt_likes and (not views or (alt_likes != views and alt_likes < views and alt_likes > views * 0.001)):
+                                    reel['likes'] = alt_likes
+                                    salvage_stats['likes_recovered'] += 1
+                                    recovered.append(f"likes={alt_likes} (alt method)")
+                    
+                    if 'comments' in missing and salvage_data.get('comments') is not None:
+                        reel['comments'] = salvage_data['comments']
+                        salvage_stats['comments_recovered'] += 1
+                        recovered.append(f"comments={salvage_data['comments']}")
+                    
+                    if 'date' in missing and salvage_data.get('date'):
+                        reel['date'] = salvage_data['date']
+                        reel['date_display'] = salvage_data.get('date_display')
+                        reel['date_timestamp'] = salvage_data.get('date_timestamp')
+                        salvage_stats['dates_recovered'] += 1
+                        recovered.append(f"date={salvage_data.get('date_display', salvage_data['date'])}")
+                    
+                    if recovered:
+                        print(f"      ✅ RECOVERED: {', '.join(recovered)}")
+                    else:
+                        print(f"      ❌ Could not recover any data")
+                    
+                    # Add additional jitter after request
+                    self.add_jitter(base_delay=0.5, max_jitter=1.0)
+                    
+                except Exception as e:
+                    print(f"      ❌ Error: {str(e)[:50]}")
+                    continue
+            
+            # Update counts after salvage
+            likes_found = sum(1 for h in hover_data if h.get('likes') is not None)
+            comments_found = sum(1 for h in hover_data if h.get('comments') is not None)
+            dates_found = sum(1 for h in hover_data if h.get('date'))
+            
+            print(f"\n   📊 SALVAGE SUMMARY:")
+            print(f"      Posts attempted: {salvage_stats['attempted']}")
+            print(f"      Likes recovered: {salvage_stats['likes_recovered']}")
+            print(f"      Comments recovered: {salvage_stats['comments_recovered']}")
+            print(f"      Dates recovered: {salvage_stats['dates_recovered']}")
+            print(f"      New totals: likes={likes_found}, comments={comments_found}, dates={dates_found}")
+            
+            # Update orphan check with new counts
+            orphan_check['salvage_stats'] = salvage_stats
+            orphan_check['with_likes'] = likes_found
+            orphan_check['with_comments'] = comments_found
+            orphan_check['with_dates'] = dates_found
+            orphan_check['complete_posts'] = sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None and h.get('date'))
+            
+            # Re-run outlier detection after salvage to remove recovered posts from outliers list
+            print(f"\n   🔄 Updating outliers after salvage...")
+            new_outliers = []
+            for o in outliers:
+                reel_id = o['reel_id']
+                # Find the reel in hover_data
+                reel = next((h for h in hover_data if h['reel_id'] == reel_id), None)
+                if reel:
+                    views = reel.get('views')
+                    likes = reel.get('likes')
+                    # Check if still an outlier after salvage
+                    still_outlier = False
+                    new_reasons = []
+                    
+                    if views and likes and views > 0:
+                        ratio = likes / views
+                        if 0.95 <= ratio <= 1.05:
+                            still_outlier = True
+                            new_reasons.append(f"likes ({likes}) ≈ views ({views}) - likely extraction error")
+                    
+                    if views and likes and likes > views:
+                        still_outlier = True
+                        new_reasons.append(f"likes ({likes}) > views ({views})")
+                    
+                    if views and views > 1000 and (likes == 0 or likes is None):
+                        still_outlier = True
+                        new_reasons.append(f"no likes but {views} views")
+                    
+                    if still_outlier:
+                        new_outliers.append({
+                            'reel_id': reel_id,
+                            'position': o['position'],
+                            'views': views,
+                            'likes': likes,
+                            'reasons': new_reasons
+                        })
+                        reel['is_outlier'] = True
+                        reel['outlier_reasons'] = new_reasons
+                    else:
+                        # Mark as no longer outlier
+                        reel['is_outlier'] = False
+                        reel['outlier_reasons'] = []
+                        print(f"      ✅ {reel_id} no longer an outlier (data recovered)")
+            
+            outliers = new_outliers
+            print(f"   📊 Final outliers after salvage: {len(outliers)}")
+        
+        # =====================================================================
+        # STEP 6: Build final data with all analysis
+        # =====================================================================
+        print("\n📍 STEP 6: Building final data")
+        
+        final_data = []
+        for reel in hover_data:
+            # Calculate engagement if we have all values
+            engagement = None
+            if reel.get('views') and reel.get('likes') is not None and reel.get('comments') is not None:
+                if reel['views'] > 0:
+                    engagement = round(((reel['likes'] + reel['comments']) / reel['views']) * 100, 2)
+            
+            final_data.append({
+                'reel_id': reel['reel_id'],
+                'position': reel['position'],
+                'is_pinned': reel.get('is_pinned', False),
+                'is_outlier': reel.get('is_outlier', False),
+                'outlier_reasons': reel.get('outlier_reasons', []),
+                'date': reel.get('date'),
+                'date_display': reel.get('date_display'),
+                'views': reel.get('views'),
+                'likes': reel.get('likes'),
+                'comments': reel.get('comments'),
+                'engagement': engagement,
+                'method_a_likes': reel.get('method_a_likes'),
+                'method_a_plus_likes': reel.get('method_a_plus_likes'),
+                'disagreement': reel.get('disagreement')
+            })
+        
+        # =====================================================================
+        # STEP 7: Save to test.xlsx (same format as normal scrape)
+        # =====================================================================
+        print("\n📍 STEP 7: Saving to test.xlsx")
+        
+        # Create DataFrame in same format as create_dataframe_for_account
+        df = pd.DataFrame()
+        df[timestamp_col] = None
+        
+        df.loc["followers", timestamp_col] = followers
+        df.loc["reels_scraped", timestamp_col] = len(final_data)
+        df.loc["pinned_posts", timestamp_col] = len(pinned_posts)
+        df.loc["outliers", timestamp_col] = len(outliers)
+        
+        for reel in final_data:
+            reel_id = reel['reel_id']
+            for metric in ['is_pinned', 'is_outlier', 'date', 'date_display', 'views', 'likes', 'comments', 'engagement']:
+                row_name = f"reel_{reel_id}_{metric}"
+                df.loc[row_name, timestamp_col] = reel.get(metric, "")
+        
+        # Save to test.xlsx
+        test_excel_path = "test.xlsx"
+        try:
+            with pd.ExcelWriter(test_excel_path, engine='openpyxl') as writer:
+                sheet_name = username[:31]
+                df.to_excel(writer, sheet_name=sheet_name)
+            print(f"   ✅ Saved: {test_excel_path}")
+        except Exception as e:
+            print(f"   ❌ Error saving Excel: {e}")
+        
+        # =====================================================================
+        # STEP 8: Save comprehensive diagnostic JSON
+        # =====================================================================
+        diagnostic_data = {
+            "test_config": {
+                "account": username,
+                "posts_analyzed": len(hover_data),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "followers": followers
+            },
+            "hover_scrape": {
+                "method": "method_a + method_a_plus",
+                "views_found": views_found,
+                "likes_found": likes_found,
+                "comments_found": comments_found,
+                "disagreements_resolved": disagreements,
+                "extraction_errors_corrected": extraction_errors,
+                "success_rate": round(sum(1 for h in hover_data if h.get('views') and h.get('likes') is not None and h.get('comments') is not None) / len(hover_data) * 100, 1) if hover_data else 0
+            },
+            "arrow_scrape": {
+                "page_type_used": page_type_used or "none",
+                "dates_extracted": dates_found,
+                "success_rate": round(dates_found / len(hover_data) * 100, 1) if hover_data else 0
+            },
+            "pinned_posts": pinned_posts,
+            "outliers": outliers,
+            "orphan_check": orphan_check,
+            "logarithmic_model": {
+                "coefficient_a": round(log_a, 4) if log_a else None,
+                "coefficient_b": round(log_b, 4) if log_b else None,
+                "formula": f"log(likes) = {log_a:.3f} × log(views) + {log_b:.3f}" if log_a else None
+            },
+            "per_post_detail": final_data
+        }
+        
+        diagnostic_filename = f"insta_diagnostic_{timestamp}.json"
+        try:
+            with open(diagnostic_filename, 'w', encoding='utf-8') as f:
+                json.dump(diagnostic_data, f, indent=2, default=str)
+            print(f"   ✅ Saved: {diagnostic_filename}")
+        except Exception as e:
+            print(f"   ❌ Error saving diagnostic file: {e}")
+        
+        # =====================================================================
+        # Final Summary
+        # =====================================================================
+        print("\n" + "="*70)
+        print("✅ ENHANCED TEST COMPLETE")
+        print("="*70)
+        print(f"\n📊 Summary:")
+        print(f"   Account: @{username}")
+        print(f"   Followers: {followers:,}" if followers else "   Followers: N/A")
+        print(f"   Posts scraped: {len(final_data)}")
+        print(f"   Complete posts: {orphan_check['complete_posts']}/{len(hover_data)}")
+        print(f"\n📍 Data Quality:")
+        print(f"   Views found: {views_found}/{len(hover_data)}")
+        print(f"   Likes found: {likes_found}/{len(hover_data)}")
+        print(f"   Comments found: {comments_found}/{len(hover_data)}")
+        print(f"   Dates found: {dates_found}/{len(hover_data)}")
+        print(f"\n📌 Pinned Posts: {len(pinned_posts)}")
+        print(f"⚠️ Outliers: {len(outliers)}")
+        print(f"🔄 Disagreements Resolved: {disagreements}")
+        if extraction_errors > 0:
+            print(f"🔧 Likes=Views Errors Corrected: {extraction_errors}")
+        print(f"\n📁 Output files:")
+        print(f"   • {test_excel_path} (Excel for analysis)")
+        print(f"   • {diagnostic_filename} (JSON diagnostic)")
+        print("="*70 + "\n")
+        
+        return diagnostic_data
+
     def get_scrape_mode(self):
         print("\n" + "="*70)
         print("🎯 SELECT SCRAPE MODE")
         print("="*70)
         print("\n1. Custom scrape (default: 100 posts)")
         print("2. Deep scrape (back 2 years)")
-        print("3. Test mode (15 reels on @popdartsgame)")
+        print("3. Test mode (50 reels on @popdartsgame with diagnostics)")
+        print("4. Arrow scrape optimization (test main page methods)")
         print()
         while True:
-            choice = input("Enter your choice (1, 2, or 3): ").strip()
+            choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
             if choice == '1' or choice == '':
                 num_input = input("\nHow many posts per account? (default 100): ").strip()
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False, False  # Added 4th return value for deep_deep
+                        return num_posts, False, False, False, False, False
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
                     print("Invalid input. Using default: 100")
-                    return 100, False, False, False
+                    return 100, False, False, False, False, False
             elif choice == '2':
                 print("\n⚠️  Deep scrape options:")
                 print("   a) 2 years back (default)")
@@ -1892,20 +3577,22 @@ class InstagramScraper:
                     confirm = input("\n🔥 DEEP DEEP mode will scrape ALL available posts. This takes significantly longer. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep deep mode selected - will scrape ALL available posts!")
-                        return None, True, False, True  # deep_scrape=True, deep_deep=True
+                        return None, True, False, True, False, False  # deep_scrape=True, deep_deep=True
                     else:
                         continue
                 else:
                     confirm = input("\n⚠️  Deep scrape will go back 2 years. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep mode selected - will scrape back 2 years")
-                        return None, True, False, False  # deep_scrape=True, deep_deep=False
+                        return None, True, False, False, False, False  # deep_scrape=True, deep_deep=False
                     else:
                         continue
             elif choice == '3':
-                return 15, False, True, False
+                return 50, False, False, False, True, False  # Test mode with 50 posts and diagnostics
+            elif choice == '4':
+                return 25, False, False, False, False, True  # Arrow scrape optimization mode
             else:
-                print("Invalid choice. Please enter 1, 2, or 3.")
+                print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
     def run(self):
         """Main execution function"""
@@ -1918,39 +3605,60 @@ class InstagramScraper:
         print("="*70)
         
         browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode, deep_deep = self.get_scrape_mode()
+        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode = self.get_scrape_mode()
         
-        if test_mode:
-            print("\n🧪 TEST MODE ACTIVATED")
-            print(f"   Account: @popdartsgame")
-            print(f"   Reels: 15 (will display all 15)")
-            print(f"   Browser: {browser_choice.upper()}")
-            print(f"   Output: Terminal only (no Excel file)")
-            print(f"   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
-            print(f"   Debug: Enhanced hover scrape debug info enabled")
-            accounts = ["popdartsgame"]
-            expected_reels = 15
-        else:
-            print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
-            for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
-                print(f"   {i}. @{account}")
-            print(f"\n   Browser: {browser_choice.upper()}")
-            accounts = ACCOUNTS_TO_TRACK
-            if deep_scrape:
-                if deep_deep:
-                    print("\n🔥 Mode: DEEP DEEP SCRAPE (ALL available posts - no limit)")
-                else:
-                    print("\n🔍 Mode: DEEP SCRAPE (back 2 years)")
-                expected_reels = None
+        # Handle arrow optimization mode (test main page methods)
+        if arrow_optimization_mode:
+            self.driver = self.setup_driver(browser=browser_choice)
+            try:
+                self.run_arrow_scrape_optimization(self.driver, "popdartsgame", max_reels=25)
+            finally:
+                if self.driver:
+                    self.driver.quit()
+                if self.incognito_driver:
+                    try:
+                        self.incognito_driver.quit()
+                    except:
+                        pass
+            return
+        
+        # Handle test mode (enhanced diagnostics on @popdartsgame)
+        if enhanced_test_mode:
+            self.driver = self.setup_driver(browser=browser_choice)
+            try:
+                self.run_enhanced_test_mode(self.driver, "popdartsgame", max_reels=50)
+            finally:
+                if self.driver:
+                    self.driver.quit()
+                if self.incognito_driver:
+                    try:
+                        self.incognito_driver.quit()
+                    except:
+                        pass
+            return
+        
+        # Regular scrape modes (custom or deep)
+        print(f"\n✅ Will scrape {len(ACCOUNTS_TO_TRACK)} account(s):\n")
+        for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
+            print(f"   {i}. @{account}")
+        print(f"\n   Browser: {browser_choice.upper()}")
+        accounts = ACCOUNTS_TO_TRACK
+        if deep_scrape:
+            if deep_deep:
+                print("\n🔥 Mode: DEEP DEEP SCRAPE (ALL available posts - no limit)")
             else:
-                print(f"\n📊 Mode: {max_reels} posts per account")
-                expected_reels = max_reels
-            print("   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
+                print("\n🔍 Mode: DEEP SCRAPE (back 2 years)")
+            expected_reels = None
+        else:
+            print(f"\n📊 Mode: {max_reels} posts per account")
+            expected_reels = max_reels
+        print("   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
+        print("   Output: Verbose (shows errors, corrections, salvage status)")
         
         input("\n▶️  Press ENTER to start scraping...")
         
         self.driver = self.setup_driver(browser=browser_choice)
-        existing_data = self.load_existing_excel() if not test_mode else {}
+        existing_data = self.load_existing_excel()
         timestamp_col = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         all_account_data = {}
         scrape_results = {}
@@ -1958,15 +3666,12 @@ class InstagramScraper:
         try:
             for idx, username in enumerate(accounts, 1):
                 print("\n" + "="*70)
-                if test_mode:
-                    print(f"🧪 TEST SCRAPE: @{username}")
-                else:
-                    print(f"📱 [{idx}/{len(accounts)}] Processing @{username}")
+                print(f"📱 [{idx}/{len(accounts)}] Processing @{username}")
                 print("="*70)
                 
                 try:
                     reels_data, followers, pinned_count = self.scrape_instagram_account(
-                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=test_mode
+                        self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=False
                     )
                     
                     scrape_results[username] = {
@@ -1977,40 +3682,29 @@ class InstagramScraper:
                     }
                     
                     # Store current data for backup
-                    if not test_mode:
-                        existing_df = existing_data.get(username, pd.DataFrame())
-                        df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
-                        all_account_data[username] = df
-                        self.current_data = all_account_data
+                    existing_df = existing_data.get(username, pd.DataFrame())
+                    df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
+                    all_account_data[username] = df
+                    self.current_data = all_account_data
                     
-                    if test_mode:
-                        print("\n" + "="*70)
-                        print("✅ TEST COMPLETE!")
-                        print("="*70)
-                        print(f"\n📊 Summary:")
-                        print(f"   Account: @{username}")
-                        print(f"   Browser: {browser_choice.upper()}")
-                        print(f"   Followers: {followers:,}" if followers else "   Followers: N/A")
-                        print(f"   Reels scraped: {len(reels_data)}")
-                    else:
-                        print(f"\n  ✅ @{username} complete!")
-                        print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
-                        if deep_scrape:
-                            if reels_data:
-                                oldest_date = None
-                                for reel in reversed(reels_data):
-                                    if reel.get('date_timestamp'):
-                                        oldest_date = reel['date_timestamp']
-                                        break
-                                if oldest_date:
-                                    days_back = (datetime.now() - oldest_date).days
-                                    print(f"  🎬 Reels: {len(reels_data)} (spanning ~{days_back} days)")
-                                else:
-                                    print(f"  🎬 Reels: {len(reels_data)}")
+                    print(f"\n  ✅ @{username} complete!")
+                    print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
+                    if deep_scrape:
+                        if reels_data:
+                            oldest_date = None
+                            for reel in reversed(reels_data):
+                                if reel.get('date_timestamp'):
+                                    oldest_date = reel['date_timestamp']
+                                    break
+                            if oldest_date:
+                                days_back = (datetime.now() - oldest_date).days
+                                print(f"  🎬 Reels: {len(reels_data)} (spanning ~{days_back} days)")
                             else:
-                                print(f"  🎬 Reels: 0")
+                                print(f"  🎬 Reels: {len(reels_data)}")
                         else:
-                            print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'}")
+                            print(f"  🎬 Reels: 0")
+                    else:
+                        print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'}")
                 
                 except Exception as e:
                     print(f"\n  ❌ Error with @{username}: {e}")
@@ -2023,16 +3717,15 @@ class InstagramScraper:
                     }
                     continue
             
-            if not test_mode:
-                # Save results
-                self.save_to_excel(all_account_data)
-                self.upload_to_google_drive()
-                
-                print("\n" + "="*70)
-                print("✅ All scraping complete!")
-                print(f"📁 Local file: '{OUTPUT_EXCEL}'")
-                print(f"🌐 View analytics: https://crespo.world/crespomize.html")
-                print("="*70 + "\n")
+            # Save results
+            self.save_to_excel(all_account_data)
+            self.upload_to_google_drive()
+            
+            print("\n" + "="*70)
+            print("✅ All scraping complete!")
+            print(f"📁 Local file: '{OUTPUT_EXCEL}'")
+            print(f"🌐 View analytics: https://crespo.world/crespomize.html")
+            print("="*70 + "\n")
         
         finally:
             if self.driver:
