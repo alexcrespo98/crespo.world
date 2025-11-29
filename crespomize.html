@@ -511,6 +511,7 @@
       trendlineDaysAverage: {},
       trendlineSmoothnessLevel: {},
       chartModeStates: {},
+      chartMetricKeys: {},
       allPlatformsData: {},
       allVideosUnfiltered: [],
       
@@ -2003,6 +2004,24 @@
         const trendlineDataset = chart.data.datasets.find(ds => ds.label === 'Trend');
         if (trendlineDataset) {
           trendlineDataset.hidden = !showTrendline;
+          
+          // When enabling the trendline, recalculate it based on the current mode
+          if (showTrendline) {
+            const currentMode = this.chartModeStates[chartId] || 'average';
+            const mainDataset = chart.data.datasets.find(ds => ds.label !== 'Trend');
+            
+            if (mainDataset && mainDataset.data) {
+              if (currentMode === 'cumulative') {
+                // Use smoothed curve for cumulative mode
+                const smoothnessLevel = this.trendlineSmoothnessLevel[chartId] || this.SMOOTHNESS.DEFAULT_LEVEL;
+                trendlineDataset.data = this.calculateSmoothedCurve(mainDataset.data, smoothnessLevel);
+              } else {
+                // Use moving average for average mode
+                const days = this.trendlineDaysAverage[chartId] || 7;
+                trendlineDataset.data = this.calculateMovingAverageByDays(mainDataset.data, days);
+              }
+            }
+          }
         }
         
         if (chart.options.scales.y1) {
@@ -2025,6 +2044,17 @@
         const controls = document.querySelector(`[data-smoothness-controls="${chartId}"]`);
         if (controls) {
           controls.style.display = showTrendline ? 'inline-block' : 'none';
+        }
+        
+        // Update the smoothness/days display based on current mode
+        const daysDisplay = document.querySelector(`[data-days-display="${chartId}"]`);
+        if (daysDisplay && showTrendline) {
+          const currentMode = this.chartModeStates[chartId] || 'average';
+          if (currentMode === 'cumulative') {
+            daysDisplay.textContent = this.trendlineSmoothnessLevel[chartId] || this.SMOOTHNESS.DEFAULT_LEVEL;
+          } else {
+            daysDisplay.textContent = this.trendlineDaysAverage[chartId] || 7;
+          }
         }
       },
       
@@ -2262,8 +2292,9 @@
           modeBadge.onclick = () => this.toggleChartMode(chartId, metricKey);
           header.appendChild(modeBadge);
           
-          // Initialize mode state
+          // Initialize mode state and store metricKey for later use
           this.chartModeStates[chartId] = 'average';
+          this.chartMetricKeys[chartId] = metricKey;
           this.trendlineSmoothnessLevel[chartId] = this.SMOOTHNESS.DEFAULT_LEVEL;
         }
         
@@ -2560,6 +2591,7 @@
         this.trendlineStates = {};
         this.trendlineDaysAverage = {};
         this.chartModeStates = {};
+        this.chartMetricKeys = {};
         this.trendlineSmoothnessLevel = {};
         
         const statsContainer = document.getElementById('statsSummary');
@@ -2746,6 +2778,7 @@
         this.trendlineStates = {};
         this.trendlineDaysAverage = {};
         this.chartModeStates = {};
+        this.chartMetricKeys = {};
         this.trendlineSmoothnessLevel = {};
         
         const statsContainer = document.getElementById('statsSummary');
