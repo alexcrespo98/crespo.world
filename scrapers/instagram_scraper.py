@@ -1137,9 +1137,9 @@ class InstagramScraper:
         ]
         
         # Constants for fallback logic
-        METHOD_TIMEOUT = 30  # Max seconds per method attempt
-        MAX_CONSECUTIVE_NO_DATE = 3  # Switch methods after 3 consecutive NO DATE
-        MAX_CONSECUTIVE_NO_REEL_ID = 5  # Switch methods after 5 consecutive "POST" (no reel ID)
+        POST_TIMEOUT = 30  # Max seconds per post before considering it stuck
+        MAX_CONSECUTIVE_NO_DATE = 10  # Switch methods after 10 consecutive NO DATE
+        MAX_CONSECUTIVE_NO_REEL_ID = 10  # Switch methods after 10 consecutive "POST" (no reel ID)
         MIN_SUCCESS_RATE = 0.5  # Need at least 50% of dates to avoid individual URL fallback
         
         for method in methods:
@@ -1162,10 +1162,11 @@ class InstagramScraper:
             else:
                 page_url = f"https://www.instagram.com/{username}/"
             
-            method_start_time = time.time()
             method_arrow_data = {}
             consecutive_no_dates = 0
             consecutive_no_reel_id = 0
+            last_reel_id = None  # Track to detect if we're stuck on same post
+            stuck_count = 0  # Count how many times we've seen the same reel
             
             try:
                 # Set shorter timeout for page load
@@ -1252,14 +1253,9 @@ class InstagramScraper:
                 posts_processed = 0
                 max_posts = min(len(hover_data) + 200, 2000)
                 
-                print(f"  🔄 Navigating through posts...")
+                print(f"  🔄 Navigating through posts (target: {len(reel_ids_needed)})...")
                 
                 while posts_processed < max_posts:
-                    # Check method timeout
-                    if time.time() - method_start_time > METHOD_TIMEOUT:
-                        print(f"  ⏱️ Method timeout ({METHOD_TIMEOUT}s) - trying next method...")
-                        break
-                    
                     # Check consecutive failures
                     if consecutive_no_dates >= MAX_CONSECUTIVE_NO_DATE:
                         print(f"  ❌ Failed after {MAX_CONSECUTIVE_NO_DATE} consecutive NO DATE - trying next method...")
@@ -1267,6 +1263,11 @@ class InstagramScraper:
                     
                     if consecutive_no_reel_id >= MAX_CONSECUTIVE_NO_REEL_ID:
                         print(f"  ❌ Failed after {MAX_CONSECUTIVE_NO_REEL_ID} consecutive missing reel IDs - trying next method...")
+                        break
+                    
+                    # Check if we're stuck on the same post (arrow key not working)
+                    if stuck_count >= 5:
+                        print(f"  ❌ Stuck on same post for 5 iterations - trying next method...")
                         break
                     
                     # Wait for content to load
@@ -1282,6 +1283,13 @@ class InstagramScraper:
                         # This is a regular post, not a reel - still extract ID for logging
                         current_reel_id = current_url.split('/p/')[-1].rstrip('/').split('?')[0]
                     
+                    # Track if we're stuck on the same reel (arrow key not advancing)
+                    if current_reel_id and current_reel_id == last_reel_id:
+                        stuck_count += 1
+                    else:
+                        stuck_count = 0
+                        last_reel_id = current_reel_id
+                    
                     # Track if we're getting reel IDs properly
                     if current_reel_id:
                         consecutive_no_reel_id = 0
@@ -1291,8 +1299,8 @@ class InstagramScraper:
                     # Extract date
                     date_info = self.extract_date_from_current_view(driver)
                     
-                    # Show verbose output
-                    if verbose and posts_processed < 20:
+                    # Show verbose output (first 20, then every 50th)
+                    if verbose and (posts_processed < 20 or posts_processed % 50 == 0):
                         in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
                         reel_display = current_reel_id if current_reel_id else 'POST'
@@ -1313,8 +1321,8 @@ class InstagramScraper:
                     body.send_keys(Keys.ARROW_RIGHT)
                     posts_processed += 1
                     
-                    # Progress update every 50 posts
-                    if posts_processed % 50 == 0:
+                    # Progress update every 50 posts (if not already shown in verbose)
+                    if posts_processed % 50 == 0 and not verbose:
                         print(f"  📊 Processed {posts_processed} posts, found {len(method_arrow_data)} matches...")
                     
                     # Check if we've collected all needed dates
