@@ -1185,15 +1185,24 @@ class InstagramScraper:
                 
                 print(f"    ✅ Found {len(post_links)} posts on page")
                 
-                # Click the first post
+                # For main page: hover first, then click (proven method from Option 4)
                 first_post = post_links[0]
                 first_post_url = first_post.get_attribute('href')
                 print(f"    🖱️ Clicking first post...")
                 
+                # Hover over first post before clicking (helps with detection)
+                try:
+                    ActionChains(driver).move_to_element(first_post).perform()
+                    time.sleep(0.5)
+                except:
+                    pass
+                
+                # Try clicking with JS fallback (more reliable on main page)
                 try:
                     first_post.click()
                 except:
                     # Try JavaScript click as fallback
+                    print(f"    ⚠️ Click failed, trying JS fallback...")
                     driver.execute_script("arguments[0].click();", first_post)
                 
                 time.sleep(3)  # Wait for modal to load
@@ -1205,6 +1214,8 @@ class InstagramScraper:
                 consecutive_no_dates = 0  # Track consecutive posts with no date found
                 max_consecutive_misses = 50  # Increased to allow more posts without matches
                 max_posts = min(len(hover_data) + 200, 2000)  # Limit to reasonable amount
+                
+                print(f"    🔄 Navigating through posts...")
                 
                 while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
                     # Wait for content to load
