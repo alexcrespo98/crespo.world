@@ -565,7 +565,7 @@
         // For now, use a default range
         const now = new Date();
         const yearAgo = new Date();
-        yearAgo.setFullYear(yearAgo.getFullYear() - 2); // Default to 2 years range
+        yearAgo. setFullYear(yearAgo. getFullYear() - 10); // Fallback to 10 years
         
         this.dataDateRange.min = yearAgo;
         this.dataDateRange.max = now;
@@ -588,6 +588,7 @@
         sliderRange.style.left = '0%';
         sliderRange.style.width = '100%';
       },
+        
       
       // Select preset time range (from button click)
       selectPresetTimeRange(days) {
