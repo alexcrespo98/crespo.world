@@ -170,24 +170,8 @@ class TikTokScraper:
             print(f"❌ Error reading Excel file: {e}")
             return None
 
-    def is_precise_count(self, count_str):
-        """Check if a count string is a precise value (not an approximation like 1.2M, 500K)"""
-        if not count_str:
-            return False
-        count_str = str(count_str).strip().upper()
-        # If it contains K, M, B suffixes, it's likely an approximation
-        if any(suffix in count_str for suffix in ['K', 'M', 'B']):
-            return False
-        # If it's a pure number (with optional commas), it's precise
-        clean = count_str.replace(',', '').replace(' ', '')
-        return clean.isdigit()
-
     def get_tokcount_stats(self, username):
-        """Get followers and likes for a TikTok user from TokCount using screenshots + OCR
-        
-        Polls every second for up to 15 seconds to ensure we get the precise count,
-        not an approximation (e.g., "1,234,567" instead of "1.2M").
-        """
+        """Get followers and likes for a TikTok user from TokCount using screenshots + OCR"""
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
         from PIL import Image
@@ -206,7 +190,7 @@ class TikTokScraper:
         chrome_options.add_argument("--disable-logging")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
         
-        print(f"  🔍 Fetching TokCount stats (polling for precise count)...")
+        print(f"  🔍 Fetching TokCount stats...")
         
         screenshot_files = []
         driver = None
@@ -214,52 +198,7 @@ class TikTokScraper:
         try:
             driver = webdriver.Chrome(options=chrome_options)
             driver.get(url)
-            
-            # Poll for precise count: wait until the value is not an approximation
-            # Maximum wait time of 15 seconds, checking every second
-            max_wait_seconds = 15
-            poll_interval = 1
-            precise_count_found = False
-            
-            for poll_attempt in range(max_wait_seconds):
-                time.sleep(poll_interval)
-                
-                # Take a quick screenshot to check if count is precise
-                temp_screenshot = os.path.join(desktop_path, f"tokcount_poll_{username}.png")
-                driver.save_screenshot(temp_screenshot)
-                
-                try:
-                    if os.path.exists(temp_screenshot):
-                        img = Image.open(temp_screenshot)
-                        text = pytesseract.image_to_string(img)
-                        img.close()
-                        os.remove(temp_screenshot)
-                        
-                        # Look for numbers with commas (precise counts like "1,234,567")
-                        precise_numbers = re.findall(r'\d{1,3}(?:,\d{3})+', text)
-                        
-                        if precise_numbers:
-                            # Found precise count (number with commas)
-                            largest_precise = max(precise_numbers, key=lambda x: int(x.replace(',', '')))
-                            if int(largest_precise.replace(',', '')) > 1000:
-                                precise_count_found = True
-                                print(f"    ✓ Precise count detected after {poll_attempt + 1}s: {largest_precise}")
-                                break
-                        
-                        # Check if we see approximations (K, M, B) - need to wait longer
-                        if any(approx in text.upper() for approx in ['K FOLLOWERS', 'M FOLLOWERS', 'B FOLLOWERS']):
-                            if poll_attempt < max_wait_seconds - 1:
-                                print(f"    ⏳ Waiting for precise count... ({poll_attempt + 1}s)")
-                except Exception as e:
-                    # Continue polling even if there's an error reading this screenshot
-                    try:
-                        if os.path.exists(temp_screenshot):
-                            os.remove(temp_screenshot)
-                    except:
-                        pass
-            
-            if not precise_count_found:
-                print(f"    ⚠️ Precise count not detected after {max_wait_seconds}s, using best available")
+            time.sleep(8)
             
             # Take screenshots at different scroll positions
             scroll_positions = [0, 200, 400, 600, 800]
