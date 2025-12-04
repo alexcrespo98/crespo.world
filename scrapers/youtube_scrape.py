@@ -116,7 +116,9 @@ class YoutubeScraper:
         required = {
             'pandas': 'pandas',
             'openpyxl': 'openpyxl',
-            'requests': 'requests'
+            'requests': 'requests',
+            'selenium': 'selenium',
+            'webdriver_manager': 'webdriver-manager'
         }
         for module, package in required.items():
             try:
@@ -152,6 +154,107 @@ class YoutubeScraper:
         
         if self.api_quota_used > self.api_quota_limit * 0.8:
             print(f"  ⚠️ API quota warning: {self.api_quota_used}/{self.api_quota_limit} units used")
+
+    def get_livecounts_subscriber_count(self, channel_id, max_wait_seconds=15, stability_threshold=3):
+        """
+        Get exact subscriber count from livecounts.io using stable value detection.
+        
+        This method loads the livecounts.io page for the channel and waits for the
+        odometer value to stabilize (stop changing) before capturing it.
+        
+        Args:
+            channel_id: The YouTube channel ID (e.g., 'UCo4RsSblLnfBG5IuHJsvj4g')
+            max_wait_seconds: Maximum time to wait for stable value (default 15s)
+            stability_threshold: Seconds the value must remain stable (default 3s)
+            
+        Returns:
+            int or None: The exact subscriber count, or None if unable to fetch
+        """
+        try:
+            from selenium import webdriver
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.chrome.options import Options as ChromeOptions
+            from selenium.webdriver.chrome.service import Service as ChromeService
+            from webdriver_manager.chrome import ChromeDriverManager
+            
+            url = f"https://livecounts.io/youtube-live-subscriber-counter/{channel_id}"
+            
+            # Set up headless Chrome
+            chrome_options = ChromeOptions()
+            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_argument("--log-level=3")
+            chrome_options.add_argument("--disable-logging")
+            chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+            
+            service = ChromeService(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            
+            try:
+                driver.get(url)
+                time.sleep(2)  # Initial wait for page load
+                
+                last_value = None
+                stable_since = None
+                start_time = time.time()
+                
+                while time.time() - start_time < max_wait_seconds:
+                    current_value = None
+                    
+                    try:
+                        # Try multiple selectors to find the odometer value
+                        selectors = [
+                            ".odometer-inside",
+                            "[class*='odometer']",
+                            "[class*='count']"
+                        ]
+                        
+                        for selector in selectors:
+                            elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                            if elements:
+                                text = elements[0].text.strip().replace(' ', '').replace(',', '')
+                                # Extract just digits
+                                digits = ''.join(c for c in text if c.isdigit())
+                                if digits:
+                                    current_value = int(digits)
+                                    break
+                    except Exception:
+                        pass
+                    
+                    if current_value:
+                        if current_value == last_value:
+                            if stable_since is None:
+                                stable_since = time.time()
+                            
+                            stability_duration = time.time() - stable_since
+                            if stability_duration >= stability_threshold:
+                                # Value has been stable long enough
+                                return current_value
+                        else:
+                            # Value changed, reset stability timer
+                            stable_since = None
+                            last_value = current_value
+                    
+                    time.sleep(0.5)
+                
+                # Max wait reached, return last value if we have one
+                return last_value
+                
+            finally:
+                driver.quit()
+                
+        except Exception as e:
+            # Log error but don't crash - we'll fall back to other methods
+            error_msg = str(e)
+            # Show more context for debugging but keep it readable
+            if len(error_msg) > 100:
+                error_msg = error_msg[:100] + "..."
+            print(f"  ⚠️ LiveCounts fetch failed: {error_msg}")
+            return None
 
     def get_web_subscriber_count(self, channel_id):
         """
@@ -256,11 +359,11 @@ class YoutubeScraper:
 
     def wait_for_subscriber_count_update(self, channel_id, api_count, max_wait_seconds=10, poll_interval=2):
         """
-        Wait for the web subscriber count to refresh if it appears stale.
+        Get the true/exact subscriber count using livecounts.io as the primary source.
         
-        After fetching an initial count, this method polls the web endpoint to detect
-        if the subscriber count changes (indicating a fresh value). It will wait until
-        a change is observed or the timeout is reached.
+        This method first tries livecounts.io which provides exact subscriber counts
+        using the stable value detection approach. If that fails, it falls back to
+        YouTube's web endpoint.
         
         Args:
             channel_id: The YouTube channel ID
@@ -272,20 +375,33 @@ class YoutubeScraper:
             dict: Contains 'count' (the final subscriber count), 'is_updated' (bool),
                   and 'source' (description of where the count came from)
         """
-        print(f"  🔄 Checking for true subscriber count...")
+        print(f"  🔄 Fetching exact subscriber count from LiveCounts.io...")
         
-        # Get initial web count
+        # Try livecounts.io first (provides exact counts)
+        livecounts_value = self.get_livecounts_subscriber_count(channel_id)
+        
+        if livecounts_value is not None:
+            print(f"  ✅ LiveCounts exact count: {livecounts_value:,} (API estimate: {api_count:,})")
+            return {
+                'count': livecounts_value,
+                'is_updated': True,
+                'source': 'LiveCounts.io (exact)'
+            }
+        
+        # Fallback to YouTube web scraping
+        print(f"  ⚠️ LiveCounts failed, trying YouTube web fallback...")
+        
         initial_web_count = self.get_web_subscriber_count(channel_id)
         
         if initial_web_count is None:
-            print(f"  ⚠️ Could not fetch web subscriber count, using API value")
+            print(f"  ⚠️ Web fallback also failed, using API value")
             return {
                 'count': api_count,
                 'is_updated': False,
-                'source': 'API (web fetch failed)'
+                'source': 'API (all methods failed)'
             }
         
-        print(f"  📊 Initial web count: {initial_web_count:,} (API: {api_count:,})")
+        print(f"  📊 Web fallback count: {initial_web_count:,} (API: {api_count:,})")
         
         # If the web count differs significantly from API, it might already be accurate
         # Wait and poll to see if it changes (indicating a stale cache refresh)
