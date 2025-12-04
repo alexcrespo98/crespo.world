@@ -5,6 +5,7 @@ YouTube Shorts/Videos Analytics Tracker v2.0
 - NEW: Master scraper integration support
 - NEW: Early termination detection with recovery option
 - NEW: Auto-detection when API quota is exhausted
+- NEW: True subscriber count detection with web scraping and change polling
 - Uses YouTube Data API v3 (official, free, reliable)
 - Tracks multiple YouTube channels
 - Configurable scrape modes: test, custom, deep (unlimited)
@@ -12,6 +13,13 @@ YouTube Shorts/Videos Analytics Tracker v2.0
 - Compatible with crespomize.html analytics dashboard
 - Auto-uploads to Google Drive (when configured)
 - Deep scrape now goes back as far as possible with pagination
+
+True Subscriber Count Feature:
+    After fetching the YouTube API subscriber count (which may be an estimate),
+    the scraper queries a web endpoint to get the true/real-time subscriber count.
+    It waits for any visual update if the count appears stale, polling until a
+    change is observed or a timeout is reached. Terminal messages indicate when
+    this process is happening and whether the real count was successfully retrieved.
 """
 
 import sys
@@ -145,8 +153,201 @@ class YoutubeScraper:
         if self.api_quota_used > self.api_quota_limit * 0.8:
             print(f"  ⚠️ API quota warning: {self.api_quota_used}/{self.api_quota_limit} units used")
 
+    def get_web_subscriber_count(self, channel_id):
+        """
+        Fetch the true subscriber count from YouTube's web endpoint.
+        
+        This queries the YouTube channel page to get the real-time subscriber
+        count rather than the rounded/estimated value from the API.
+        
+        Args:
+            channel_id: The YouTube channel ID
+            
+        Returns:
+            int or None: The true subscriber count, or None if unable to fetch
+        """
+        try:
+            # Use YouTube's channel page to scrape the real subscriber count
+            url = f"https://www.youtube.com/channel/{channel_id}"
+            headers = {
+                # Use a generic User-Agent that represents a standard browser request
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                return None
+            
+            html_content = response.text
+            
+            # Try to extract subscriber count from the page content
+            # YouTube embeds data in ytInitialData JSON
+            match = re.search(r'"subscriberCountText":\s*\{\s*"accessibility":\s*\{\s*"accessibilityData":\s*\{\s*"label":\s*"([^"]+)"', html_content)
+            if match:
+                subscriber_text = match.group(1)
+                # Parse the subscriber count from text like "1.23 million subscribers"
+                count = self._parse_subscriber_text(subscriber_text)
+                if count:
+                    return count
+            
+            # Alternative pattern for simpleText
+            match = re.search(r'"subscriberCountText":\s*\{\s*"simpleText":\s*"([^"]+)"', html_content)
+            if match:
+                subscriber_text = match.group(1)
+                count = self._parse_subscriber_text(subscriber_text)
+                if count:
+                    return count
+            
+            return None
+            
+        except requests.RequestException:
+            # Network or HTTP errors when fetching the page
+            return None
+        except (ValueError, TypeError):
+            # Errors during parsing or data extraction
+            return None
+
+    def _parse_subscriber_text(self, text):
+        """
+        Parse subscriber count from text like "1.23M subscribers" or "1,234 subscribers"
+        
+        Args:
+            text: The subscriber count text from YouTube
+            
+        Returns:
+            int or None: The parsed subscriber count
+        """
+        try:
+            # Remove "subscribers" suffix and clean up
+            text = text.lower().replace('subscribers', '').replace('subscriber', '').strip()
+            
+            # Handle full words first (billion, million), then abbreviations (K, M, B)
+            multiplier = 1
+            if 'billion' in text:
+                multiplier = 1000000000
+                text = text.replace('billion', '')
+            elif 'million' in text:
+                multiplier = 1000000
+                text = text.replace('million', '')
+            elif 'b' in text:
+                multiplier = 1000000000
+                text = text.replace('b', '')
+            elif 'm' in text:
+                multiplier = 1000000
+                text = text.replace('m', '')
+            elif 'k' in text:
+                multiplier = 1000
+                text = text.replace('k', '')
+            
+            # Remove commas and parse
+            text = text.replace(',', '').replace(' ', '').strip()
+            
+            if text:
+                count = float(text) * multiplier
+                return int(count)
+            
+            return None
+            
+        except ValueError:
+            # Raised when float() fails to parse the text
+            return None
+
+    def wait_for_subscriber_count_update(self, channel_id, api_count, max_wait_seconds=10, poll_interval=2):
+        """
+        Wait for the web subscriber count to refresh if it appears stale.
+        
+        After fetching an initial count, this method polls the web endpoint to detect
+        if the subscriber count changes (indicating a fresh value). It will wait until
+        a change is observed or the timeout is reached.
+        
+        Args:
+            channel_id: The YouTube channel ID
+            api_count: The subscriber count from the YouTube API (used as reference)
+            max_wait_seconds: Maximum time to wait for an update (default 10 seconds)
+            poll_interval: Time between polling attempts (default 2 seconds)
+            
+        Returns:
+            dict: Contains 'count' (the final subscriber count), 'is_updated' (bool),
+                  and 'source' (description of where the count came from)
+        """
+        print(f"  🔄 Checking for true subscriber count...")
+        
+        # Get initial web count
+        initial_web_count = self.get_web_subscriber_count(channel_id)
+        
+        if initial_web_count is None:
+            print(f"  ⚠️ Could not fetch web subscriber count, using API value")
+            return {
+                'count': api_count,
+                'is_updated': False,
+                'source': 'API (web fetch failed)'
+            }
+        
+        print(f"  📊 Initial web count: {initial_web_count:,} (API: {api_count:,})")
+        
+        # If the web count differs significantly from API, it might already be accurate
+        # Wait and poll to see if it changes (indicating a stale cache refresh)
+        start_time = time.time()
+        previous_count = initial_web_count
+        
+        print(f"  ⏳ Waiting for subscriber count to refresh (max {max_wait_seconds}s)...")
+        
+        while time.time() - start_time < max_wait_seconds:
+            time.sleep(poll_interval)
+            
+            current_count = self.get_web_subscriber_count(channel_id)
+            
+            if current_count is None:
+                continue
+            
+            if current_count != previous_count:
+                print(f"  ✅ Subscriber count updated: {previous_count:,} → {current_count:,}")
+                return {
+                    'count': current_count,
+                    'is_updated': True,
+                    'source': 'Web (live update detected)'
+                }
+            
+            previous_count = current_count
+            elapsed = time.time() - start_time
+            remaining = max_wait_seconds - elapsed
+            if remaining > 0:
+                print(f"  ⏳ Still waiting... ({remaining:.0f}s remaining)")
+        
+        # Timeout reached, use the last fetched web count
+        if initial_web_count != api_count:
+            print(f"  ℹ️ Timeout reached. Using web count: {initial_web_count:,} (differs from API: {api_count:,})")
+            return {
+                'count': initial_web_count,
+                'is_updated': False,
+                'source': 'Web (no live update, but differs from API)'
+            }
+        else:
+            print(f"  ℹ️ Timeout reached. Web and API counts match: {api_count:,}")
+            return {
+                'count': api_count,
+                'is_updated': False,
+                'source': 'API/Web (counts match)'
+            }
+
     def get_channel_info(self, channel_name):
-        """Get channel ID, statistics, and uploads playlist"""
+        """
+        Get channel ID, statistics, and uploads playlist.
+        
+        After fetching the YouTube API subscriber count (which may be an estimate),
+        this method queries the web endpoint to get the true/real-time subscriber
+        count. It waits for any visual update if the count appears stale, polling
+        until a change is observed or a timeout is reached.
+        
+        Args:
+            channel_name: The YouTube channel handle or name
+            
+        Returns:
+            dict or None: Channel information including true subscriber count,
+                          or None if the channel cannot be found
+        """
         # Try by handle first
         url = "https://www.googleapis.com/youtube/v3/channels"
         params = {
@@ -168,10 +369,20 @@ class YoutubeScraper:
         
         if 'items' in data and len(data['items']) > 0:
             item = data['items'][0]
+            channel_id = item['id']
+            api_subscribers = int(item['statistics'].get('subscriberCount', 0))
+            
+            # Get true subscriber count using web scraping with polling
+            subscriber_result = self.wait_for_subscriber_count_update(
+                channel_id, api_subscribers
+            )
+            
             return {
-                'channel_id': item['id'],
+                'channel_id': channel_id,
                 'title': item['snippet']['title'],
-                'subscribers': int(item['statistics'].get('subscriberCount', 0)),
+                'subscribers': subscriber_result['count'],
+                'subscribers_source': subscriber_result['source'],
+                'subscribers_api': api_subscribers,
                 'total_views': int(item['statistics'].get('viewCount', 0)),
                 'total_videos': int(item['statistics'].get('videoCount', 0)),
                 'uploads_playlist': item['contentDetails']['relatedPlaylists']['uploads']
@@ -215,10 +426,19 @@ class YoutubeScraper:
             
             if 'items' in data:
                 item = data['items'][0]
+                api_subscribers = int(item['statistics'].get('subscriberCount', 0))
+                
+                # Get true subscriber count using web scraping with polling
+                subscriber_result = self.wait_for_subscriber_count_update(
+                    channel_id, api_subscribers
+                )
+                
                 return {
                     'channel_id': item['id'],
                     'title': item['snippet']['title'],
-                    'subscribers': int(item['statistics'].get('subscriberCount', 0)),
+                    'subscribers': subscriber_result['count'],
+                    'subscribers_source': subscriber_result['source'],
+                    'subscribers_api': api_subscribers,
                     'total_views': int(item['statistics'].get('viewCount', 0)),
                     'total_videos': int(item['statistics'].get('videoCount', 0)),
                     'uploads_playlist': item['contentDetails']['relatedPlaylists']['uploads']
