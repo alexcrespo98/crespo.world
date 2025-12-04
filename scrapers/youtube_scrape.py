@@ -170,7 +170,8 @@ class YoutubeScraper:
             # Use YouTube's channel page to scrape the real subscriber count
             url = f"https://www.youtube.com/channel/{channel_id}"
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                # Use a generic User-Agent that represents a standard browser request
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
             }
             
@@ -201,7 +202,11 @@ class YoutubeScraper:
             
             return None
             
-        except Exception as e:
+        except requests.RequestException:
+            # Network or HTTP errors when fetching the page
+            return None
+        except (ValueError, TypeError):
+            # Errors during parsing or data extraction
             return None
 
     def _parse_subscriber_text(self, text):
@@ -245,7 +250,8 @@ class YoutubeScraper:
             
             return None
             
-        except (ValueError, AttributeError):
+        except ValueError:
+            # Raised when float() fails to parse the text
             return None
 
     def wait_for_subscriber_count_update(self, channel_id, api_count, max_wait_seconds=10, poll_interval=2):
@@ -285,7 +291,6 @@ class YoutubeScraper:
         # Wait and poll to see if it changes (indicating a stale cache refresh)
         start_time = time.time()
         previous_count = initial_web_count
-        update_detected = False
         
         print(f"  ⏳ Waiting for subscriber count to refresh (max {max_wait_seconds}s)...")
         
@@ -298,7 +303,6 @@ class YoutubeScraper:
                 continue
             
             if current_count != previous_count:
-                update_detected = True
                 print(f"  ✅ Subscriber count updated: {previous_count:,} → {current_count:,}")
                 return {
                     'count': current_count,
