@@ -1330,6 +1330,8 @@ class InstagramScraper:
                     elif current_reel_id and not is_in_needed_list:
                         # Valid reel ID but not in our needed list - track consecutive unmatched
                         consecutive_unmatched += 1
+                    # Note: When current_reel_id is None (invalid), we don't modify consecutive_unmatched
+                    # because that's a different issue tracked by consecutive_no_reel_id
                     
                     # Show verbose output (first 20, then every 50th)
                     if verbose and (posts_processed < 20 or posts_processed % 50 == 0):
