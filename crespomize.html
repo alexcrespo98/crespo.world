@@ -994,15 +994,51 @@
             const likes = monthVideos.reduce((sum, v) => sum + (v.likes || 0), 0);
             const posts = monthVideos.length;
             
-            // Calculate new followers (difference between start and end of month)
+            // Calculate new followers with extrapolation for sparse data
             let newFollowers = 0;
             if (data.followersHistory && data.followersHistory.length > 0) {
               const monthHistory = data.followersHistory.filter(h => 
                 h.date >= startDate && h.date <= endDate
               );
+              
               if (monthHistory.length >= 2) {
+                // Direct calculation when we have enough data points
                 const sorted = monthHistory.sort((a, b) => a.date - b.date);
                 newFollowers = sorted[sorted.length - 1].value - sorted[0].value;
+              } else {
+                // Extrapolate from all available history if month data is sparse
+                const allHistory = data.followersHistory.sort((a, b) => a.date - b.date);
+                
+                if (allHistory.length >= 2) {
+                  // Calculate daily growth rate from all history
+                  const firstPoint = allHistory[0];
+                  const lastPoint = allHistory[allHistory.length - 1];
+                  const totalDays = (lastPoint.date - firstPoint.date) / (1000 * 60 * 60 * 24);
+                  const totalGrowth = lastPoint.value - firstPoint.value;
+                  
+                  if (totalDays > 0 && totalGrowth > 0) {
+                    const dailyGrowthRate = totalGrowth / totalDays;
+                    
+                    // Calculate days in this month's range
+                    const monthDays = (endDate - startDate) / (1000 * 60 * 60 * 24);
+                    
+                    // Extrapolate growth for this month
+                    newFollowers = Math.round(dailyGrowthRate * monthDays);
+                    
+                    // Note: This is an extrapolated value
+                    if (newFollowers > 0) {
+                      console.log(`[${platform}] Extrapolated follower growth: ~${newFollowers} (from ${dailyGrowthRate.toFixed(2)}/day avg)`);
+                    }
+                  }
+                } else if (monthHistory.length === 1) {
+                  // If we only have one data point this month, check if there's data before
+                  const beforeMonth = data.followersHistory.filter(h => h.date < startDate);
+                  if (beforeMonth.length > 0) {
+                    const lastBefore = beforeMonth.sort((a, b) => a.date - b.date).pop();
+                    newFollowers = monthHistory[0].value - lastBefore.value;
+                    if (newFollowers < 0) newFollowers = 0; // Don't show negative
+                  }
+                }
               }
             }
             
@@ -1113,7 +1149,7 @@
         });
       },
       
-      // Create views over time chart for easy graphs
+      // Create views over time chart for easy graphs (with cumulative line and logarithmic scale)
       createEasyViewsOverTimeChart(container, startDate, endDate) {
         const chartDiv = document.createElement('div');
         chartDiv.className = 'chart-container';
@@ -1122,7 +1158,7 @@
         canvas.id = 'easy-views-time';
         
         const header = document.createElement('h3');
-        header.textContent = 'Views Over Time (All Platforms)';
+        header.textContent = 'Views Over Time (Cumulative + Per-Post)';
         
         chartDiv.appendChild(header);
         chartDiv.appendChild(canvas);
@@ -1142,32 +1178,65 @@
         
         allVideos.sort((a, b) => a.date - b.date);
         
+        // Calculate cumulative views
+        let cumulativeViews = 0;
+        const cumulativeData = allVideos.map(v => {
+          cumulativeViews += (v.views || 0);
+          return { x: v.date, y: cumulativeViews };
+        });
+        
+        // Determine if logarithmic scale is appropriate (large range)
+        const viewsArray = allVideos.map(v => v.views || 0).filter(v => v > 0);
+        const maxViews = Math.max(...viewsArray, 1);
+        const minViews = Math.min(...viewsArray.filter(v => v > 0), maxViews);
+        const useLogScale = maxViews / minViews > 100 && maxViews > 10000;
+        
         const ctx = canvas.getContext('2d');
         
         this.chartInstances['easy-views-time'] = new Chart(ctx, {
-          type: 'scatter',
+          type: 'line',
           data: {
-            datasets: [{
-              label: 'Views',
-              data: allVideos.map(v => ({ x: v.date, y: v.views || 0 })),
-              borderColor: '#00d2d3',
-              backgroundColor: 'rgba(0, 210, 211, 0.7)',
-              pointRadius: 4,
-              pointHoverRadius: 6
-            }]
+            datasets: [
+              {
+                label: 'Cumulative Views',
+                data: cumulativeData,
+                borderColor: '#0f0',
+                backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                yAxisID: 'y-cumulative'
+              },
+              {
+                label: 'Views per Post',
+                data: allVideos.map(v => ({ x: v.date, y: v.views || 0 })),
+                borderColor: '#00d2d3',
+                backgroundColor: 'rgba(0, 210, 211, 0.7)',
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                type: 'scatter',
+                yAxisID: 'y-individual'
+              }
+            ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: true,
             aspectRatio: 2.5,
             plugins: {
-              legend: { display: false },
+              legend: {
+                display: true,
+                labels: { color: '#0f0', font: { family: 'monospace' } }
+              },
               tooltip: {
                 backgroundColor: 'rgba(0, 0, 0, 0.8)',
                 titleColor: '#0f0',
                 bodyColor: '#0f0',
                 callbacks: {
-                  label: (context) => 'Views: ' + this.formatNumber(context.parsed.y)
+                  label: (context) => {
+                    const label = context.dataset.label || '';
+                    return label + ': ' + this.formatNumber(context.parsed.y);
+                  }
                 }
               }
             },
@@ -1181,13 +1250,37 @@
                 ticks: { color: '#0f0', font: { family: 'monospace' } },
                 grid: { color: 'rgba(0, 255, 0, 0.1)' }
               },
-              y: {
+              'y-cumulative': {
+                type: useLogScale ? 'logarithmic' : 'linear',
+                position: 'left',
+                title: {
+                  display: true,
+                  text: 'Cumulative Views' + (useLogScale ? ' (log)' : ''),
+                  color: '#0f0',
+                  font: { family: 'monospace' }
+                },
                 ticks: {
                   color: '#0f0',
                   font: { family: 'monospace' },
                   callback: (value) => this.formatNumber(value)
                 },
                 grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              'y-individual': {
+                type: useLogScale ? 'logarithmic' : 'linear',
+                position: 'right',
+                title: {
+                  display: true,
+                  text: 'Per-Post Views' + (useLogScale ? ' (log)' : ''),
+                  color: '#00d2d3',
+                  font: { family: 'monospace' }
+                },
+                ticks: {
+                  color: '#00d2d3',
+                  font: { family: 'monospace' },
+                  callback: (value) => this.formatNumber(value)
+                },
+                grid: { drawOnChartArea: false }
               }
             }
           }
@@ -1741,15 +1834,15 @@
           
           if (rowName === 'subscribers' || rowName === 'followers') {
             followersHistory = row.slice(1).map((val, idx) => ({
-              date: new Date(headers[idx]),
+              date: this.parseDate(headers[idx]),
               value: parseInt(val) || 0
-            })).filter(item => this.isValidDate(item.date));
+            })).filter(item => item.date !== null);
               
           } else if (rowName === 'total_likes') {
             totalLikesHistory = row.slice(1).map((val, idx) => ({
-              date: new Date(headers[idx]),
+              date: this.parseDate(headers[idx]),
               value: parseInt(val) || 0
-            })).filter(item => this.isValidDate(item.date));
+            })).filter(item => item.date !== null);
               
           } else if (rowName.startsWith('post_') || rowName.startsWith('video_') || rowName.startsWith('short_')) {
             const parts = rowName.split('_');
@@ -1865,15 +1958,15 @@
           
           if (rowName === 'followers') {
             followersHistory = row.slice(1).map((val, idx) => ({
-              date: new Date(headers[idx]),
+              date: this.parseDate(headers[idx]),
               value: parseInt(val) || 0
-            })).filter(item => this.isValidDate(item.date));
+            })).filter(item => item.date !== null);
               
           } else if (rowName === 'total_likes') {
             totalLikesHistory = row.slice(1).map((val, idx) => ({
-              date: new Date(headers[idx]),
+              date: this.parseDate(headers[idx]),
               value: parseInt(val) || 0
-            })).filter(item => this.isValidDate(item.date));
+            })).filter(item => item.date !== null);
               
           } else if (rowName.startsWith('post_')) {
             const parts = rowName.split('_');
@@ -1933,9 +2026,10 @@
         
         const videosData = Array.from(allVideosMap.values());
         let cleanVideos = videosData.filter(v => v.Date).map(v => {
-          const dateObj = new Date(v.Date);
+          // Use robust date parsing
+          const dateObj = this.parseDate(v.Date);
           
-          if (!this.isValidDate(dateObj)) {
+          if (!dateObj) {
             return null;
           }
           
@@ -1988,9 +2082,9 @@
           
           if (rowName === 'followers') {
             followersHistory = row.slice(1).map((val, idx) => ({
-              date: new Date(headers[idx]),
+              date: this.parseDate(headers[idx]),
               value: parseInt(val) || 0
-            })).filter(item => this.isValidDate(item.date));
+            })).filter(item => item.date !== null);
               
           } else if (rowName.startsWith('reel_')) {
             const parts = rowName.split('_');
@@ -2173,9 +2267,10 @@
         
         const videosData = Array.from(allVideosMap.values());
         let cleanVideos = videosData.filter(v => v.Date).map(v => {
-          const dateObj = new Date(v.Date);
+          // Use robust date parsing to handle various formats
+          const dateObj = this.parseDate(v.Date);
           
-          if (!this.isValidDate(dateObj)) {
+          if (!dateObj) {
             return null;
           }
           
@@ -2373,6 +2468,82 @@
         const year = date.getFullYear();
         const currentYear = new Date().getFullYear();
         return year >= 2020 && year <= currentYear + 1;
+      },
+      
+      // Robust date parsing that handles various date formats from Excel/scrapers
+      parseDate(dateValue) {
+        if (!dateValue) return null;
+        
+        // If it's already a valid Date object
+        if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
+          return this.isValidDate(dateValue) ? dateValue : null;
+        }
+        
+        // Handle Excel serial date numbers (days since 1900-01-01)
+        if (typeof dateValue === 'number') {
+          // Excel serial date conversion
+          const excelEpoch = new Date(1899, 11, 30); // Excel epoch
+          const millisecondsPerDay = 24 * 60 * 60 * 1000;
+          const date = new Date(excelEpoch.getTime() + (dateValue * millisecondsPerDay));
+          return this.isValidDate(date) ? date : null;
+        }
+        
+        // Handle string formats
+        if (typeof dateValue === 'string') {
+          dateValue = dateValue.trim();
+          
+          // Try ISO format first (most common from scrapers: 2024-01-15T12:00:00)
+          let date = new Date(dateValue);
+          if (this.isValidDate(date)) return date;
+          
+          // Try YYYY-MM-DD format
+          const isoMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (isoMatch) {
+            date = new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+            if (this.isValidDate(date)) return date;
+          }
+          
+          // Try MM/DD/YYYY format
+          const usMatch = dateValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+          if (usMatch) {
+            date = new Date(parseInt(usMatch[3]), parseInt(usMatch[1]) - 1, parseInt(usMatch[2]));
+            if (this.isValidDate(date)) return date;
+          }
+          
+          // Try DD/MM/YYYY format (European)
+          const euMatch = dateValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+          if (euMatch) {
+            // Try European format (day first)
+            date = new Date(parseInt(euMatch[3]), parseInt(euMatch[2]) - 1, parseInt(euMatch[1]));
+            if (this.isValidDate(date)) return date;
+          }
+          
+          // Try "Month DD, YYYY" format (e.g., "January 15, 2024")
+          const monthNameMatch = dateValue.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+          if (monthNameMatch) {
+            const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                               'july', 'august', 'september', 'october', 'november', 'december'];
+            const monthIdx = monthNames.indexOf(monthNameMatch[1].toLowerCase());
+            if (monthIdx !== -1) {
+              date = new Date(parseInt(monthNameMatch[3]), monthIdx, parseInt(monthNameMatch[2]));
+              if (this.isValidDate(date)) return date;
+            }
+          }
+          
+          // Try "DD Mon YYYY" format (e.g., "15 Jan 2024")
+          const shortMonthMatch = dateValue.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/);
+          if (shortMonthMatch) {
+            const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 
+                               'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            const monthIdx = monthNames.findIndex(m => shortMonthMatch[2].toLowerCase().startsWith(m));
+            if (monthIdx !== -1) {
+              date = new Date(parseInt(shortMonthMatch[3]), monthIdx, parseInt(shortMonthMatch[1]));
+              if (this.isValidDate(date)) return date;
+            }
+          }
+        }
+        
+        return null;
       },
       
       filterDataByTimeRange(videos, timeRangeDays) {

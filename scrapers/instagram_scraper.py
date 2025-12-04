@@ -74,6 +74,9 @@ class InstagramScraper:
     MAX_ARROW_POSTS_CAP = 2000  # Maximum posts to process in arrow scrape
     POST_TIMEOUT_SECONDS = 10  # Maximum time allowed per post for any method (skip if exceeded)
     
+    # Logarithmic outlier detection threshold (number of standard deviations from expected)
+    LOG_OUTLIER_THRESHOLD_STDEV = 2.5  # Flag posts with likes/views > 2.5 stdev from expected
+    
     def __init__(self):
         self.driver = None
         self.incognito_driver = None  # For fallback on rate limiting
@@ -1891,6 +1894,122 @@ class InstagramScraper:
         
         return merged
 
+    def filter_logarithmic_outliers(self, data, test_mode=False):
+        """
+        Filter posts with unusually low likes/views using logarithmic outlier detection.
+        
+        This helps identify posts that may have been incorrectly scraped (e.g., with
+        single-digit likes when the account typically gets thousands).
+        
+        Returns the filtered data with outliers marked/excluded.
+        """
+        if len(data) < 5:
+            # Not enough data for statistical analysis
+            return data
+        
+        # Collect views-likes pairs for valid posts
+        valid_pairs = []
+        for reel in data:
+            views = reel.get('views')
+            likes = reel.get('likes')
+            if views is not None and views > 0 and likes is not None and likes > 0:
+                valid_pairs.append((views, likes, reel['reel_id']))
+        
+        if len(valid_pairs) < 5:
+            return data
+        
+        # Calculate logarithmic regression: log(likes) = a * log(views) + b
+        log_a, log_b = None, None
+        try:
+            log_views = [math.log(v) for v, l, _ in valid_pairs]
+            log_likes = [math.log(l) for v, l, _ in valid_pairs]
+            
+            n = len(valid_pairs)
+            sum_x = sum(log_views)
+            sum_y = sum(log_likes)
+            sum_xy = sum(x * y for x, y in zip(log_views, log_likes))
+            sum_xx = sum(x * x for x in log_views)
+            
+            denominator = n * sum_xx - sum_x * sum_x
+            if denominator != 0:
+                log_a = (n * sum_xy - sum_x * sum_y) / denominator
+                log_b = (sum_y - log_a * sum_x) / n
+        except Exception as e:
+            if test_mode:
+                print(f"  ⚠️ Could not calculate log regression: {e}")
+            return data
+        
+        if log_a is None or log_b is None:
+            return data
+        
+        # Calculate residuals (difference between actual and expected log(likes))
+        residuals = []
+        for views, likes, reel_id in valid_pairs:
+            try:
+                expected_log_likes = log_a * math.log(views) + log_b
+                actual_log_likes = math.log(likes)
+                residual = actual_log_likes - expected_log_likes
+                residuals.append((reel_id, residual, views, likes, expected_log_likes))
+            except:
+                pass
+        
+        if len(residuals) < 5:
+            return data
+        
+        # Calculate standard deviation of residuals
+        residual_values = [r[1] for r in residuals]
+        residual_mean = sum(residual_values) / len(residual_values)
+        residual_variance = sum((r - residual_mean) ** 2 for r in residual_values) / len(residual_values)
+        residual_stdev = math.sqrt(residual_variance) if residual_variance > 0 else 1.0
+        
+        # Identify outliers (posts with residuals beyond threshold)
+        outliers_found = []
+        outlier_ids = set()
+        
+        for reel_id, residual, views, likes, expected_log_likes in residuals:
+            stdev_from_mean = abs(residual - residual_mean) / residual_stdev if residual_stdev > 0 else 0
+            
+            # Only flag posts with MUCH lower likes than expected (negative residuals)
+            # This catches scraping errors that return near-zero likes
+            if residual < residual_mean and stdev_from_mean > self.LOG_OUTLIER_THRESHOLD_STDEV:
+                expected_likes = int(math.exp(expected_log_likes))
+                outliers_found.append({
+                    'reel_id': reel_id,
+                    'views': views,
+                    'likes': likes,
+                    'expected_likes': expected_likes,
+                    'stdev_from_mean': round(stdev_from_mean, 2)
+                })
+                outlier_ids.add(reel_id)
+        
+        if outliers_found:
+            print(f"\n  🔍 LOGARITHMIC OUTLIER DETECTION:")
+            print(f"  📈 Model: log(likes) = {log_a:.3f} * log(views) + {log_b:.3f}")
+            print(f"  📊 Residual StdDev: {residual_stdev:.3f}")
+            print(f"  ⚠️ Found {len(outliers_found)} posts with suspiciously low likes:")
+            
+            for outlier in outliers_found:
+                print(f"    📍 {outlier['reel_id']}")
+                print(f"       Views: {outlier['views']:,}, Likes: {outlier['likes']:,} (expected ~{outlier['expected_likes']:,})")
+                print(f"       Deviation: {outlier['stdev_from_mean']}σ below expected")
+            
+            print(f"\n  🔧 These posts will be marked as needing re-scrape or will use previous values if available.")
+        elif test_mode:
+            print(f"  ✅ No logarithmic outliers detected - likes/views ratios are consistent")
+        
+        # Mark outliers in the data
+        for reel in data:
+            if reel['reel_id'] in outlier_ids:
+                reel['is_log_outlier'] = True
+                # Set likes to None so it can be salvaged or use previous value
+                if reel.get('likes') is not None and reel['likes'] < 10:
+                    print(f"  🔧 Clearing suspicious likes={reel['likes']} for {reel['reel_id']} (will use previous or salvage)")
+                    reel['likes'] = None
+            else:
+                reel['is_log_outlier'] = False
+        
+        return data
+
     def scrape_instagram_account(self, driver, username, max_reels=100, deep_scrape=False, deep_deep=False, test_mode=False):
         """
         Main scraping method using hover-first approach.
@@ -1937,12 +2056,16 @@ class InstagramScraper:
         final_data = self.smart_merge_data_v2(hover_data, url_data, outliers, test_mode=test_mode)
         pinned_count = 0  # Pinned detection not available in hover-first mode
         
-        # Step 5: Salvage scrape for posts missing critical data (likes, comments)
-        posts_needing_salvage = [d for d in final_data if d.get('likes') is None or d.get('comments') is None]
+        # Step 4.5: Apply logarithmic outlier filter to detect posts with unusually low likes
+        # This catches scraping errors where likes are incorrectly captured as single-digit values
+        final_data = self.filter_logarithmic_outliers(final_data, test_mode=test_mode)
         
-        if posts_needing_salvage and len(posts_needing_salvage) <= 10:
+        # Step 5: Salvage scrape for posts missing critical data (likes, comments, or marked as log outliers)
+        posts_needing_salvage = [d for d in final_data if d.get('likes') is None or d.get('comments') is None or d.get('is_log_outlier', False)]
+        
+        if posts_needing_salvage and len(posts_needing_salvage) <= 15:
             # Only salvage if there are a reasonable number of missing posts (avoid long delays)
-            print(f"\n  🔧 Salvaging {len(posts_needing_salvage)} posts with missing data...")
+            print(f"\n  🔧 Salvaging {len(posts_needing_salvage)} posts with missing data or outliers...")
             
             for item in posts_needing_salvage:
                 reel_id = item['reel_id']
