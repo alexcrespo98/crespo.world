@@ -2063,13 +2063,48 @@ class InstagramScraper:
         df.loc["followers", timestamp_col] = followers
         df.loc["reels_scraped", timestamp_col] = len(reels_data)
         
+        # Find the most recent previous column for value validation
+        previous_col = None
+        if len(df.columns) > 1:
+            # Get columns sorted by name (timestamps), exclude current column
+            other_cols = [c for c in df.columns if c != timestamp_col]
+            if other_cols:
+                previous_col = sorted(other_cols)[-1]  # Most recent previous scrape
+        
+        # Metrics that should never decrease (allow 1% tolerance for rounding)
+        monotonic_metrics = ['views', 'likes', 'comments']
+        corrections_made = 0
+        
         for reel in reels_data:
             reel_id = reel['reel_id']
             for metric in ['is_pinned', 'date', 'date_display', 'views', 'likes', 'comments', 'engagement']:
                 row_name = f"reel_{reel_id}_{metric}"
                 if row_name not in df.index:
                     df.loc[row_name] = None
-                df.loc[row_name, timestamp_col] = reel.get(metric, "")
+                
+                new_value = reel.get(metric, "")
+                
+                # For monotonic metrics, validate against previous value
+                if metric in monotonic_metrics and previous_col is not None and new_value is not None:
+                    try:
+                        prev_value = df.loc[row_name, previous_col]
+                        # Only compare if both values are numeric
+                        if prev_value is not None and prev_value != "" and not pd.isna(prev_value):
+                            prev_num = float(prev_value)
+                            new_num = float(new_value) if new_value != "" else 0
+                            
+                            # Check if new value is less than 99% of previous (allowing 1% tolerance)
+                            if new_num < prev_num * 0.99:
+                                print(f"  ⚠️ {metric.upper()} CORRECTION: {reel_id} - new value {int(new_num):,} < previous {int(prev_num):,}, keeping previous")
+                                new_value = prev_value
+                                corrections_made += 1
+                    except (ValueError, TypeError, KeyError):
+                        pass  # If comparison fails, just use the new value
+                
+                df.loc[row_name, timestamp_col] = new_value
+        
+        if corrections_made > 0:
+            print(f"  📊 Value validation complete: {corrections_made} correction(s) made (kept higher previous values)")
         
         return df
 
