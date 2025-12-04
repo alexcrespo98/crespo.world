@@ -377,16 +377,46 @@ class YoutubeScraper:
         """
         print(f"  🔄 Fetching exact subscriber count from LiveCounts.io...")
         
-        # Try livecounts.io first (provides exact counts)
-        livecounts_value = self.get_livecounts_subscriber_count(channel_id)
-        
-        if livecounts_value is not None:
-            print(f"  ✅ LiveCounts exact count: {livecounts_value:,} (API estimate: {api_count:,})")
-            return {
-                'count': livecounts_value,
-                'is_updated': True,
-                'source': 'LiveCounts.io (exact)'
-            }
+        # Try livecounts.io up to 2 times if we get suspicious values
+        max_livecounts_attempts = 2
+        for attempt in range(max_livecounts_attempts):
+            livecounts_value = self.get_livecounts_subscriber_count(channel_id)
+            
+            if livecounts_value is not None:
+                # Validate the LiveCounts value
+                is_valid = True
+                rejection_reason = None
+                
+                # Check 1: Value is ridiculously large compared to API estimate
+                # If LiveCounts is more than 100x the API estimate, it's likely a scraping error
+                if api_count > 0 and livecounts_value > api_count * 100:
+                    is_valid = False
+                    rejection_reason = f"value {livecounts_value:,} is >100x API estimate {api_count:,}"
+                
+                # Check 2: Value ends with "00" (same as rounded API value)
+                # This suggests LiveCounts may have returned a rounded value, not exact
+                elif livecounts_value == api_count and api_count % 100 == 0:
+                    is_valid = False
+                    rejection_reason = f"value {livecounts_value:,} matches rounded API estimate"
+                
+                # Check 3: Value is unreasonably small (less than 1% of API estimate)
+                elif api_count > 1000 and livecounts_value < api_count * 0.01:
+                    is_valid = False
+                    rejection_reason = f"value {livecounts_value:,} is <1% of API estimate {api_count:,}"
+                
+                if is_valid:
+                    print(f"  ✅ LiveCounts exact count: {livecounts_value:,} (API estimate: {api_count:,})")
+                    return {
+                        'count': livecounts_value,
+                        'is_updated': True,
+                        'source': 'LiveCounts.io (exact)'
+                    }
+                else:
+                    if attempt < max_livecounts_attempts - 1:
+                        print(f"  ⚠️ LiveCounts returned suspicious value: {rejection_reason}")
+                        print(f"  🔄 Retrying LiveCounts ({attempt + 2}/{max_livecounts_attempts})...")
+                    else:
+                        print(f"  ⚠️ LiveCounts failed validation: {rejection_reason}")
         
         # Fallback to YouTube web scraping
         print(f"  ⚠️ LiveCounts failed, trying YouTube web fallback...")
