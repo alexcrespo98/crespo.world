@@ -1143,7 +1143,9 @@ class InstagramScraper:
         POST_TIMEOUT = 30  # Max seconds per post before considering it stuck
         MAX_CONSECUTIVE_NO_DATE = 10  # Switch methods after 10 consecutive NO DATE
         MAX_CONSECUTIVE_NO_REEL_ID = 10  # Switch methods after 10 consecutive "POST" (no reel ID)
+        MAX_CONSECUTIVE_UNMATCHED = 10  # Give up after 10 consecutive unmatched reel IDs
         MIN_SUCCESS_RATE = 0.5  # Need at least 50% of dates to avoid individual URL fallback
+        GOOD_ENOUGH_SUCCESS_RATE = 0.9  # If >= 90% matched, consider it "good enough" and continue
         
         for method in methods:
             # Check if we already have enough dates
@@ -1168,6 +1170,7 @@ class InstagramScraper:
             method_arrow_data = {}
             consecutive_no_dates = 0
             consecutive_no_reel_id = 0
+            consecutive_unmatched = 0  # Track consecutive reel IDs not in our needed list
             last_reel_id = None  # Track to detect if we're stuck on same post
             stuck_count = 0  # Count how many times we've seen the same reel
             
@@ -1273,6 +1276,19 @@ class InstagramScraper:
                         print(f"  ❌ Stuck on same post for 5 iterations - trying next method...")
                         break
                     
+                    # Check for consecutive unmatched reel IDs
+                    if consecutive_unmatched >= MAX_CONSECUTIVE_UNMATCHED:
+                        # Calculate current success rate
+                        current_success_rate = len(method_arrow_data) / len(reel_ids_needed) if reel_ids_needed else 0
+                        if current_success_rate >= GOOD_ENOUGH_SUCCESS_RATE:
+                            # We have >= 90% matches, consider it "good enough" and continue to next step
+                            print(f"  ⚠️ {MAX_CONSECUTIVE_UNMATCHED} consecutive unmatched reels, but {current_success_rate:.0%} success rate is good enough")
+                            print(f"  ✅ Continuing with {len(method_arrow_data)}/{len(reel_ids_needed)} dates ({current_success_rate:.0%})")
+                            break
+                        else:
+                            print(f"  ❌ {MAX_CONSECUTIVE_UNMATCHED} consecutive unmatched reels with only {current_success_rate:.0%} success - trying next method...")
+                            break
+                    
                     # Wait for content to load
                     time.sleep(1.5)
                     
@@ -1304,14 +1320,20 @@ class InstagramScraper:
                     
                     # Store date if we found one for a reel we need
                     found_new_match = False
-                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in method_arrow_data:
+                    is_in_needed_list = current_reel_id and current_reel_id in reel_ids_needed
+                    
+                    if is_in_needed_list and current_reel_id not in method_arrow_data:
                         if date_info.get('date'):
                             method_arrow_data[current_reel_id] = date_info
                             found_new_match = True
+                            consecutive_unmatched = 0  # Reset unmatched counter on successful match
+                    elif current_reel_id and not is_in_needed_list:
+                        # Valid reel ID but not in our needed list - track consecutive unmatched
+                        consecutive_unmatched += 1
                     
                     # Show verbose output (first 20, then every 50th)
                     if verbose and (posts_processed < 20 or posts_processed % 50 == 0):
-                        in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
+                        in_list = "✓" if is_in_needed_list else "✗"
                         date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
                         reel_display = current_reel_id if current_reel_id else 'POST'
                         matches_str = f"({len(method_arrow_data)}/{len(reel_ids_needed)} dates)"
