@@ -2212,8 +2212,8 @@
         let followersByTimestamp = {};
         let likesByTimestamp = {};
         
-        // Track last known values for each account for cumulative calculation
-        let lastKnownFollowersByAccount = {};
+        // Track highest known values for each account (followers should never decrease)
+        let highestKnownFollowersByAccount = {};
         let lastKnownLikesByAccount = {};
         
         accounts.forEach(sheetName => {
@@ -2254,39 +2254,57 @@
         
         const totalAccountCount = accounts.length;
         
-        // Followers: include ALL timestamps, using last known value for missing accounts
+        // Followers: include ALL timestamps, using highest known value for each account
         // Sort timestamps chronologically first
         const sortedFollowersTimestamps = Object.values(followersByTimestamp)
           .filter(item => this.isValidDate(item.date))
           .sort((a, b) => a.date - b.date);
         
-        // Build cumulative total followers history
+        // Build cumulative total followers history using HIGHEST values
+        // (since followers should never decrease - lower values are scrape errors)
         const followersHistory = [];
-        accounts.forEach(acc => { lastKnownFollowersByAccount[acc] = 0; });
+        accounts.forEach(acc => { highestKnownFollowersByAccount[acc] = 0; });
         
+        // First pass: determine the highest value each account ever reaches
         sortedFollowersTimestamps.forEach(item => {
-          // Update last known values for accounts that have data at this timestamp
           Object.keys(item.accountValues).forEach(acc => {
             const newValue = item.accountValues[acc];
-            const lastValue = lastKnownFollowersByAccount[acc];
-            
-            // Check for abnormal drops (50%+ drop is considered invalid)
-            if (lastValue > 0 && newValue < lastValue * 0.5) {
-              // Skip this value, keep the previous one
-              return;
+            if (newValue > highestKnownFollowersByAccount[acc]) {
+              highestKnownFollowersByAccount[acc] = newValue;
             }
-            
-            lastKnownFollowersByAccount[acc] = newValue;
+          });
+        });
+        
+        // Reset for second pass
+        const currentFollowersByAccount = {};
+        accounts.forEach(acc => { currentFollowersByAccount[acc] = 0; });
+        
+        // Second pass: build history using highest value seen UP TO each timestamp
+        sortedFollowersTimestamps.forEach(item => {
+          // Update current values for accounts that have data at this timestamp
+          // Only update if the new value is higher (followers shouldn't decrease)
+          Object.keys(item.accountValues).forEach(acc => {
+            const newValue = item.accountValues[acc];
+            if (newValue > currentFollowersByAccount[acc]) {
+              currentFollowersByAccount[acc] = newValue;
+            }
           });
           
-          // Sum all last known values (ensures cumulative behavior)
-          const cumulativeTotal = Object.values(lastKnownFollowersByAccount).reduce((sum, val) => sum + val, 0);
+          // Sum all current values
+          const cumulativeTotal = Object.values(currentFollowersByAccount).reduce((sum, val) => sum + val, 0);
           
-          if (cumulativeTotal > 0) {
-            followersHistory.push({
-              date: item.date,
-              value: cumulativeTotal
-            });
+          // Only add if we have a meaningful total and at least some accounts have data
+          const accountsWithData = Object.values(currentFollowersByAccount).filter(v => v > 0).length;
+          
+          if (cumulativeTotal > 0 && accountsWithData > 0) {
+            // Check if this is significantly different from the last entry to avoid duplicates
+            const lastEntry = followersHistory[followersHistory.length - 1];
+            if (!lastEntry || lastEntry.value !== cumulativeTotal) {
+              followersHistory.push({
+                date: item.date,
+                value: cumulativeTotal
+              });
+            }
           }
         });
         
