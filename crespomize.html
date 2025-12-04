@@ -373,6 +373,33 @@
       background: #00d2d3;
       box-shadow: 0 0 10px #0f0;
     }
+    .looks-good-btn {
+      background: #00ff00;
+      color: #000;
+      border: 3px solid #00ff00;
+      padding: 1em 2em;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 1.2em;
+      font-weight: bold;
+      transition: all 0.3s;
+      border-radius: 8px;
+      text-transform: uppercase;
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+    }
+    .looks-good-btn:hover {
+      background: #00d2d3;
+      border-color: #00d2d3;
+      box-shadow: 0 0 25px rgba(0, 210, 211, 0.5);
+      transform: scale(1.05);
+    }
+    .export-section {
+      margin-top: 2em;
+      padding: 1.5em;
+      border: 2px solid #0f0;
+      border-radius: 10px;
+      background: rgba(0, 255, 0, 0.05);
+    }
     .no-data-message {
       text-align: center;
       padding: 3em;
@@ -406,8 +433,38 @@
   <h1>crespomize analytics</h1>
   
   <div class="container">
-    <!-- Step 0: Platform selection -->
+    <!-- Step 0: Analytics Type Selection -->
     <div id="step0" class="step">
+      <div class="question">what type of analytics?</div>
+      <select id="analyticsTypeSelect">
+        <option value="" disabled selected>-- select analytics type --</option>
+        <option value="easy">Easy Graphs (for client reports)</option>
+        <option value="custom">Custom Analytics</option>
+      </select>
+    </div>
+
+    <!-- Easy Graphs Section -->
+    <div id="easyGraphsSection" class="step hidden">
+      <div class="question">select month for client report:</div>
+      <select id="monthSelect">
+        <option value="" disabled selected>-- select month --</option>
+      </select>
+      <div id="easyGraphsContainer" class="hidden">
+        <div class="question" id="easyGraphsTitle"></div>
+        <div class="stats-summary" id="easyStatsSummary"></div>
+        <div id="easyChartsList"></div>
+        <div class="export-section" style="text-align: center; margin-top: 2em;">
+          <button id="looksGoodBtn" class="looks-good-btn" onclick="app.exportClientReport()">
+            ✓ Looks Good - Export PDF
+          </button>
+        </div>
+        <br>
+        <button onclick="location.reload()">start over</button>
+      </div>
+    </div>
+
+    <!-- Custom Analytics: Platform selection -->
+    <div id="step0Custom" class="step hidden">
       <div class="question">which platform?</div>
       <select id="platformSelect">
         <option value="" disabled selected>-- select platform --</option>
@@ -514,6 +571,11 @@
       chartMetricKeys: {},
       allPlatformsData: {},
       allVideosUnfiltered: [],
+      
+      // Easy graphs state
+      easyGraphsData: {},
+      currentEasyGraphsMonth: null,
+      currentEasyGraphsYear: null,
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -753,6 +815,14 @@
       
       // Setup all event listeners
       setupEventListeners() {
+        // Analytics type selection (new first step)
+        document.getElementById('analyticsTypeSelect').addEventListener('change', (e) => {
+          if (e.target.value) {
+            this.selectAnalyticsType(e.target.value);
+          }
+        });
+        
+        // Platform selection (for custom analytics)
         document.getElementById('platformSelect').addEventListener('change', (e) => {
           if (e.target.value) {
             this.selectPlatform(e.target.value);
@@ -764,6 +834,524 @@
             this.selectAccount(e.target.value);
           }
         });
+        
+        // Month selection (for easy graphs)
+        document.getElementById('monthSelect').addEventListener('change', (e) => {
+          if (e.target.value) {
+            this.selectMonthForEasyGraphs(e.target.value);
+          }
+        });
+      },
+      
+      // Analytics type selection
+      selectAnalyticsType(type) {
+        document.getElementById('step0').classList.add('hidden');
+        
+        if (type === 'easy') {
+          this.initializeEasyGraphsMode();
+        } else if (type === 'custom') {
+          document.getElementById('step0Custom').classList.remove('hidden');
+        }
+      },
+      
+      // Initialize Easy Graphs mode
+      async initializeEasyGraphsMode() {
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('loading').textContent = 'loading data...';
+        
+        // Load all platforms data first
+        await this.loadAllPlatformsDataForEasyGraphs();
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('easyGraphsSection').classList.remove('hidden');
+        
+        // Populate month dropdown
+        this.populateMonthDropdown();
+      },
+      
+      // Load all platforms data for easy graphs
+      async loadAllPlatformsDataForEasyGraphs() {
+        this.easyGraphsData = {
+          instagram: null,
+          tiktok: null,
+          youtube: null
+        };
+        
+        // Load Instagram data
+        try {
+          const igResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.instagram}/export?format=xlsx`);
+          const igBuffer = await igResponse.arrayBuffer();
+          this.easyGraphsData.instagramWorkbook = XLSX.read(igBuffer, { type: 'array' });
+          this.easyGraphsData.instagram = this.processWorkbookData(this.easyGraphsData.instagramWorkbook, 'instagram', 'all');
+        } catch (error) {
+          console.error('Error loading Instagram data:', error);
+        }
+        
+        // Load TikTok data
+        try {
+          const ttResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.tiktok}/export?format=xlsx`);
+          const ttBuffer = await ttResponse.arrayBuffer();
+          this.easyGraphsData.tiktokWorkbook = XLSX.read(ttBuffer, { type: 'array' });
+          this.easyGraphsData.tiktok = this.processWorkbookData(this.easyGraphsData.tiktokWorkbook, 'tiktok', 'all');
+        } catch (error) {
+          console.error('Error loading TikTok data:', error);
+        }
+        
+        // Load YouTube data
+        try {
+          const ytResponse = await fetch(`https://docs.google.com/spreadsheets/d/${this.SHEET_IDS.youtube}/export?format=xlsx`);
+          const ytBuffer = await ytResponse.arrayBuffer();
+          this.easyGraphsData.youtubeWorkbook = XLSX.read(ytBuffer, { type: 'array' });
+          this.easyGraphsData.youtube = this.processWorkbookData(this.easyGraphsData.youtubeWorkbook, 'youtube', 'all');
+        } catch (error) {
+          console.error('Error loading YouTube data:', error);
+        }
+      },
+      
+      // Populate month dropdown with current and past 12 months
+      populateMonthDropdown() {
+        const monthSelect = document.getElementById('monthSelect');
+        monthSelect.innerHTML = '<option value="" disabled selected>-- select month --</option>';
+        
+        const now = new Date();
+        const currentDay = now.getDate();
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        // Add current month and previous 12 months
+        for (let i = 0; i <= 12; i++) {
+          const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const monthName = months[date.getMonth()];
+          const year = date.getFullYear();
+          const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          let label = `${monthName} ${year}`;
+          
+          // Check if it's the current month (partial)
+          if (i === 0) {
+            label += ' (partial)';
+          }
+          
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = label;
+          monthSelect.appendChild(option);
+        }
+      },
+      
+      // Select month for easy graphs
+      async selectMonthForEasyGraphs(monthValue) {
+        const [year, month] = monthValue.split('-').map(Number);
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0, 23, 59, 59); // Last day of month
+        
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = months[month - 1];
+        
+        // Show loading
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('loading').textContent = 'generating graphs...';
+        
+        // Render the easy graphs
+        await this.renderEasyGraphs(startDate, endDate, monthName, year);
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('easyGraphsContainer').classList.remove('hidden');
+        
+        // Store current month for PDF export
+        this.currentEasyGraphsMonth = monthName;
+        this.currentEasyGraphsYear = year;
+      },
+      
+      // Render easy graphs for client report
+      async renderEasyGraphs(startDate, endDate, monthName, year) {
+        const container = document.getElementById('easyChartsList');
+        container.innerHTML = '';
+        
+        // Reset chart instances
+        this.chartInstances = {};
+        
+        document.getElementById('easyGraphsTitle').textContent = 
+          `${monthName} ${year} Analytics for MoonMedia`;
+        
+        // Calculate stats for each platform for this month
+        const platformStats = {};
+        const platforms = ['instagram', 'tiktok', 'youtube'];
+        
+        let totalViews = 0;
+        let totalNewFollowers = 0;
+        
+        platforms.forEach(platform => {
+          const data = this.easyGraphsData[platform];
+          if (data && data.videos) {
+            // Filter videos for this month
+            const monthVideos = data.videos.filter(v => 
+              v.date >= startDate && v.date <= endDate
+            );
+            
+            const views = monthVideos.reduce((sum, v) => sum + (v.views || 0), 0);
+            const likes = monthVideos.reduce((sum, v) => sum + (v.likes || 0), 0);
+            const posts = monthVideos.length;
+            
+            // Calculate new followers (difference between start and end of month)
+            let newFollowers = 0;
+            if (data.followersHistory && data.followersHistory.length > 0) {
+              const monthHistory = data.followersHistory.filter(h => 
+                h.date >= startDate && h.date <= endDate
+              );
+              if (monthHistory.length >= 2) {
+                const sorted = monthHistory.sort((a, b) => a.date - b.date);
+                newFollowers = sorted[sorted.length - 1].value - sorted[0].value;
+              }
+            }
+            
+            platformStats[platform] = { views, likes, posts, newFollowers };
+            totalViews += views;
+            totalNewFollowers += newFollowers;
+          }
+        });
+        
+        // Render stats summary
+        const statsContainer = document.getElementById('easyStatsSummary');
+        statsContainer.innerHTML = `
+          <div class="stat-card">
+            <h4>TOTAL VIEWS</h4>
+            <div class="value">${this.formatNumber(totalViews)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>NEW FOLLOWERS</h4>
+            <div class="value">+${this.formatNumber(totalNewFollowers)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM VIEWS</h4>
+            <div class="value">${this.formatNumber(platformStats.instagram?.views || 0)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK VIEWS</h4>
+            <div class="value">${this.formatNumber(platformStats.tiktok?.views || 0)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE VIEWS</h4>
+            <div class="value">${this.formatNumber(platformStats.youtube?.views || 0)}</div>
+          </div>
+        `;
+        
+        // Create platform views comparison chart
+        this.createEasyPlatformViewsChart(container, platformStats);
+        
+        // Create views over time chart for the month
+        this.createEasyViewsOverTimeChart(container, startDate, endDate);
+        
+        // Create followers growth chart
+        this.createEasyFollowersChart(container, startDate, endDate);
+      },
+      
+      // Create platform views comparison chart for easy graphs
+      createEasyPlatformViewsChart(container, platformStats) {
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'easy-platform-views';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Views by Platform';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        this.chartInstances['easy-platform-views'] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: ['Instagram', 'TikTok', 'YouTube'],
+            datasets: [{
+              label: 'Views',
+              data: [
+                platformStats.instagram?.views || 0,
+                platformStats.tiktok?.views || 0,
+                platformStats.youtube?.views || 0
+              ],
+              backgroundColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                callbacks: {
+                  label: (context) => 'Views: ' + this.formatNumber(context.parsed.y)
+                }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { color: '#0f0', font: { family: 'monospace' } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create views over time chart for easy graphs
+      createEasyViewsOverTimeChart(container, startDate, endDate) {
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'easy-views-time';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Views Over Time (All Platforms)';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        // Combine all videos from all platforms
+        const allVideos = [];
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          const data = this.easyGraphsData[platform];
+          if (data && data.videos) {
+            const monthVideos = data.videos.filter(v => 
+              v.date >= startDate && v.date <= endDate
+            );
+            allVideos.push(...monthVideos.map(v => ({ ...v, platform })));
+          }
+        });
+        
+        allVideos.sort((a, b) => a.date - b.date);
+        
+        const ctx = canvas.getContext('2d');
+        
+        this.chartInstances['easy-views-time'] = new Chart(ctx, {
+          type: 'scatter',
+          data: {
+            datasets: [{
+              label: 'Views',
+              data: allVideos.map(v => ({ x: v.date, y: v.views || 0 })),
+              borderColor: '#00d2d3',
+              backgroundColor: 'rgba(0, 210, 211, 0.7)',
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                callbacks: {
+                  label: (context) => 'Views: ' + this.formatNumber(context.parsed.y)
+                }
+              }
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'day',
+                  displayFormats: { day: 'MMM d' }
+                },
+                ticks: { color: '#0f0', font: { family: 'monospace' } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create followers chart for easy graphs
+      createEasyFollowersChart(container, startDate, endDate) {
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'easy-followers';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Followers/Subscribers Growth';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        // Get followers data from each platform
+        const datasets = [];
+        const platformColors = {
+          instagram: { border: '#E1306C', bg: 'rgba(225, 48, 108, 0.3)' },
+          tiktok: { border: '#00f2ea', bg: 'rgba(0, 242, 234, 0.3)' },
+          youtube: { border: '#FF0000', bg: 'rgba(255, 0, 0, 0.3)' }
+        };
+        
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          const data = this.easyGraphsData[platform];
+          if (data && data.followersHistory) {
+            const monthHistory = data.followersHistory
+              .filter(h => h.date >= startDate && h.date <= endDate)
+              .sort((a, b) => a.date - b.date);
+            
+            if (monthHistory.length > 0) {
+              datasets.push({
+                label: platform.charAt(0).toUpperCase() + platform.slice(1),
+                data: monthHistory.map(h => ({ x: h.date, y: h.value })),
+                borderColor: platformColors[platform].border,
+                backgroundColor: platformColors[platform].bg,
+                borderWidth: 2,
+                tension: 0.3,
+                fill: false
+              });
+            }
+          }
+        });
+        
+        if (datasets.length > 0) {
+          const ctx = canvas.getContext('2d');
+          
+          this.chartInstances['easy-followers'] = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              aspectRatio: 2.5,
+              plugins: {
+                legend: {
+                  display: true,
+                  labels: {
+                    color: '#0f0',
+                    font: { family: 'monospace' }
+                  }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  titleColor: '#0f0',
+                  bodyColor: '#0f0',
+                  callbacks: {
+                    label: (context) => context.dataset.label + ': ' + this.formatNumber(context.parsed.y)
+                  }
+                }
+              },
+              scales: {
+                x: {
+                  type: 'time',
+                  time: {
+                    unit: 'day',
+                    displayFormats: { day: 'MMM d' }
+                  },
+                  ticks: { color: '#0f0', font: { family: 'monospace' } },
+                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                },
+                y: {
+                  ticks: {
+                    color: '#0f0',
+                    font: { family: 'monospace' },
+                    callback: (value) => this.formatNumber(value)
+                  },
+                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                }
+              }
+            }
+          });
+        }
+      },
+      
+      // Export client report as PDF
+      async exportClientReport() {
+        const monthName = this.currentEasyGraphsMonth;
+        const year = this.currentEasyGraphsYear;
+        const filename = `${monthName}_${year}_analytics_for_MoonMedia.pdf`;
+        
+        // Create a temporary container for the export
+        const exportContainer = document.createElement('div');
+        exportContainer.style.position = 'absolute';
+        exportContainer.style.left = '-9999px';
+        exportContainer.style.background = '#000';
+        exportContainer.style.padding = '20px';
+        exportContainer.style.width = '800px';
+        document.body.appendChild(exportContainer);
+        
+        // Clone the charts section
+        const chartsClone = document.getElementById('easyGraphsContainer').cloneNode(true);
+        
+        // Remove the export button from clone
+        const exportBtns = chartsClone.querySelectorAll('.looks-good-btn, .export-section');
+        exportBtns.forEach(btn => btn.remove());
+        
+        exportContainer.appendChild(chartsClone);
+        
+        try {
+          // Use html2canvas if available, otherwise use a simpler approach
+          if (typeof html2canvas !== 'undefined') {
+            const canvas = await html2canvas(exportContainer, {
+              backgroundColor: '#000000',
+              scale: 2
+            });
+            
+            const imgData = canvas.toDataURL('image/png');
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.download = filename.replace('.pdf', '.png');
+            link.href = imgData;
+            link.click();
+          } else {
+            // Fallback: export charts as images
+            alert(`Export feature: In a full implementation, this would generate "${filename}"\n\nTo enable PDF export, add html2canvas and jsPDF libraries.`);
+            
+            // Export each chart individually
+            Object.keys(this.chartInstances).forEach(chartId => {
+              if (chartId.startsWith('easy-')) {
+                const chart = this.chartInstances[chartId];
+                if (chart) {
+                  const imageUrl = chart.toBase64Image();
+                  const link = document.createElement('a');
+                  link.download = `${monthName}_${year}_${chartId}.png`;
+                  link.href = imageUrl;
+                  link.click();
+                }
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Export error:', error);
+          alert('Export failed. Charts have been downloaded individually.');
+        } finally {
+          document.body.removeChild(exportContainer);
+        }
       },
       
       // Platform selection
@@ -771,7 +1359,7 @@
         this.selectedPlatform = platform;
         this.isAllPlatforms = (platform === 'all');
         
-        document.getElementById('step0').classList.add('hidden');
+        document.getElementById('step0Custom').classList.add('hidden');
         
         if (this.isAllPlatforms) {
           // Show loading while fetching data to determine date range
@@ -1523,7 +2111,8 @@
         let followersByTimestamp = {};
         let likesByTimestamp = {};
         
-        // Track last known likes value for each account for cumulative calculation
+        // Track last known values for each account for cumulative calculation
+        let lastKnownFollowersByAccount = {};
         let lastKnownLikesByAccount = {};
         
         accounts.forEach(sheetName => {
@@ -1533,6 +2122,7 @@
           totalPosts += data.postsScraped;
           allVideos = allVideos.concat(data.videos);
           
+          // For followers, store per-account values to enable cumulative calculation
           data.followersHistory.forEach(item => {
             if (!this.isValidDate(item.date)) return;
             
@@ -1540,12 +2130,10 @@
             if (!followersByTimestamp[dateKey]) {
               followersByTimestamp[dateKey] = { 
                 date: item.date, 
-                total: 0, 
-                accountCount: 0 
+                accountValues: {} 
               };
             }
-            followersByTimestamp[dateKey].total += item.value;
-            followersByTimestamp[dateKey].accountCount += 1;
+            followersByTimestamp[dateKey].accountValues[sheetName] = item.value;
           });
           
           // For likes, store per-account values to enable cumulative calculation
@@ -1565,12 +2153,41 @@
         
         const totalAccountCount = accounts.length;
         
-        // Followers: only include timestamps where ALL accounts have data (as per exception)
-        const followersHistory = Object.values(followersByTimestamp)
-          .filter(item => item.accountCount === totalAccountCount)
-          .map(item => ({ date: item.date, value: item.total }))
-          .filter(item => this.isValidDate(item.date) && item.value > 0)
+        // Followers: include ALL timestamps, using last known value for missing accounts
+        // Sort timestamps chronologically first
+        const sortedFollowersTimestamps = Object.values(followersByTimestamp)
+          .filter(item => this.isValidDate(item.date))
           .sort((a, b) => a.date - b.date);
+        
+        // Build cumulative total followers history
+        const followersHistory = [];
+        accounts.forEach(acc => { lastKnownFollowersByAccount[acc] = 0; });
+        
+        sortedFollowersTimestamps.forEach(item => {
+          // Update last known values for accounts that have data at this timestamp
+          Object.keys(item.accountValues).forEach(acc => {
+            const newValue = item.accountValues[acc];
+            const lastValue = lastKnownFollowersByAccount[acc];
+            
+            // Check for abnormal drops (50%+ drop is considered invalid)
+            if (lastValue > 0 && newValue < lastValue * 0.5) {
+              // Skip this value, keep the previous one
+              return;
+            }
+            
+            lastKnownFollowersByAccount[acc] = newValue;
+          });
+          
+          // Sum all last known values (ensures cumulative behavior)
+          const cumulativeTotal = Object.values(lastKnownFollowersByAccount).reduce((sum, val) => sum + val, 0);
+          
+          if (cumulativeTotal > 0) {
+            followersHistory.push({
+              date: item.date,
+              value: cumulativeTotal
+            });
+          }
+        });
         
         // Total Likes: include ALL timestamps, using last known value for missing accounts
         // Sort timestamps chronologically first
@@ -1660,11 +2277,34 @@
       interpolateHistoricalData(historyArray) {
         if (historyArray.length === 0) return historyArray;
         
-        const interpolated = historyArray.map((item, idx) => ({
-          ...item,
-          index: idx,
-          needsInterp: item.value === 0 || item.value === null || item.value === undefined
-        }));
+        // First pass: mark items that need interpolation (0, null, undefined, or abnormal drops)
+        const interpolated = historyArray.map((item, idx, arr) => {
+          let needsInterp = item.value === 0 || item.value === null || item.value === undefined;
+          
+          // Also check for abnormal drops (50%+ drop from previous valid value)
+          if (!needsInterp && idx > 0) {
+            // Find the previous valid value
+            let prevValidValue = null;
+            for (let j = idx - 1; j >= 0; j--) {
+              const prevVal = arr[j].value;
+              if (prevVal > 0 && prevVal !== null && prevVal !== undefined) {
+                prevValidValue = prevVal;
+                break;
+              }
+            }
+            
+            // If there's a 50%+ drop, consider it invalid
+            if (prevValidValue !== null && item.value < prevValidValue * 0.5) {
+              needsInterp = true;
+            }
+          }
+          
+          return {
+            ...item,
+            index: idx,
+            needsInterp: needsInterp
+          };
+        });
         
         let i = 0;
         while (i < interpolated.length) {
