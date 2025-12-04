@@ -408,7 +408,8 @@ class InstagramScraper:
     def dismiss_modal(self, driver, max_attempts=3):
         """
         Dismiss Instagram login/signup modal by clicking X button.
-        Returns True if modal was dismissed, False otherwise.
+        If it's a login modal that can't be dismissed, attempt to log in.
+        Returns True if modal was dismissed or login successful, False otherwise.
         """
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
@@ -418,6 +419,27 @@ class InstagramScraper:
         
         for attempt in range(max_attempts):
             try:
+                # First check if this is a login form that requires login
+                login_form_detected = False
+                try:
+                    # Check for login form elements
+                    login_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Log in') or contains(text(), 'Log In')]")
+                    username_fields = driver.find_elements(By.NAME, "username")
+                    
+                    if (login_buttons and any(btn.is_displayed() for btn in login_buttons)) or \
+                       (username_fields and any(field.is_displayed() for field in username_fields)):
+                        login_form_detected = True
+                except:
+                    pass
+                
+                if login_form_detected:
+                    print("  🔐 Login form detected - attempting login...")
+                    if self.perform_inline_login(driver):
+                        print("  ✅ Login successful!")
+                        return True
+                    else:
+                        print("  ⚠️ Login attempt failed, trying to dismiss modal...")
+                
                 # Common selectors for the X/close button on Instagram modals
                 close_button_selectors = [
                     # SVG close button (most common)
@@ -434,6 +456,9 @@ class InstagramScraper:
                     "//button[contains(text(), 'Not now')]",
                     "//div[contains(text(), 'Not Now')]",
                     "//div[contains(text(), 'Not now')]",
+                    # Save info button (dismiss save login prompt)
+                    "//button[contains(text(), 'Save Info')]",
+                    "//button[contains(text(), 'Save info')]",
                 ]
                 
                 for selector in close_button_selectors:
@@ -470,6 +495,158 @@ class InstagramScraper:
         
         print("  ⚠️ Could not dismiss modal after all attempts")
         return False
+    
+    def perform_inline_login(self, driver):
+        """
+        Perform login when a login modal/form is detected inline (not navigating to login page).
+        Uses credentials from INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD.
+        Returns True if login successful, False otherwise.
+        """
+        from selenium.common.exceptions import NoSuchElementException
+        
+        try:
+            # Find username field and enter credentials
+            username_selectors = [
+                "//input[@name='username']",
+                "//input[@aria-label='Phone number, username, or email']",
+                "//input[contains(@placeholder, 'username')]",
+                "//input[contains(@placeholder, 'Username')]",
+            ]
+            
+            username_field = None
+            for selector in username_selectors:
+                try:
+                    fields = driver.find_elements(By.XPATH, selector)
+                    for field in fields:
+                        if field.is_displayed():
+                            username_field = field
+                            break
+                    if username_field:
+                        break
+                except:
+                    continue
+            
+            if not username_field:
+                print("    ❌ Could not find username field")
+                return False
+            
+            # Clear and enter username
+            username_field.clear()
+            time.sleep(0.3)
+            username_field.send_keys(INSTAGRAM_USERNAME)
+            print(f"    📝 Entered username: {INSTAGRAM_USERNAME}")
+            time.sleep(0.5)
+            
+            # Find password field
+            password_selectors = [
+                "//input[@name='password']",
+                "//input[@type='password']",
+                "//input[@aria-label='Password']",
+            ]
+            
+            password_field = None
+            for selector in password_selectors:
+                try:
+                    fields = driver.find_elements(By.XPATH, selector)
+                    for field in fields:
+                        if field.is_displayed():
+                            password_field = field
+                            break
+                    if password_field:
+                        break
+                except:
+                    continue
+            
+            if not password_field:
+                print("    ❌ Could not find password field")
+                return False
+            
+            # Clear and enter password
+            password_field.clear()
+            time.sleep(0.3)
+            password_field.send_keys(INSTAGRAM_PASSWORD)
+            print("    📝 Entered password: ********")
+            time.sleep(0.5)
+            
+            # Find and click login button
+            login_button_selectors = [
+                "//button[@type='submit']",
+                "//button[contains(text(), 'Log in')]",
+                "//button[contains(text(), 'Log In')]",
+                "//div[@role='button'][contains(text(), 'Log in')]",
+            ]
+            
+            login_button = None
+            for selector in login_button_selectors:
+                try:
+                    buttons = driver.find_elements(By.XPATH, selector)
+                    for btn in buttons:
+                        if btn.is_displayed() and btn.is_enabled():
+                            login_button = btn
+                            break
+                    if login_button:
+                        break
+                except:
+                    continue
+            
+            if not login_button:
+                print("    ❌ Could not find login button")
+                return False
+            
+            # Click login button
+            login_button.click()
+            print("    ⏳ Logging in...")
+            time.sleep(5)
+            
+            # Handle "Save Login Info" popup if it appears
+            try:
+                save_info_selectors = [
+                    "//button[contains(text(), 'Save Info')]",
+                    "//button[contains(text(), 'Save info')]",
+                    "//button[contains(text(), 'Not Now')]",
+                    "//button[contains(text(), 'Not now')]",
+                ]
+                for selector in save_info_selectors:
+                    try:
+                        btn = driver.find_element(By.XPATH, selector)
+                        if btn.is_displayed():
+                            btn.click()
+                            print("    ✅ Dismissed 'Save Info' popup")
+                            time.sleep(2)
+                            break
+                    except:
+                        continue
+            except:
+                pass
+            
+            # Verify login was successful
+            time.sleep(2)
+            
+            # Check if we're still on login page (error)
+            if "/accounts/login" in driver.current_url:
+                print("    ❌ Login failed - still on login page")
+                return False
+            
+            # Check if login form is still visible
+            try:
+                still_has_login = False
+                login_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Log in') or contains(text(), 'Log In')]")
+                for btn in login_buttons:
+                    if btn.is_displayed():
+                        still_has_login = True
+                        break
+                
+                if still_has_login:
+                    print("    ❌ Login button still visible - login may have failed")
+                    return False
+            except:
+                pass
+            
+            return True
+            
+        except Exception as e:
+            print(f"    ❌ Login error: {e}")
+            return False
 
     def login_to_instagram(self, driver):
         """
@@ -1108,11 +1285,12 @@ class InstagramScraper:
         Arrow scrape method - click first reel and use arrow keys to navigate.
         More reliable than visiting individual URLs (avoids 429 rate limits).
         
-        1. Go to /reels/ page, click first reel
-        2. Navigate through reels using right arrow key
-        3. Extract date info from each reel
-        4. If /reels/ fails, fallback to main profile page (fresh start)
-        5. Keep reels data as backup for cross-validation
+        Tries multiple methods for each page:
+        1. Standard click
+        2. Hover first + click  
+        3. JavaScript click
+        
+        Falls back from /reels/ to main page if needed.
         """
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.common.action_chains import ActionChains
@@ -1127,199 +1305,106 @@ class InstagramScraper:
         arrow_data = {}  # reel_id -> date data
         reels_page_data = {}  # Keep reels page data as backup
         
-        # Try /reels/ page first, then main profile as fallback
-        pages_to_try = [
-            f"https://www.instagram.com/{username}/reels/",
-            f"https://www.instagram.com/{username}/"
+        # Define methods to try for clicking posts
+        click_methods = [
+            ("standard click", self._click_standard),
+            ("hover first + click", self._click_hover_first),
+            ("JavaScript click", self._click_javascript),
         ]
         
-        for page_url in pages_to_try:
+        # Try /reels/ page first, then main profile as fallback
+        pages_to_try = [
+            (f"https://www.instagram.com/{username}/reels/", "reels"),
+            (f"https://www.instagram.com/{username}/", "main")
+        ]
+        
+        method_number = 0
+        for page_url, page_type in pages_to_try:
             if len(arrow_data) >= len(reel_ids_needed):
                 break  # Already got all dates
-            
-            page_type = "reels" if "/reels/" in page_url else "main"
-            print(f"    📄 Trying {page_type} page...")
             
             # Save reels page data before trying main page
             if page_type == "main" and arrow_data:
                 reels_page_data = arrow_data.copy()
                 print(f"    📦 Keeping {len(reels_page_data)} dates from reels page as backup")
             
-            try:
-                # Use shorter timeout for page load to avoid long hangs
-                driver.set_page_load_timeout(20)  # 20 second timeout (reduced from 30)
+            # Try each click method for this page
+            for method_name, click_func in click_methods:
+                method_number += 1
+                
+                if len(arrow_data) >= len(reel_ids_needed):
+                    break  # Already got all dates
+                
+                print(f"\n📍 METHOD {method_number}: /{page_type}/ page - {method_name}")
+                print("-" * 50)
                 
                 try:
-                    driver.get(page_url)
-                except Exception as timeout_err:
-                    if "timeout" in str(timeout_err).lower():
-                        print(f"    ⏱️ Timeout loading {page_type} page - skipping to next method...")
-                        # Reset timeout and try recovery
-                        driver.set_page_load_timeout(120)
-                        try:
-                            driver.get("about:blank")
-                            time.sleep(1)
-                        except:
-                            pass
-                        continue
-                    raise timeout_err
-                
-                time.sleep(4)  # Wait for page to load
-                
-                # Reset to normal timeout
-                driver.set_page_load_timeout(120)
-                
-                # Dismiss any modals
-                self.dismiss_modal(driver, max_attempts=2)
-                
-                # Find first clickable reel
-                post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
-                
-                if not post_links:
-                    # Try also looking for regular posts
-                    post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
-                
-                if not post_links:
-                    print(f"    ⚠️ No posts found on {page_type} page")
-                    continue
-                
-                print(f"    ✅ Found {len(post_links)} posts on page")
-                
-                # For main page: hover first, then click (proven method from Option 4)
-                first_post = post_links[0]
-                first_post_url = first_post.get_attribute('href')
-                print(f"    🖱️ Clicking first post...")
-                
-                # Hover over first post before clicking (helps with detection)
-                try:
-                    ActionChains(driver).move_to_element(first_post).perform()
-                    time.sleep(0.5)
-                except:
-                    pass
-                
-                # Try clicking with JS fallback (more reliable on main page)
-                try:
-                    first_post.click()
-                except:
-                    # Try JavaScript click as fallback
-                    print(f"    ⚠️ Click failed, trying JS fallback...")
-                    driver.execute_script("arguments[0].click();", first_post)
-                
-                time.sleep(3)  # Wait for modal to load
-                
-                # Now navigate through posts using arrow keys
-                body = driver.find_element(By.TAG_NAME, "body")
-                posts_processed = 0
-                consecutive_misses = 0
-                consecutive_no_dates = 0  # Track consecutive posts with no date found
-                max_consecutive_misses = 50  # Increased to allow more posts without matches
-                max_posts = min(len(hover_data) + 200, 2000)  # Limit to reasonable amount
-                
-                print(f"    🔄 Navigating through posts...")
-                
-                while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
-                    # Wait for content to load
-                    time.sleep(1.5)
+                    # Navigate to page
+                    print(f"    Navigating to {page_type} page...")
+                    driver.set_page_load_timeout(20)
                     
-                    # Extract current reel ID from URL
-                    current_url = driver.current_url
-                    current_reel_id = None
-                    
-                    if '/reel/' in current_url:
-                        current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
-                    elif '/p/' in current_url:
-                        # This is a regular post, not a reel
-                        current_reel_id = None
-                    
-                    # Extract date for all posts (for debugging)
-                    date_info = self.extract_date_from_current_view(driver)
-                    
-                    # Show verbose output for debugging
-                    if verbose and posts_processed < 20:  # Show first 20 posts
-                        in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
-                        date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
-                        print(f"      [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str}")
-                    
-                    # If we get 3 consecutive NO DATE on reels page, break and try main page
-                    if page_type == "reels" and not date_info.get('date'):
-                        consecutive_no_dates = consecutive_no_dates + 1 if 'consecutive_no_dates' in dir() else 1
-                        if consecutive_no_dates >= 3:
-                            print(f"    ⚠️ 3 consecutive NO DATE - switching to main page...")
-                            body.send_keys(Keys.ESCAPE)
-                            time.sleep(1)
-                            break
-                    else:
-                        consecutive_no_dates = 0
-                    
-                    if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
-                        if date_info.get('date'):
-                            arrow_data[current_reel_id] = date_info
-                            consecutive_misses = 0
-                            
-                            if test_mode:
-                                print(f"    ✅ [{len(arrow_data)}/{len(reel_ids_needed)}] {current_reel_id}: {date_info.get('date_display', 'N/A')}")
-                            elif len(arrow_data) % 10 == 0:
-                                print(f"    Progress: {len(arrow_data)}/{len(reel_ids_needed)} dates collected...")
-                        else:
-                            consecutive_misses += 1
-                    elif current_reel_id and current_reel_id not in reel_ids_needed:
-                        # Not a match but still found a reel
-                        consecutive_misses += 1
-                    else:
-                        consecutive_misses += 1
-                    
-                    # Navigate to next post
-                    body.send_keys(Keys.ARROW_RIGHT)
-                    posts_processed += 1
-                    
-                    # Progress update every 50 posts
-                    if posts_processed % 50 == 0:
-                        print(f"    📊 Processed {posts_processed} posts, found {len(arrow_data)} matches...")
-                    
-                    # Check if we've collected all needed dates
-                    if len(arrow_data) >= len(reel_ids_needed):
-                        print(f"    ✅ Collected all {len(arrow_data)} dates!")
-                        break
-                
-                # Close the modal/overlay by pressing Escape
-                try:
-                    body.send_keys(Keys.ESCAPE)
-                    time.sleep(1)
-                except:
-                    pass
-                
-                print(f"    📊 Collected {len(arrow_data)} dates from {page_type} page (processed {posts_processed} posts)")
-                
-            except Exception as e:
-                import traceback
-                error_msg = str(e)
-                
-                # Check if this is a timeout error
-                if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                    print(f"    ⏱️ Timeout on {page_type} page - trying recovery...")
-                    
-                    # Try to recover: navigate to a simple page first
                     try:
-                        driver.set_page_load_timeout(15)  # Short timeout
-                        driver.get("about:blank")
-                        time.sleep(1)
-                        driver.set_page_load_timeout(120)  # Reset timeout
+                        driver.get(page_url)
+                    except Exception as timeout_err:
+                        if "timeout" in str(timeout_err).lower():
+                            print(f"    ⏱️ Timeout - trying next method...")
+                            driver.set_page_load_timeout(120)
+                            try:
+                                driver.get("about:blank")
+                                time.sleep(1)
+                            except:
+                                pass
+                            continue
+                        raise timeout_err
+                    
+                    time.sleep(4)
+                    driver.set_page_load_timeout(120)
+                    
+                    # Dismiss any modals
+                    self.dismiss_modal(driver, max_attempts=2)
+                    
+                    # Find posts
+                    post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/')]")
+                    if not post_links:
+                        post_links = driver.find_elements(By.XPATH, "//a[contains(@href, '/reel/') or contains(@href, '/p/')]")
+                    
+                    if not post_links:
+                        print(f"    ⚠️ No posts found - trying next method...")
+                        continue
+                    
+                    print(f"    ✅ Found {len(post_links)} posts")
+                    
+                    # Try to click first post using the selected method
+                    first_post = post_links[0]
+                    print(f"    🖱️ {'Hovering over' if 'hover' in method_name else 'Clicking'} first post...")
+                    
+                    click_success = click_func(driver, first_post)
+                    
+                    if not click_success:
+                        print(f"    ⚠️ Click failed - trying next method...")
+                        continue
+                    
+                    time.sleep(3)
+                    
+                    # Navigate through posts and collect dates
+                    dates_found = self._navigate_and_collect_dates(
+                        driver, reel_ids_needed, arrow_data, len(reel_ids_needed), verbose
+                    )
+                    
+                    print(f"    📊 METHOD {method_number} result: {dates_found}/{len(reel_ids_needed)} dates ({100*dates_found/max(1,len(reel_ids_needed)):.0f}%)")
+                    
+                    # If we got a decent number of dates, move on
+                    if dates_found >= len(reel_ids_needed) * 0.8:
+                        break
                         
-                        # If we have reels data, we can continue with it
-                        if reels_page_data:
-                            print(f"    ✅ Using {len(reels_page_data)} dates from reels page backup")
-                            arrow_data = reels_page_data
-                        
-                    except:
-                        pass
-                else:
-                    print(f"    ❌ Error on {page_type} page: {error_msg[:60]}")
-                
-                if verbose:
-                    traceback.print_exc()
-                continue
+                except Exception as e:
+                    import traceback
+                    print(f"    ❌ Error: {str(e)[:60]}")
+                    if verbose:
+                        traceback.print_exc()
+                    continue
         
-        # Cross-validate if we have data from both reels and main pages
+        # Cross-validate and merge if we have data from both reels and main pages
         if reels_page_data and arrow_data != reels_page_data:
             # Check for overlapping reel_ids and validate dates match
             overlap = set(reels_page_data.keys()) & set(arrow_data.keys())
@@ -1363,6 +1448,148 @@ class InstagramScraper:
         print(f"  📊 Arrow scrape complete: {dates_found}/{len(hover_data)} dates found")
         
         return url_data
+    
+    def _click_standard(self, driver, element):
+        """Standard click method"""
+        try:
+            element.click()
+            return True
+        except:
+            return False
+    
+    def _click_hover_first(self, driver, element):
+        """Hover over element first, then click"""
+        from selenium.webdriver.common.action_chains import ActionChains
+        try:
+            print(f"    🖱️ Hovering over first post...")
+            ActionChains(driver).move_to_element(element).perform()
+            time.sleep(0.5)
+            print(f"    🖱️ Clicking first post...")
+            try:
+                element.click()
+                return True
+            except:
+                # Try JavaScript fallback
+                print(f"    ⚠️ Click failed, trying JS fallback...")
+                driver.execute_script("arguments[0].click();", element)
+                return True
+        except Exception as e:
+            print(f"    ❌ Hover+click failed: {e}")
+            return False
+    
+    def _click_javascript(self, driver, element):
+        """JavaScript click method"""
+        try:
+            driver.execute_script("arguments[0].click();", element)
+            return True
+        except:
+            return False
+    
+    def _navigate_and_collect_dates(self, driver, reel_ids_needed, arrow_data, target_count, verbose=True):
+        """Navigate through posts using arrow keys and collect dates"""
+        from selenium.webdriver.common.keys import Keys
+        
+        print(f"    🔄 Navigating through posts (target: {target_count})...")
+        
+        body = driver.find_element(By.TAG_NAME, "body")
+        posts_processed = 0
+        consecutive_no_dates = 0
+        consecutive_misses = 0
+        max_posts = min(target_count + 200, 2000)
+        max_consecutive_misses = 50
+        initial_arrow_data_count = len(arrow_data)
+        
+        while posts_processed < max_posts and consecutive_misses < max_consecutive_misses:
+            # Wait for content to load
+            time.sleep(1.5)
+            
+            # Extract current reel ID from URL
+            current_url = driver.current_url
+            current_reel_id = None
+            
+            if '/reel/' in current_url:
+                current_reel_id = current_url.split('/reel/')[-1].rstrip('/').split('?')[0]
+            elif '/p/' in current_url:
+                current_reel_id = None
+            
+            # Extract date
+            date_info = self.extract_date_from_current_view(driver)
+            
+            # Show verbose output
+            if verbose:
+                in_list = "✓" if current_reel_id and current_reel_id in reel_ids_needed else "✗"
+                date_str = date_info.get('date_display', 'N/A') if date_info.get('date') else 'NO DATE'
+                print(f"  [{posts_processed+1}] {current_reel_id or 'POST'} [{in_list}] → {date_str} ({len(arrow_data)}/{target_count} dates)")
+            
+            # If we get NO DATE, check for login modal
+            if not date_info.get('date'):
+                consecutive_no_dates += 1
+                
+                if consecutive_no_dates >= 3:
+                    # Check for login form/modal
+                    try:
+                        login_forms = driver.find_elements(By.NAME, "username")
+                        login_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Log in') or contains(text(), 'Log In')]")
+                        
+                        if (login_forms and any(f.is_displayed() for f in login_forms)) or \
+                           (login_buttons and any(b.is_displayed() for b in login_buttons)):
+                            print(f"    🔐 Login required detected - attempting login...")
+                            if self.perform_inline_login(driver):
+                                print(f"    ✅ Login successful! Continuing navigation...")
+                                consecutive_no_dates = 0
+                                time.sleep(3)
+                                continue
+                            else:
+                                print(f"    ❌ Login failed")
+                                break
+                    except:
+                        pass
+                    
+                    # Try to dismiss any modal
+                    self.dismiss_modal(driver, max_attempts=1)
+                
+                if consecutive_no_dates >= 10:
+                    print(f"  ❌ Failed after {consecutive_no_dates} consecutive NO DATE - trying next method...")
+                    try:
+                        body.send_keys(Keys.ESCAPE)
+                    except:
+                        pass
+                    break
+            else:
+                consecutive_no_dates = 0
+            
+            # Save date if this is a reel we need
+            if current_reel_id and current_reel_id in reel_ids_needed and current_reel_id not in arrow_data:
+                if date_info.get('date'):
+                    arrow_data[current_reel_id] = date_info
+                    consecutive_misses = 0
+                else:
+                    consecutive_misses += 1
+            elif current_reel_id:
+                consecutive_misses += 1
+            else:
+                consecutive_misses += 1
+            
+            # Navigate to next post
+            try:
+                body.send_keys(Keys.ARROW_RIGHT)
+            except:
+                break
+            posts_processed += 1
+            
+            # Check if we've collected all needed dates
+            if len(arrow_data) >= target_count:
+                print(f"    ✅ Collected all {len(arrow_data)} dates!")
+                break
+        
+        # Close the modal/overlay
+        try:
+            body.send_keys(Keys.ESCAPE)
+            time.sleep(1)
+        except:
+            pass
+        
+        return len(arrow_data) - initial_arrow_data_count
 
     def extract_date_from_current_view(self, driver):
         """Extract date and other info from the currently displayed reel/post using multiple methods"""
