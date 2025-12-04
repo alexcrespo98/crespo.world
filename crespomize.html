@@ -1760,19 +1760,39 @@
               allUniqueVideoIds.add(videoId);
             }
             
-            for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
-              const cellValue = row[colIdx];
-              
-              if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+            // For views and likes, use the HIGHEST value across all scrapes
+            // (since they should never decrease - if they do, it's a scrape error)
+            const metricLower = metric.toLowerCase();
+            if (metricLower === 'views' || metricLower === 'likes') {
+              let highestValue = 0;
+              for (let colIdx = 1; colIdx < row.length; colIdx++) {
+                const cellValue = parseInt(row[colIdx]) || 0;
+                if (cellValue > highestValue) {
+                  highestValue = cellValue;
+                }
+              }
+              if (highestValue > 0) {
                 if (!allVideosMap.has(videoId)) {
                   allVideosMap.set(videoId, { id: videoId });
                 }
+                allVideosMap.get(videoId)[metric] = highestValue;
+              }
+            } else {
+              // For other metrics, use most recent non-empty value
+              for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
+                const cellValue = row[colIdx];
                 
-                const video = allVideosMap.get(videoId);
-                if (video[metric] === undefined) {
-                  video[metric] = cellValue;
+                if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+                  if (!allVideosMap.has(videoId)) {
+                    allVideosMap.set(videoId, { id: videoId });
+                  }
+                  
+                  const video = allVideosMap.get(videoId);
+                  if (video[metric] === undefined) {
+                    video[metric] = cellValue;
+                  }
+                  break;
                 }
-                break;
               }
             }
           }
@@ -1864,19 +1884,38 @@
               allUniqueVideoIds.add(videoId);
             }
             
-            for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
-              const cellValue = row[colIdx];
-              
-              if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+            // For Views and Likes, use the HIGHEST value across all scrapes
+            // (since they should never decrease - if they do, it's a scrape error)
+            if (metric === 'Views' || metric === 'Likes') {
+              let highestValue = 0;
+              for (let colIdx = 1; colIdx < row.length; colIdx++) {
+                const cellValue = parseInt(row[colIdx]) || 0;
+                if (cellValue > highestValue) {
+                  highestValue = cellValue;
+                }
+              }
+              if (highestValue > 0) {
                 if (!allVideosMap.has(videoId)) {
                   allVideosMap.set(videoId, { id: videoId });
                 }
+                allVideosMap.get(videoId)[metric] = highestValue;
+              }
+            } else {
+              // For other metrics, use most recent non-empty value
+              for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
+                const cellValue = row[colIdx];
                 
-                const video = allVideosMap.get(videoId);
-                if (video[metric] === undefined) {
-                  video[metric] = cellValue;
+                if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+                  if (!allVideosMap.has(videoId)) {
+                    allVideosMap.set(videoId, { id: videoId });
+                  }
+                  
+                  const video = allVideosMap.get(videoId);
+                  if (video[metric] === undefined) {
+                    video[metric] = cellValue;
+                  }
+                  break;
                 }
-                break;
               }
             }
           }
@@ -1975,19 +2014,38 @@
             if (metric === 'date_display') continue;
             
             if (mappedMetric) {
-              for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
-                const cellValue = row[colIdx];
-                
-                if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+              // For views and likes, use the HIGHEST value across all scrapes (since they should never go down)
+              // For other metrics, use the most recent non-empty value
+              if (metric === 'views' || metric === 'likes') {
+                let highestValue = 0;
+                for (let colIdx = 1; colIdx < row.length; colIdx++) {
+                  const cellValue = parseInt(row[colIdx]) || 0;
+                  if (cellValue > highestValue) {
+                    highestValue = cellValue;
+                  }
+                }
+                if (highestValue > 0) {
                   if (!allVideosMap.has(videoId)) {
                     allVideosMap.set(videoId, { id: videoId });
                   }
+                  allVideosMap.get(videoId)[mappedMetric] = highestValue;
+                }
+              } else {
+                // For date, comments, engagement - use most recent non-empty value
+                for (let colIdx = row.length - 1; colIdx >= 1; colIdx--) {
+                  const cellValue = row[colIdx];
                   
-                  const video = allVideosMap.get(videoId);
-                  if (video[mappedMetric] === undefined) {
-                    video[mappedMetric] = cellValue;
+                  if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
+                    if (!allVideosMap.has(videoId)) {
+                      allVideosMap.set(videoId, { id: videoId });
+                    }
+                    
+                    const video = allVideosMap.get(videoId);
+                    if (video[mappedMetric] === undefined) {
+                      video[mappedMetric] = cellValue;
+                    }
+                    break;
                   }
-                  break;
                 }
               }
             }
@@ -1997,6 +2055,7 @@
         // Calculate total likes history using only the most recent scrape data per post
         // First, build a map of video IDs to their likes rows
         const likesRowsMap = new Map();
+        const viewsRowsMap = new Map();
         const postDatesMap = new Map();
         
         for (let i = 1; i < jsonData.length; i++) {
@@ -2007,6 +2066,12 @@
             const parts = rowName.split('_');
             const videoId = parts.slice(1, -1).join('_');
             likesRowsMap.set(videoId, row);
+          }
+          
+          if (rowName && rowName.startsWith('reel_') && rowName.endsWith('_views')) {
+            const parts = rowName.split('_');
+            const videoId = parts.slice(1, -1).join('_');
+            viewsRowsMap.set(videoId, row);
           }
           
           if (rowName && rowName.startsWith('reel_') && rowName.endsWith('_date')) {
@@ -2023,32 +2088,48 @@
           }
         }
         
-        // For each scrape timestamp (column), calculate total likes using only the most recent data per post
+        // Determine which scrape columns have actual post data (not just followers)
+        // Early scrapes may only have follower data, which causes misaligned graphs
+        const columnsWithPostData = new Set();
+        for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+          // Check if any post has data in this column
+          for (const [videoId, likesRow] of likesRowsMap) {
+            if (colIdx + 1 < likesRow.length) {
+              const value = parseInt(likesRow[colIdx + 1]) || 0;
+              if (value > 0) {
+                columnsWithPostData.add(colIdx);
+                break;
+              }
+            }
+          }
+        }
+        
+        // For each scrape timestamp (column), calculate total likes using the HIGHEST value per post
+        // (since likes should never decrease - if they do, it's a scrape error)
         for (let colIdx = 0; colIdx < headers.length; colIdx++) {
           const scrapeDate = new Date(headers[colIdx]);
           if (!this.isValidDate(scrapeDate)) continue;
           
           let columnTotalLikes = 0;
           
-          // For each post, get the most recent likes value up to this column
+          // For each post, get the HIGHEST likes value up to this column
           for (const [videoId, likesRow] of likesRowsMap) {
             const postDate = postDatesMap.get(videoId);
             
             // Only include posts that existed by this scrape date
             if (postDate && postDate <= scrapeDate) {
-              // Find the most recent non-empty likes value for this post up to this column
-              let mostRecentLikes = 0;
-              for (let prevColIdx = colIdx; prevColIdx >= 0; prevColIdx--) {
+              // Find the HIGHEST likes value for this post up to this column
+              let highestLikes = 0;
+              for (let prevColIdx = 0; prevColIdx <= colIdx; prevColIdx++) {
                 // Check array bounds before accessing
                 if (prevColIdx + 1 < likesRow.length) {
                   const value = parseInt(likesRow[prevColIdx + 1]) || 0;
-                  if (value > 0) {
-                    mostRecentLikes = value;
-                    break;
+                  if (value > highestLikes) {
+                    highestLikes = value;
                   }
                 }
               }
-              columnTotalLikes += mostRecentLikes;
+              columnTotalLikes += highestLikes;
             }
           }
           
@@ -2058,6 +2139,26 @@
               value: columnTotalLikes
             });
           }
+        }
+        
+        // Filter follower history to only include dates that have post data
+        // This fixes early scrapes that only had follower data
+        if (columnsWithPostData.size > 0) {
+          const firstPostDataColumnIdx = Math.min(...columnsWithPostData);
+          const firstPostDataDate = new Date(headers[firstPostDataColumnIdx]);
+          
+          // Keep follower data only from dates when we also have post data
+          followersHistory = followersHistory.filter(item => {
+            // Find the column index for this date
+            const dateStr = item.date.toISOString();
+            for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+              const headerDate = new Date(headers[colIdx]);
+              if (headerDate.toISOString() === dateStr) {
+                return columnsWithPostData.has(colIdx) || item.date >= firstPostDataDate;
+              }
+            }
+            return item.date >= firstPostDataDate;
+          });
         }
         
         // Process and clean data
@@ -2111,8 +2212,8 @@
         let followersByTimestamp = {};
         let likesByTimestamp = {};
         
-        // Track last known values for each account for cumulative calculation
-        let lastKnownFollowersByAccount = {};
+        // Track highest known values for each account (followers should never decrease)
+        let highestKnownFollowersByAccount = {};
         let lastKnownLikesByAccount = {};
         
         accounts.forEach(sheetName => {
@@ -2153,39 +2254,57 @@
         
         const totalAccountCount = accounts.length;
         
-        // Followers: include ALL timestamps, using last known value for missing accounts
+        // Followers: include ALL timestamps, using highest known value for each account
         // Sort timestamps chronologically first
         const sortedFollowersTimestamps = Object.values(followersByTimestamp)
           .filter(item => this.isValidDate(item.date))
           .sort((a, b) => a.date - b.date);
         
-        // Build cumulative total followers history
+        // Build cumulative total followers history using HIGHEST values
+        // (since followers should never decrease - lower values are scrape errors)
         const followersHistory = [];
-        accounts.forEach(acc => { lastKnownFollowersByAccount[acc] = 0; });
+        accounts.forEach(acc => { highestKnownFollowersByAccount[acc] = 0; });
         
+        // First pass: determine the highest value each account ever reaches
         sortedFollowersTimestamps.forEach(item => {
-          // Update last known values for accounts that have data at this timestamp
           Object.keys(item.accountValues).forEach(acc => {
             const newValue = item.accountValues[acc];
-            const lastValue = lastKnownFollowersByAccount[acc];
-            
-            // Check for abnormal drops (50%+ drop is considered invalid)
-            if (lastValue > 0 && newValue < lastValue * 0.5) {
-              // Skip this value, keep the previous one
-              return;
+            if (newValue > highestKnownFollowersByAccount[acc]) {
+              highestKnownFollowersByAccount[acc] = newValue;
             }
-            
-            lastKnownFollowersByAccount[acc] = newValue;
+          });
+        });
+        
+        // Reset for second pass
+        const currentFollowersByAccount = {};
+        accounts.forEach(acc => { currentFollowersByAccount[acc] = 0; });
+        
+        // Second pass: build history using highest value seen UP TO each timestamp
+        sortedFollowersTimestamps.forEach(item => {
+          // Update current values for accounts that have data at this timestamp
+          // Only update if the new value is higher (followers shouldn't decrease)
+          Object.keys(item.accountValues).forEach(acc => {
+            const newValue = item.accountValues[acc];
+            if (newValue > currentFollowersByAccount[acc]) {
+              currentFollowersByAccount[acc] = newValue;
+            }
           });
           
-          // Sum all last known values (ensures cumulative behavior)
-          const cumulativeTotal = Object.values(lastKnownFollowersByAccount).reduce((sum, val) => sum + val, 0);
+          // Sum all current values
+          const cumulativeTotal = Object.values(currentFollowersByAccount).reduce((sum, val) => sum + val, 0);
           
-          if (cumulativeTotal > 0) {
-            followersHistory.push({
-              date: item.date,
-              value: cumulativeTotal
-            });
+          // Only add if we have a meaningful total and at least some accounts have data
+          const accountsWithData = Object.values(currentFollowersByAccount).filter(v => v > 0).length;
+          
+          if (cumulativeTotal > 0 && accountsWithData > 0) {
+            // Check if this is significantly different from the last entry to avoid duplicates
+            const lastEntry = followersHistory[followersHistory.length - 1];
+            if (!lastEntry || lastEntry.value !== cumulativeTotal) {
+              followersHistory.push({
+                date: item.date,
+                value: cumulativeTotal
+              });
+            }
           }
         });
         
