@@ -915,20 +915,26 @@
         
         const now = new Date();
         
+        // Constants for week calculations
+        const DAYS_IN_WEEK = 7;
+        const SUNDAY_INDEX = 0;
+        const DAYS_FROM_SUNDAY_TO_MONDAY = 6;
+        
         // Get the start of the current week (Monday)
         const currentWeekStart = new Date(now);
         const dayOfWeek = now.getDay();
-        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday = 0, so 6 days back to Monday
+        // If today is Sunday (0), go back 6 days to Monday; otherwise go back (dayOfWeek - 1) days
+        const daysToMonday = dayOfWeek === SUNDAY_INDEX ? DAYS_FROM_SUNDAY_TO_MONDAY : dayOfWeek - 1;
         currentWeekStart.setDate(now.getDate() - daysToMonday);
         currentWeekStart.setHours(0, 0, 0, 0);
         
         // Add current week and previous 12 weeks
         for (let i = 0; i <= 12; i++) {
           const weekStart = new Date(currentWeekStart);
-          weekStart.setDate(weekStart.getDate() - (i * 7));
+          weekStart.setDate(weekStart.getDate() - (i * DAYS_IN_WEEK));
           
           const weekEnd = new Date(weekStart);
-          weekEnd.setDate(weekEnd.getDate() + 6);
+          weekEnd.setDate(weekEnd.getDate() + (DAYS_IN_WEEK - 1));
           weekEnd.setHours(23, 59, 59, 999);
           
           const value = weekStart.toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -1000,13 +1006,29 @@
           }
         });
         
+        // Account name normalization patterns
+        const ACCOUNT_PREFIX_PATTERNS = /^(the_?|official_?)/i;
+        const ACCOUNT_SUFFIX_PATTERNS = /(_?official|_?tv|_?shorts|_?reels|_?yt|_?ig|_?tt)$/i;
+        const ACCOUNT_SEPARATOR_PATTERN = /[._-]/g;
+        const MIN_MATCH_LENGTH = 3; // Minimum length for substring matching to avoid false positives
+        
         // Normalize account name for matching (lowercase, remove common prefixes/suffixes)
         const normalizeAccountName = (name) => {
           return name.toLowerCase()
-            .replace(/^(the_?|official_?)/i, '')
-            .replace(/(_?official|_?tv|_?shorts|_?reels|_?yt|_?ig|_?tt)$/i, '')
-            .replace(/[._-]/g, '')
+            .replace(ACCOUNT_PREFIX_PATTERNS, '')
+            .replace(ACCOUNT_SUFFIX_PATTERNS, '')
+            .replace(ACCOUNT_SEPARATOR_PATTERN, '')
             .trim();
+        };
+        
+        // Check if two normalized names match (with minimum length threshold)
+        const namesMatch = (name1, name2) => {
+          if (name1 === name2) return true;
+          // Only do substring matching if both names meet minimum length
+          if (name1.length >= MIN_MATCH_LENGTH && name2.length >= MIN_MATCH_LENGTH) {
+            return name1.includes(name2) || name2.includes(name1);
+          }
+          return false;
         };
         
         // Find matching accounts across platforms
@@ -1029,9 +1051,7 @@
           platformAccounts.tiktok.forEach(ttAccount => {
             if (!usedAccounts.tiktok.has(ttAccount)) {
               const ttNormalized = normalizeAccountName(ttAccount);
-              if (ttNormalized === normalized || 
-                  ttNormalized.includes(normalized) || 
-                  normalized.includes(ttNormalized)) {
+              if (namesMatch(ttNormalized, normalized)) {
                 match.tiktok = ttAccount;
                 usedAccounts.tiktok.add(ttAccount);
               }
@@ -1042,9 +1062,7 @@
           platformAccounts.youtube.forEach(ytAccount => {
             if (!usedAccounts.youtube.has(ytAccount)) {
               const ytNormalized = normalizeAccountName(ytAccount);
-              if (ytNormalized === normalized || 
-                  ytNormalized.includes(normalized) || 
-                  normalized.includes(ytNormalized)) {
+              if (namesMatch(ytNormalized, normalized)) {
                 match.youtube = ytAccount;
                 usedAccounts.youtube.add(ytAccount);
               }
