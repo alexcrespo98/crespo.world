@@ -21,3 +21,10 @@ Thumbs.db
 
 # Excel temporary files
 ~$*.xlsx
+
+# Test output files
+livecounts_test_*.json
+*_backup_*.xlsx
+*_state_*.json
+*_diagnostic_*.json
+test.xlsx
