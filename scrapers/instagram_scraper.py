@@ -428,6 +428,164 @@ class InstagramScraper:
         
         return stats
 
+    def rescrape_missed_posts(self, driver, missed_posts, username, existing_data=None):
+        """
+        Rescrape posts that were missed during the main scrape.
+        
+        For each missed post:
+        1. Check if we already have data from a previous scrape
+        2. If no existing data, visit the post URL and extract data
+        3. Merge the recovered data back into the results
+        
+        Args:
+            driver: Selenium WebDriver instance
+            missed_posts: List of dicts with {'reel_id': str, 'reason': str}
+            username: Instagram username
+            existing_data: Dict of existing Excel data (optional)
+        
+        Returns:
+            dict: Recovered data by reel_id
+        """
+        if not missed_posts:
+            return {}
+        
+        print(f"\n" + "="*70)
+        print(f"🔄 RESCRAPE MISSED POSTS: {len(missed_posts)} posts for @{username}")
+        print("="*70)
+        
+        recovered_data = {}
+        posts_with_existing_data = []
+        posts_needing_rescrape = []
+        
+        # Step 1: Check which posts already have existing data
+        if existing_data and username in existing_data:
+            sheet_data = existing_data[username]
+            for post in missed_posts:
+                reel_id = post['reel_id']
+                # Check if we have views data for this reel
+                views_row_name = f"reel_{reel_id}_views"
+                if views_row_name in sheet_data.index:
+                    views_row = sheet_data.loc[views_row_name]
+                    has_data = any(pd.notna(val) and val not in ['', 0] for val in views_row.values)
+                    if has_data:
+                        posts_with_existing_data.append(post)
+                        print(f"   ✓ {reel_id}: Already have data from previous scrape")
+                        continue
+                posts_needing_rescrape.append(post)
+        else:
+            posts_needing_rescrape = missed_posts.copy()
+        
+        if posts_with_existing_data:
+            print(f"\n   📊 {len(posts_with_existing_data)} posts already have existing data (skipping)")
+        
+        if not posts_needing_rescrape:
+            print(f"\n   ✅ All missed posts have existing data - no rescrape needed!")
+            return recovered_data
+        
+        print(f"\n   🔍 {len(posts_needing_rescrape)} posts need rescraping")
+        
+        # Step 2: Ask user if they want to rescrape
+        if len(posts_needing_rescrape) > 20:
+            print(f"\n   ⚠️  Warning: {len(posts_needing_rescrape)} posts is a lot - browser may get rate limited")
+            choice = input(f"\n   Rescrape all {len(posts_needing_rescrape)} posts? (y/n/number to limit, default=n): ").strip().lower()
+            if choice == 'n' or choice == '':
+                print("   ⏭️ Skipping rescrape")
+                return recovered_data
+            elif choice != 'y':
+                try:
+                    limit = int(choice)
+                    posts_needing_rescrape = posts_needing_rescrape[:limit]
+                    print(f"   📊 Limiting to first {limit} posts")
+                except ValueError:
+                    print("   ⏭️ Invalid input, skipping rescrape")
+                    return recovered_data
+        else:
+            choice = input(f"\n   Rescrape {len(posts_needing_rescrape)} missed posts? (y/n, default=y): ").strip().lower()
+            if choice == 'n':
+                print("   ⏭️ Skipping rescrape")
+                return recovered_data
+        
+        # Step 3: Rescrape each post
+        print(f"\n   🔧 Rescraping {len(posts_needing_rescrape)} posts...")
+        print(f"   ⏱️ Adding delays between requests to avoid rate limiting...")
+        
+        for i, post in enumerate(posts_needing_rescrape):
+            reel_id = post['reel_id']
+            reel_url = f"https://www.instagram.com/reel/{reel_id}/"
+            
+            print(f"\n   [{i+1}/{len(posts_needing_rescrape)}] Rescraping {reel_id}...")
+            
+            try:
+                # Add jitter delay
+                jitter_delay = self.add_jitter(base_delay=2.0, max_jitter=3.0)
+                print(f"      ⏱️ Waited {jitter_delay:.1f}s")
+                
+                # Navigate to the post
+                driver.get(reel_url)
+                time.sleep(3)
+                
+                # Extract data using existing method
+                extracted_data = self.extract_date_from_current_view(driver)
+                
+                if extracted_data:
+                    # Try to get views from the page too
+                    try:
+                        body_text = driver.find_element(By.TAG_NAME, "body").text
+                        views_match = re.search(r'([\d,]+)\s*views?', body_text.lower())
+                        if views_match:
+                            views = self.parse_number(views_match.group(1))
+                            if views:
+                                extracted_data['views'] = views
+                    except:
+                        pass
+                    
+                    # Validate the data
+                    has_valid_data = (
+                        extracted_data.get('likes') is not None or
+                        extracted_data.get('date') is not None or
+                        extracted_data.get('views') is not None
+                    )
+                    
+                    if has_valid_data:
+                        recovered_data[reel_id] = extracted_data
+                        print(f"      ✅ Recovered: likes={extracted_data.get('likes')}, views={extracted_data.get('views')}, date={extracted_data.get('date_display', 'N/A')}")
+                    else:
+                        print(f"      ⚠️ No valid data extracted")
+                        # Ask for manual entry
+                        manual_input = input(f"      Enter likes manually (or Enter to skip): ").strip()
+                        if manual_input:
+                            try:
+                                manual_likes = int(manual_input.replace(',', ''))
+                                recovered_data[reel_id] = {'likes': manual_likes, 'manually_entered': True}
+                                print(f"      ✅ Manually set likes to {manual_likes}")
+                            except ValueError:
+                                print(f"      ⚠️ Invalid input, skipping")
+                else:
+                    print(f"      ⚠️ Could not extract data")
+                    # Ask for manual entry
+                    manual_input = input(f"      Enter likes manually (or Enter to skip): ").strip()
+                    if manual_input:
+                        try:
+                            manual_likes = int(manual_input.replace(',', ''))
+                            recovered_data[reel_id] = {'likes': manual_likes, 'manually_entered': True}
+                            print(f"      ✅ Manually set likes to {manual_likes}")
+                        except ValueError:
+                            print(f"      ⚠️ Invalid input, skipping")
+                
+            except Exception as e:
+                print(f"      ❌ Error: {str(e)[:50]}")
+        
+        # Summary
+        print(f"\n" + "="*70)
+        print(f"📊 RESCRAPE SUMMARY")
+        print("="*70)
+        print(f"   Posts attempted: {len(posts_needing_rescrape)}")
+        print(f"   Posts recovered: {len(recovered_data)}")
+        print(f"   Posts with existing data: {len(posts_with_existing_data)}")
+        print("="*70 + "\n")
+        
+        return recovered_data
+
     def check_for_rate_limit(self, driver):
         """Check if we've hit a 429 rate limit - DISABLED due to false positives"""
         # Rate limit detection is disabled because Instagram pages often contain
@@ -2441,6 +2599,25 @@ class InstagramScraper:
         if test_mode:
             print(f"\n  👥 Final Followers: {followers:,}" if followers else "\n  👥 Followers: N/A")
         
+        # Track missed posts (posts we had in hover_data but couldn't get date for)
+        missed_posts = []
+        for item in final_data:
+            if not item.get('date'):
+                missed_posts.append({
+                    'reel_id': item['reel_id'],
+                    'reason': 'no_date',
+                    'views': item.get('views'),
+                    'likes': item.get('likes')
+                })
+        
+        if missed_posts:
+            print(f"\n  ℹ️  {len(missed_posts)} posts missing dates (will offer rescrape at end)")
+        
+        # Store missed posts in instance variable for later use
+        if not hasattr(self, 'all_missed_posts'):
+            self.all_missed_posts = {}
+        self.all_missed_posts[username] = missed_posts
+        
         return final_data, followers, pinned_count
 
     def load_existing_excel(self):
@@ -4300,6 +4477,51 @@ class InstagramScraper:
                         'deep_scrape': deep_scrape
                     }
                     continue
+            
+            # After all accounts scraped, check for missed posts and offer rescrape
+            total_missed = sum(len(posts) for posts in getattr(self, 'all_missed_posts', {}).values())
+            if total_missed > 0:
+                print("\n" + "="*70)
+                print(f"🔄 MISSED POSTS SUMMARY")
+                print("="*70)
+                for username, missed_posts in getattr(self, 'all_missed_posts', {}).items():
+                    if missed_posts:
+                        # Check how many have existing data
+                        has_existing = 0
+                        if existing_data and username in existing_data:
+                            sheet_data = existing_data[username]
+                            for post in missed_posts:
+                                views_row_name = f"reel_{post['reel_id']}_views"
+                                if views_row_name in sheet_data.index:
+                                    views_row = sheet_data.loc[views_row_name]
+                                    if any(pd.notna(val) and val not in ['', 0] for val in views_row.values):
+                                        has_existing += 1
+                        needs_rescrape = len(missed_posts) - has_existing
+                        print(f"   @{username}: {len(missed_posts)} missed ({has_existing} have existing data, {needs_rescrape} need rescrape)")
+                
+                choice = input(f"\n   Would you like to rescrape missed posts? (y/n, default=n): ").strip().lower()
+                if choice == 'y':
+                    for username, missed_posts in getattr(self, 'all_missed_posts', {}).items():
+                        if missed_posts:
+                            recovered = self.rescrape_missed_posts(self.driver, missed_posts, username, existing_data)
+                            
+                            # Merge recovered data into the DataFrame
+                            if recovered and username in all_account_data:
+                                df = all_account_data[username]
+                                for reel_id, data in recovered.items():
+                                    if data.get('likes') is not None:
+                                        row_name = f"reel_{reel_id}_likes"
+                                        if row_name in df.index:
+                                            df.loc[row_name, timestamp_col] = data['likes']
+                                    if data.get('date'):
+                                        row_name = f"reel_{reel_id}_date"
+                                        if row_name in df.index:
+                                            df.loc[row_name, timestamp_col] = data['date']
+                                    if data.get('views') is not None:
+                                        row_name = f"reel_{reel_id}_views"
+                                        if row_name in df.index:
+                                            df.loc[row_name, timestamp_col] = data['views']
+                                all_account_data[username] = df
             
             # Save results
             self.save_to_excel(all_account_data)
