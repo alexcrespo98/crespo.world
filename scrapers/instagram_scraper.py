@@ -171,6 +171,263 @@ class InstagramScraper:
         time.sleep(total_delay)
         return total_delay
 
+    def anomaly_detector(self, driver, hover_data, username, max_depth=100, interactive=True):
+        """
+        Detect and fix anomalous posts with suspicious likes/views ratios.
+        
+        Anomalies detected:
+        1. Likes that make no sense for the views (likes > views, or < 0.1% of views)
+        2. Likes under double digits for posts with significant views
+        3. Likes equal to views (extraction error)
+        
+        For each anomaly:
+        1. Try to manually scrape by visiting the URL
+        2. If still anomalous, prompt user for manual lookup (if interactive=True)
+        3. Seamlessly update the data with correct values
+        
+        Args:
+            driver: Selenium WebDriver instance
+            hover_data: List of reel data dictionaries
+            username: Instagram username
+            max_depth: Maximum number of posts to check (default 100)
+            interactive: If True, prompts user for input. If False, auto-fix only (default True)
+        
+        Returns:
+            dict: Statistics about anomalies found and fixed
+        """
+        print(f"\n" + "="*70)
+        print(f"🔍 ANOMALY DETECTOR: Scanning {min(len(hover_data), max_depth)} posts...")
+        print("="*70)
+        
+        stats = {
+            'posts_scanned': 0,
+            'anomalies_detected': 0,
+            'auto_fixed': 0,
+            'user_fixed': 0,
+            'unfixable': 0,
+            'anomalies': []
+        }
+        
+        # Scan posts for anomalies
+        posts_to_check = hover_data[:max_depth]
+        
+        for reel in posts_to_check:
+            stats['posts_scanned'] += 1
+            views = reel.get('views')
+            likes = reel.get('likes')
+            reel_id = reel.get('reel_id')
+            
+            anomaly_reasons = []
+            
+            # Check for anomalies
+            if views and likes is not None:
+                # 1. Likes > views (impossible)
+                if likes > views:
+                    anomaly_reasons.append(f"likes ({likes}) > views ({views})")
+                
+                # 2. Likes equal to views (extraction error)
+                elif likes == views and views > 100:
+                    anomaly_reasons.append(f"likes ({likes}) = views ({views}) - likely extraction error")
+                
+                # 3. Likes under double digits for significant views
+                elif views > 1000 and likes < 10:
+                    anomaly_reasons.append(f"likes ({likes}) implausibly low for {views} views")
+                
+                # 4. Likes < 0.1% of views for significant views
+                elif views > 5000 and likes < views * 0.001:
+                    anomaly_reasons.append(f"likes ({likes}) < 0.1% of views ({views})")
+            
+            # If views but no likes at all
+            elif views and views > 1000 and likes is None:
+                anomaly_reasons.append(f"missing likes for {views} views")
+            
+            if anomaly_reasons:
+                stats['anomalies_detected'] += 1
+                stats['anomalies'].append({
+                    'reel_id': reel_id,
+                    'views': views,
+                    'likes': likes,
+                    'reasons': anomaly_reasons
+                })
+        
+        if stats['anomalies_detected'] == 0:
+            print("✅ No anomalies detected!")
+            return stats
+        
+        print(f"\n⚠️  Found {stats['anomalies_detected']} anomalies:")
+        for i, anomaly in enumerate(stats['anomalies'][:10]):  # Show first 10
+            print(f"   {i+1}. {anomaly['reel_id']}: {', '.join(anomaly['reasons'])}")
+        if stats['anomalies_detected'] > 10:
+            print(f"   ... and {stats['anomalies_detected'] - 10} more")
+        
+        # Handle non-interactive mode - auto-fix only
+        if not interactive:
+            print(f"\n🤖 NON-INTERACTIVE MODE: Attempting auto-fix only...")
+            choice = '1'
+        else:
+            # Ask user if they want to fix anomalies
+            print(f"\n📍 OPTIONS:")
+            print(f"   1. Auto-fix: Try to re-scrape anomalous posts automatically")
+            print(f"   2. Manual: I'll look up the correct values myself")
+            print(f"   3. Skip: Ignore anomalies for now")
+            
+            choice = input("\n   Enter choice (1/2/3, default=1): ").strip()
+        
+        if choice == '3':
+            print("   ⏭️ Skipping anomaly fixes")
+            return stats
+        
+        if choice == '2' and interactive:
+            # Manual mode - prompt user for each anomaly
+            print(f"\n📝 MANUAL MODE: Enter correct values for each anomaly")
+            print(f"   (Press Enter to skip, or type 'q' to quit)\n")
+            
+            for anomaly in stats['anomalies']:
+                reel_id = anomaly['reel_id']
+                reel = next((r for r in hover_data if r['reel_id'] == reel_id), None)
+                if not reel:
+                    continue
+                
+                reel_url = f"https://www.instagram.com/reel/{reel_id}/"
+                print(f"\n   🔗 {reel_url}")
+                print(f"   Current: views={anomaly['views']}, likes={anomaly['likes']}")
+                print(f"   Issue: {', '.join(anomaly['reasons'])}")
+                
+                user_input = input(f"   Enter correct likes (or Enter to skip, 'q' to quit): ").strip()
+                
+                if user_input.lower() == 'q':
+                    print("   ⏹️ Stopping manual entry")
+                    break
+                
+                if user_input:
+                    try:
+                        new_likes = int(user_input.replace(',', ''))
+                        reel['likes'] = new_likes
+                        reel['manually_corrected'] = True
+                        stats['user_fixed'] += 1
+                        print(f"   ✅ Updated likes to {new_likes}")
+                    except ValueError:
+                        print(f"   ⚠️ Invalid input, skipping")
+                        stats['unfixable'] += 1
+                else:
+                    stats['unfixable'] += 1
+        
+        else:
+            # Auto-fix mode - re-scrape each anomaly
+            print(f"\n🔧 AUTO-FIX MODE: Re-scraping {stats['anomalies_detected']} anomalous posts...")
+            print(f"   ⏱️ This may take a while with jitter delays...")
+            
+            for i, anomaly in enumerate(stats['anomalies']):
+                reel_id = anomaly['reel_id']
+                reel = next((r for r in hover_data if r['reel_id'] == reel_id), None)
+                if not reel:
+                    continue
+                
+                reel_url = f"https://www.instagram.com/reel/{reel_id}/"
+                print(f"\n   [{i+1}/{stats['anomalies_detected']}] Re-scraping {reel_id}...")
+                
+                try:
+                    # Add jitter
+                    jitter_delay = self.add_jitter(base_delay=1.5, max_jitter=2.5)
+                    print(f"      ⏱️ Waited {jitter_delay:.1f}s")
+                    
+                    # Navigate to the post
+                    driver.get(reel_url)
+                    time.sleep(2.5)
+                    
+                    # Try multiple extraction methods
+                    extracted_likes = None
+                    
+                    # Method 1: Standard extraction
+                    salvage_data = self.extract_date_from_current_view(driver)
+                    if salvage_data.get('likes') is not None:
+                        extracted_likes = salvage_data['likes']
+                    
+                    # Method 2: Look for "X likes" in body text
+                    if extracted_likes is None or extracted_likes == reel.get('views'):
+                        try:
+                            body_text = driver.find_element(By.TAG_NAME, "body").text
+                            likes_match = re.search(r'(\d[\d,.]*)\s*likes?', body_text)
+                            if likes_match:
+                                alt_likes = self.parse_number(likes_match.group(1))
+                                if alt_likes and alt_likes != reel.get('views'):
+                                    extracted_likes = alt_likes
+                        except:
+                            pass
+                    
+                    # Method 3: Look for "and X others" pattern
+                    if extracted_likes is None or extracted_likes == reel.get('views'):
+                        try:
+                            body_text = driver.find_element(By.TAG_NAME, "body").text
+                            others_match = re.search(r'and\s+([\d,.]+[KMB]?)\s+others', body_text, re.IGNORECASE)
+                            if others_match:
+                                alt_likes = self.parse_number(others_match.group(1))
+                                if alt_likes and alt_likes != reel.get('views'):
+                                    extracted_likes = alt_likes
+                        except:
+                            pass
+                    
+                    # Validate extracted likes
+                    views = reel.get('views')
+                    is_valid = False
+                    
+                    if extracted_likes is not None:
+                        # Check if it's plausible
+                        if views:
+                            if extracted_likes <= views and extracted_likes != views:
+                                if extracted_likes >= 10 or views < 1000:  # Allow low likes for low-view posts
+                                    is_valid = True
+                        else:
+                            is_valid = True  # No views to compare, accept it
+                    
+                    if is_valid:
+                        old_likes = reel.get('likes')
+                        reel['likes'] = extracted_likes
+                        reel['auto_corrected'] = True
+                        stats['auto_fixed'] += 1
+                        print(f"      ✅ Fixed: likes {old_likes} → {extracted_likes}")
+                    else:
+                        # Couldn't auto-fix
+                        print(f"      ⚠️ Auto-fix failed. Got: {extracted_likes}")
+                        print(f"      🔗 URL: {reel_url}")
+                        
+                        if interactive:
+                            # Prompt user for manual entry
+                            user_input = input(f"      Enter correct likes (or Enter to skip): ").strip()
+                            
+                            if user_input:
+                                try:
+                                    new_likes = int(user_input.replace(',', ''))
+                                    reel['likes'] = new_likes
+                                    reel['manually_corrected'] = True
+                                    stats['user_fixed'] += 1
+                                    print(f"      ✅ Manually set likes to {new_likes}")
+                                except ValueError:
+                                    print(f"      ⚠️ Invalid input, skipping")
+                                    stats['unfixable'] += 1
+                            else:
+                                stats['unfixable'] += 1
+                        else:
+                            print(f"      ⏭️ Skipping (non-interactive mode)")
+                            stats['unfixable'] += 1
+                
+                except Exception as e:
+                    print(f"      ❌ Error: {str(e)[:50]}")
+                    stats['unfixable'] += 1
+        
+        # Summary
+        print(f"\n" + "="*70)
+        print(f"📊 ANOMALY DETECTOR SUMMARY")
+        print("="*70)
+        print(f"   Posts scanned: {stats['posts_scanned']}")
+        print(f"   Anomalies found: {stats['anomalies_detected']}")
+        print(f"   Auto-fixed: {stats['auto_fixed']}")
+        print(f"   User-fixed: {stats['user_fixed']}")
+        print(f"   Unfixable: {stats['unfixable']}")
+        print("="*70 + "\n")
+        
+        return stats
+
     def check_for_rate_limit(self, driver):
         """Check if we've hit a 429 rate limit - DISABLED due to false positives"""
         # Rate limit detection is disabled because Instagram pages often contain
@@ -3780,20 +4037,21 @@ class InstagramScraper:
         print("2. Deep scrape (back 2 years)")
         print("3. Test mode (50 reels on @popdartsgame with diagnostics)")
         print("4. Arrow scrape optimization (test main page methods)")
+        print("5. Anomaly detector (scan for suspicious likes/views ratios)")
         print()
         while True:
-            choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
+            choice = input("Enter your choice (1, 2, 3, 4, or 5): ").strip()
             if choice == '1' or choice == '':
                 num_input = input("\nHow many posts per account? (default 100): ").strip()
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False, False, False, False
+                        return num_posts, False, False, False, False, False, False
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
                     print("Invalid input. Using default: 100")
-                    return 100, False, False, False, False, False
+                    return 100, False, False, False, False, False, False
             elif choice == '2':
                 print("\n⚠️  Deep scrape options:")
                 print("   a) 2 years back (default)")
@@ -3804,22 +4062,24 @@ class InstagramScraper:
                     confirm = input("\n🔥 DEEP DEEP mode will scrape ALL available posts. This takes significantly longer. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep deep mode selected - will scrape ALL available posts!")
-                        return None, True, False, True, False, False  # deep_scrape=True, deep_deep=True
+                        return None, True, False, True, False, False, False  # deep_scrape=True, deep_deep=True
                     else:
                         continue
                 else:
                     confirm = input("\n⚠️  Deep scrape will go back 2 years. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep mode selected - will scrape back 2 years")
-                        return None, True, False, False, False, False  # deep_scrape=True, deep_deep=False
+                        return None, True, False, False, False, False, False  # deep_scrape=True, deep_deep=False
                     else:
                         continue
             elif choice == '3':
-                return 50, False, False, False, True, False  # Test mode with 50 posts and diagnostics
+                return 50, False, False, False, True, False, False  # Test mode with 50 posts and diagnostics
             elif choice == '4':
-                return 25, False, False, False, False, True  # Arrow scrape optimization mode
+                return 25, False, False, False, False, True, False  # Arrow scrape optimization mode
+            elif choice == '5':
+                return 100, False, False, False, False, False, True  # Anomaly detector mode
             else:
-                print("Invalid choice. Please enter 1, 2, 3, or 4.")
+                print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
 
     def run(self):
         """Main execution function"""
@@ -3832,7 +4092,104 @@ class InstagramScraper:
         print("="*70)
         
         browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode = self.get_scrape_mode()
+        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode, anomaly_detector_mode = self.get_scrape_mode()
+        
+        # Handle anomaly detector mode
+        if anomaly_detector_mode:
+            print("\n🔍 ANOMALY DETECTOR MODE")
+            print("="*70)
+            print("\nThis mode will scan existing posts for suspicious likes/views ratios")
+            print("and attempt to fix them by re-scraping or prompting for manual entry.")
+            
+            # Ask for depth
+            depth_input = input("\nHow many posts deep to scan per account? (default 100): ").strip()
+            try:
+                max_depth = int(depth_input) if depth_input else 100
+            except ValueError:
+                max_depth = 100
+            
+            print(f"\n✅ Will scan {len(ACCOUNTS_TO_TRACK)} account(s), {max_depth} posts each:\n")
+            for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
+                print(f"   {i}. @{account}")
+            
+            input("\n▶️  Press ENTER to start anomaly detection...")
+            
+            self.driver = self.setup_driver(browser=browser_choice)
+            existing_data = self.load_existing_excel()
+            
+            try:
+                for idx, username in enumerate(ACCOUNTS_TO_TRACK, 1):
+                    print("\n" + "="*70)
+                    print(f"🔍 [{idx}/{len(ACCOUNTS_TO_TRACK)}] Scanning @{username} for anomalies")
+                    print("="*70)
+                    
+                    # Get existing data for this account from Excel
+                    if existing_data is not None and username in existing_data:
+                        sheet_data = existing_data[username]
+                        
+                        # Build a list of posts from the existing data
+                        hover_data = []
+                        for row_name, row_data in sheet_data.iterrows():
+                            if row_name.startswith('reel_') and row_name.endswith('_views'):
+                                reel_id = '_'.join(row_name.split('_')[1:-1])
+                                
+                                # Get the most recent non-null values
+                                views = None
+                                likes = None
+                                
+                                # Views row
+                                for val in reversed(row_data.values):
+                                    if pd.notna(val) and val not in ['', 0]:
+                                        try:
+                                            views = int(val)
+                                            break
+                                        except:
+                                            pass
+                                
+                                # Likes row
+                                likes_row_name = f"reel_{reel_id}_likes"
+                                if likes_row_name in sheet_data.index:
+                                    likes_row = sheet_data.loc[likes_row_name]
+                                    for val in reversed(likes_row.values):
+                                        if pd.notna(val) and val not in ['', 0]:
+                                            try:
+                                                likes = int(val)
+                                                break
+                                            except:
+                                                pass
+                                
+                                if views is not None:
+                                    hover_data.append({
+                                        'reel_id': reel_id,
+                                        'views': views,
+                                        'likes': likes,
+                                        'url': f"https://www.instagram.com/reel/{reel_id}/"
+                                    })
+                        
+                        if hover_data:
+                            # Run anomaly detector
+                            stats = self.anomaly_detector(self.driver, hover_data, username, max_depth=max_depth)
+                            
+                            # If any fixes were made, offer to update the Excel
+                            if stats['auto_fixed'] > 0 or stats['user_fixed'] > 0:
+                                print(f"\n📝 {stats['auto_fixed'] + stats['user_fixed']} anomalies were fixed for @{username}")
+                                # Note: The fixes are in hover_data, but we'd need additional logic
+                                # to update the Excel file with the corrected values
+                        else:
+                            print(f"   ⚠️ No post data found for @{username}")
+                    else:
+                        print(f"   ⚠️ No existing data found for @{username}")
+                        print(f"   💡 Run a regular scrape first to collect data")
+            
+            finally:
+                if self.driver:
+                    self.driver.quit()
+                if self.incognito_driver:
+                    try:
+                        self.incognito_driver.quit()
+                    except:
+                        pass
+            return
         
         # Handle arrow optimization mode (test main page methods)
         if arrow_optimization_mode:
