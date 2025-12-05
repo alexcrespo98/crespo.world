@@ -171,7 +171,7 @@ class InstagramScraper:
         time.sleep(total_delay)
         return total_delay
 
-    def anomaly_detector(self, driver, hover_data, username, max_depth=100):
+    def anomaly_detector(self, driver, hover_data, username, max_depth=100, interactive=True):
         """
         Detect and fix anomalous posts with suspicious likes/views ratios.
         
@@ -182,7 +182,7 @@ class InstagramScraper:
         
         For each anomaly:
         1. Try to manually scrape by visiting the URL
-        2. If still anomalous, prompt user for manual lookup
+        2. If still anomalous, prompt user for manual lookup (if interactive=True)
         3. Seamlessly update the data with correct values
         
         Args:
@@ -190,6 +190,7 @@ class InstagramScraper:
             hover_data: List of reel data dictionaries
             username: Instagram username
             max_depth: Maximum number of posts to check (default 100)
+            interactive: If True, prompts user for input. If False, auto-fix only (default True)
         
         Returns:
             dict: Statistics about anomalies found and fixed
@@ -259,19 +260,24 @@ class InstagramScraper:
         if stats['anomalies_detected'] > 10:
             print(f"   ... and {stats['anomalies_detected'] - 10} more")
         
-        # Ask user if they want to fix anomalies
-        print(f"\n📍 OPTIONS:")
-        print(f"   1. Auto-fix: Try to re-scrape anomalous posts automatically")
-        print(f"   2. Manual: I'll look up the correct values myself")
-        print(f"   3. Skip: Ignore anomalies for now")
-        
-        choice = input("\n   Enter choice (1/2/3, default=1): ").strip()
+        # Handle non-interactive mode - auto-fix only
+        if not interactive:
+            print(f"\n🤖 NON-INTERACTIVE MODE: Attempting auto-fix only...")
+            choice = '1'
+        else:
+            # Ask user if they want to fix anomalies
+            print(f"\n📍 OPTIONS:")
+            print(f"   1. Auto-fix: Try to re-scrape anomalous posts automatically")
+            print(f"   2. Manual: I'll look up the correct values myself")
+            print(f"   3. Skip: Ignore anomalies for now")
+            
+            choice = input("\n   Enter choice (1/2/3, default=1): ").strip()
         
         if choice == '3':
             print("   ⏭️ Skipping anomaly fixes")
             return stats
         
-        if choice == '2':
+        if choice == '2' and interactive:
             # Manual mode - prompt user for each anomaly
             print(f"\n📝 MANUAL MODE: Enter correct values for each anomaly")
             print(f"   (Press Enter to skip, or type 'q' to quit)\n")
@@ -381,22 +387,28 @@ class InstagramScraper:
                         stats['auto_fixed'] += 1
                         print(f"      ✅ Fixed: likes {old_likes} → {extracted_likes}")
                     else:
-                        # Couldn't auto-fix, prompt user
+                        # Couldn't auto-fix
                         print(f"      ⚠️ Auto-fix failed. Got: {extracted_likes}")
                         print(f"      🔗 URL: {reel_url}")
-                        user_input = input(f"      Enter correct likes (or Enter to skip): ").strip()
                         
-                        if user_input:
-                            try:
-                                new_likes = int(user_input.replace(',', ''))
-                                reel['likes'] = new_likes
-                                reel['manually_corrected'] = True
-                                stats['user_fixed'] += 1
-                                print(f"      ✅ Manually set likes to {new_likes}")
-                            except ValueError:
-                                print(f"      ⚠️ Invalid input, skipping")
+                        if interactive:
+                            # Prompt user for manual entry
+                            user_input = input(f"      Enter correct likes (or Enter to skip): ").strip()
+                            
+                            if user_input:
+                                try:
+                                    new_likes = int(user_input.replace(',', ''))
+                                    reel['likes'] = new_likes
+                                    reel['manually_corrected'] = True
+                                    stats['user_fixed'] += 1
+                                    print(f"      ✅ Manually set likes to {new_likes}")
+                                except ValueError:
+                                    print(f"      ⚠️ Invalid input, skipping")
+                                    stats['unfixable'] += 1
+                            else:
                                 stats['unfixable'] += 1
                         else:
+                            print(f"      ⏭️ Skipping (non-interactive mode)")
                             stats['unfixable'] += 1
                 
                 except Exception as e:
@@ -4025,20 +4037,21 @@ class InstagramScraper:
         print("2. Deep scrape (back 2 years)")
         print("3. Test mode (50 reels on @popdartsgame with diagnostics)")
         print("4. Arrow scrape optimization (test main page methods)")
+        print("5. Anomaly detector (scan for suspicious likes/views ratios)")
         print()
         while True:
-            choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
+            choice = input("Enter your choice (1, 2, 3, 4, or 5): ").strip()
             if choice == '1' or choice == '':
                 num_input = input("\nHow many posts per account? (default 100): ").strip()
                 try:
                     num_posts = int(num_input) if num_input else 100
                     if num_posts > 0:
-                        return num_posts, False, False, False, False, False
+                        return num_posts, False, False, False, False, False, False
                     else:
                         print("Please enter a positive number.")
                 except ValueError:
                     print("Invalid input. Using default: 100")
-                    return 100, False, False, False, False, False
+                    return 100, False, False, False, False, False, False
             elif choice == '2':
                 print("\n⚠️  Deep scrape options:")
                 print("   a) 2 years back (default)")
@@ -4049,22 +4062,24 @@ class InstagramScraper:
                     confirm = input("\n🔥 DEEP DEEP mode will scrape ALL available posts. This takes significantly longer. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep deep mode selected - will scrape ALL available posts!")
-                        return None, True, False, True, False, False  # deep_scrape=True, deep_deep=True
+                        return None, True, False, True, False, False, False  # deep_scrape=True, deep_deep=True
                     else:
                         continue
                 else:
                     confirm = input("\n⚠️  Deep scrape will go back 2 years. Continue? (y/n): ").strip().lower()
                     if confirm == 'y':
                         print("  ✅ Deep mode selected - will scrape back 2 years")
-                        return None, True, False, False, False, False  # deep_scrape=True, deep_deep=False
+                        return None, True, False, False, False, False, False  # deep_scrape=True, deep_deep=False
                     else:
                         continue
             elif choice == '3':
-                return 50, False, False, False, True, False  # Test mode with 50 posts and diagnostics
+                return 50, False, False, False, True, False, False  # Test mode with 50 posts and diagnostics
             elif choice == '4':
-                return 25, False, False, False, False, True  # Arrow scrape optimization mode
+                return 25, False, False, False, False, True, False  # Arrow scrape optimization mode
+            elif choice == '5':
+                return 100, False, False, False, False, False, True  # Anomaly detector mode
             else:
-                print("Invalid choice. Please enter 1, 2, 3, or 4.")
+                print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
 
     def run(self):
         """Main execution function"""
@@ -4077,7 +4092,104 @@ class InstagramScraper:
         print("="*70)
         
         browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode = self.get_scrape_mode()
+        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode, anomaly_detector_mode = self.get_scrape_mode()
+        
+        # Handle anomaly detector mode
+        if anomaly_detector_mode:
+            print("\n🔍 ANOMALY DETECTOR MODE")
+            print("="*70)
+            print("\nThis mode will scan existing posts for suspicious likes/views ratios")
+            print("and attempt to fix them by re-scraping or prompting for manual entry.")
+            
+            # Ask for depth
+            depth_input = input("\nHow many posts deep to scan per account? (default 100): ").strip()
+            try:
+                max_depth = int(depth_input) if depth_input else 100
+            except ValueError:
+                max_depth = 100
+            
+            print(f"\n✅ Will scan {len(ACCOUNTS_TO_TRACK)} account(s), {max_depth} posts each:\n")
+            for i, account in enumerate(ACCOUNTS_TO_TRACK, 1):
+                print(f"   {i}. @{account}")
+            
+            input("\n▶️  Press ENTER to start anomaly detection...")
+            
+            self.driver = self.setup_driver(browser=browser_choice)
+            existing_data = self.load_existing_excel()
+            
+            try:
+                for idx, username in enumerate(ACCOUNTS_TO_TRACK, 1):
+                    print("\n" + "="*70)
+                    print(f"🔍 [{idx}/{len(ACCOUNTS_TO_TRACK)}] Scanning @{username} for anomalies")
+                    print("="*70)
+                    
+                    # Get existing data for this account from Excel
+                    if existing_data is not None and username in existing_data:
+                        sheet_data = existing_data[username]
+                        
+                        # Build a list of posts from the existing data
+                        hover_data = []
+                        for row_name, row_data in sheet_data.iterrows():
+                            if row_name.startswith('reel_') and row_name.endswith('_views'):
+                                reel_id = '_'.join(row_name.split('_')[1:-1])
+                                
+                                # Get the most recent non-null values
+                                views = None
+                                likes = None
+                                
+                                # Views row
+                                for val in reversed(row_data.values):
+                                    if pd.notna(val) and val not in ['', 0]:
+                                        try:
+                                            views = int(val)
+                                            break
+                                        except:
+                                            pass
+                                
+                                # Likes row
+                                likes_row_name = f"reel_{reel_id}_likes"
+                                if likes_row_name in sheet_data.index:
+                                    likes_row = sheet_data.loc[likes_row_name]
+                                    for val in reversed(likes_row.values):
+                                        if pd.notna(val) and val not in ['', 0]:
+                                            try:
+                                                likes = int(val)
+                                                break
+                                            except:
+                                                pass
+                                
+                                if views is not None:
+                                    hover_data.append({
+                                        'reel_id': reel_id,
+                                        'views': views,
+                                        'likes': likes,
+                                        'url': f"https://www.instagram.com/reel/{reel_id}/"
+                                    })
+                        
+                        if hover_data:
+                            # Run anomaly detector
+                            stats = self.anomaly_detector(self.driver, hover_data, username, max_depth=max_depth)
+                            
+                            # If any fixes were made, offer to update the Excel
+                            if stats['auto_fixed'] > 0 or stats['user_fixed'] > 0:
+                                print(f"\n📝 {stats['auto_fixed'] + stats['user_fixed']} anomalies were fixed for @{username}")
+                                # Note: The fixes are in hover_data, but we'd need additional logic
+                                # to update the Excel file with the corrected values
+                        else:
+                            print(f"   ⚠️ No post data found for @{username}")
+                    else:
+                        print(f"   ⚠️ No existing data found for @{username}")
+                        print(f"   💡 Run a regular scrape first to collect data")
+            
+            finally:
+                if self.driver:
+                    self.driver.quit()
+                if self.incognito_driver:
+                    try:
+                        self.incognito_driver.quit()
+                    except:
+                        pass
+            return
         
         # Handle arrow optimization mode (test main page methods)
         if arrow_optimization_mode:
