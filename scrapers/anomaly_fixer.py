@@ -108,8 +108,8 @@ class AnomalyFixer:
                         reel_id = parts[1]
                         reel_ids.add(reel_id)
             
-            # Limit to most recent N posts based on depth
-            reel_ids = list(reel_ids)[:self.depth]
+            # Sort and limit to most recent N posts based on depth
+            reel_ids = sorted(list(reel_ids))[:self.depth]
             
             for reel_id in reel_ids:
                 # Get latest values for this reel
@@ -272,7 +272,7 @@ class AnomalyFixer:
                     if new_likes > anomaly['views']:
                         is_valid = False
                         print(f"      ⚠️ Scraped likes ({new_likes:,}) > views ({anomaly['views']:,}), rejecting")
-                    elif abs(new_likes - anomaly['views']) / max(anomaly['views'], 1) < THRESHOLDS['likes_views_same_threshold']:
+                    elif anomaly['views'] > 0 and abs(new_likes - anomaly['views']) / anomaly['views'] < THRESHOLDS['likes_views_same_threshold']:
                         is_valid = False
                         print(f"      ⚠️ Scraped likes ({new_likes:,}) ≈ views ({anomaly['views']:,}), rejecting")
                     
@@ -294,8 +294,14 @@ class AnomalyFixer:
             if user_input:
                 try:
                     new_likes = int(user_input.replace(',', ''))
-                    print(f"      ✅ User entered: {new_likes:,}")
-                    self.manual_entries += 1
+                    # Validate the manual entry
+                    if new_likes < 0:
+                        print(f"      ⚠️ Invalid: likes cannot be negative")
+                    elif new_likes > 100000000:  # 100M sanity check
+                        print(f"      ⚠️ Invalid: value seems too large")
+                    else:
+                        print(f"      ✅ User entered: {new_likes:,}")
+                        self.manual_entries += 1
                 except ValueError:
                     print(f"      ⚠️ Invalid input, skipping")
                     return False
