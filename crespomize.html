@@ -570,6 +570,20 @@
         'lowtidegolf': { instagram: 'low_tide_golf', tiktok: 'lowtidegolf', youtube: null }  // No YouTube
       },
       
+      // Anomaly detection thresholds
+      ANOMALY_THRESHOLDS: {
+        LIKES_VIEWS_RATIO: 0.05,     // Reject if likes within 5% of views (extraction error)
+        MIN_LIKES_RATIO: 0.001,       // Reject if likes < 0.1% of views (implausibly low)
+        SIGNIFICANT_VIEWS: 5000       // Views threshold for applying ratio checks
+      },
+      
+      // Weekly calculation constants
+      WEEKLY_CALC: {
+        MS_PER_WEEK: 7 * 24 * 60 * 60 * 1000,
+        RECENT_WEEKS_LOOKBACK: 4,     // Include incremental views from posts within this many weeks
+        WEEKLY_DECAY_FACTOR: 0.15     // Estimated portion of views gained per week for recent posts
+      },
+      
       // Debug mode - set to true to see matching logs in console
       DEBUG_MODE: false,
       
@@ -1244,12 +1258,12 @@
           }
         } else {
           // Fallback: For recent older posts, add a portion of their views
-          // (assuming they got ~20% of their total views in each of the first few weeks)
+          // (assuming they got a decaying portion of views in each of the first few weeks)
           for (const video of recentOlderVideos) {
-            const videoAge = Math.floor((startDate - video.date) / (7 * 24 * 60 * 60 * 1000)); // weeks old
-            if (videoAge <= 4 && video.views) {
+            const videoAge = Math.floor((startDate - video.date) / this.WEEKLY_CALC.MS_PER_WEEK); // weeks old
+            if (videoAge <= this.WEEKLY_CALC.RECENT_WEEKS_LOOKBACK && video.views) {
               // Estimate weekly view contribution (decay factor based on age)
-              const weeklyContribution = video.views * (0.15 / (videoAge + 1));
+              const weeklyContribution = video.views * (this.WEEKLY_CALC.WEEKLY_DECAY_FACTOR / (videoAge + 1));
               weeklyViews += Math.round(weeklyContribution);
             }
           }
@@ -3025,16 +3039,17 @@
                 // Filter out anomalous likes values
                 const realisticValues = allValues.filter(item => {
                   if (videoViews) {
-                    // Reject if likes ≈ views (within 5% - likely extraction error)
-                    if (Math.abs(item.value - videoViews) / videoViews < 0.05) {
+                    // Reject if likes ≈ views (likely extraction error)
+                    if (Math.abs(item.value - videoViews) / videoViews < this.ANOMALY_THRESHOLDS.LIKES_VIEWS_RATIO) {
                       return false;
                     }
                     // Reject if likes > views (impossible)
                     if (item.value > videoViews) {
                       return false;
                     }
-                    // Reject if likes < 0.1% of views for significant views (implausibly low)
-                    if (videoViews > 5000 && item.value < videoViews * 0.001) {
+                    // Reject if likes < threshold of views for significant views (implausibly low)
+                    if (videoViews > this.ANOMALY_THRESHOLDS.SIGNIFICANT_VIEWS && 
+                        item.value < videoViews * this.ANOMALY_THRESHOLDS.MIN_LIKES_RATIO) {
                       return false;
                     }
                   }
@@ -3319,16 +3334,17 @@
                   // Filter out anomalous likes
                   const realisticValues = allValues.filter(item => {
                     if (videoViews) {
-                      // Reject if likes ≈ views (within 5%)
-                      if (Math.abs(item.value - videoViews) / videoViews < 0.05) {
+                      // Reject if likes ≈ views (extraction error)
+                      if (Math.abs(item.value - videoViews) / videoViews < this.ANOMALY_THRESHOLDS.LIKES_VIEWS_RATIO) {
                         return false;
                       }
                       // Reject if likes > views
                       if (item.value > videoViews) {
                         return false;
                       }
-                      // Reject if likes < 0.1% of views for significant views
-                      if (videoViews > 5000 && item.value < videoViews * 0.001) {
+                      // Reject if likes < threshold of views for significant views
+                      if (videoViews > this.ANOMALY_THRESHOLDS.SIGNIFICANT_VIEWS && 
+                          item.value < videoViews * this.ANOMALY_THRESHOLDS.MIN_LIKES_RATIO) {
                         return false;
                       }
                     }
