@@ -7,6 +7,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     body {
       background: #000;
@@ -2150,7 +2152,7 @@
       async exportClientReport() {
         const monthName = this.currentEasyGraphsMonth;
         const year = this.currentEasyGraphsYear;
-        const filename = `${monthName}_${year}_analytics_for_MoonMedia.pdf`;
+        const filename = `${monthName}_${year}_analytics_for_MoonMedia`;
         
         // Create a temporary container for the export
         const exportContainer = document.createElement('div');
@@ -2171,41 +2173,64 @@
         exportContainer.appendChild(chartsClone);
         
         try {
-          // Use html2canvas if available, otherwise use a simpler approach
-          if (typeof html2canvas !== 'undefined') {
+          if (typeof html2canvas !== 'undefined' && typeof jspdf !== 'undefined') {
+            // Use html2canvas + jsPDF for proper PDF export
             const canvas = await html2canvas(exportContainer, {
               backgroundColor: '#000000',
-              scale: 2
+              scale: 2,
+              useCORS: true,
+              logging: false
             });
             
             const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = jspdf;
             
-            // Create download link
+            // Calculate PDF dimensions based on canvas
+            const imgWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            let heightLeft = imgHeight;
+            let position = 0;
+            
+            // Add first page
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+            
+            // Add additional pages if needed
+            while (heightLeft > 0) {
+              position = heightLeft - imgHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+              heightLeft -= pageHeight;
+            }
+            
+            pdf.save(`${filename}.pdf`);
+            
+          } else if (typeof html2canvas !== 'undefined') {
+            // Fallback: Download as single PNG image
+            const canvas = await html2canvas(exportContainer, {
+              backgroundColor: '#000000',
+              scale: 2,
+              useCORS: true,
+              logging: false
+            });
+            
+            const imgData = canvas.toDataURL('image/png');
             const link = document.createElement('a');
-            link.download = filename.replace('.pdf', '.png');
+            link.download = `${filename}.png`;
             link.href = imgData;
             link.click();
-          } else {
-            // Fallback: export charts as images
-            alert(`Export feature: In a full implementation, this would generate "${filename}"\n\nTo enable PDF export, add html2canvas and jsPDF libraries.`);
             
-            // Export each chart individually
-            Object.keys(this.chartInstances).forEach(chartId => {
-              if (chartId.startsWith('easy-')) {
-                const chart = this.chartInstances[chartId];
-                if (chart) {
-                  const imageUrl = chart.toBase64Image();
-                  const link = document.createElement('a');
-                  link.download = `${monthName}_${year}_${chartId}.png`;
-                  link.href = imageUrl;
-                  link.click();
-                }
-              }
-            });
+          } else {
+            // Ultimate fallback: Create a printable window
+            alert('PDF libraries not loaded. Opening print dialog instead...');
+            window.print();
           }
         } catch (error) {
           console.error('Export error:', error);
-          alert('Export failed. Charts have been downloaded individually.');
+          alert('Export failed: ' + error.message);
         } finally {
           document.body.removeChild(exportContainer);
         }
@@ -2519,11 +2544,53 @@
         
         const exportContainer = document.getElementById('individualExportContainer');
         
+        // Hide the buttons before capturing
+        const buttons = exportContainer.querySelectorAll('button');
+        buttons.forEach(btn => btn.style.display = 'none');
+        
         try {
-          if (typeof html2canvas !== 'undefined') {
+          if (typeof html2canvas !== 'undefined' && typeof jspdf !== 'undefined') {
+            // Use html2canvas + jsPDF for proper PDF export
             const canvas = await html2canvas(exportContainer, {
               backgroundColor: '#000000',
-              scale: 2
+              scale: 2,
+              useCORS: true,
+              logging: false
+            });
+            
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = jspdf;
+            
+            // Calculate PDF dimensions based on canvas
+            const imgWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            let heightLeft = imgHeight;
+            let position = 0;
+            
+            // Add first page
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+            
+            // Add additional pages if needed
+            while (heightLeft > 0) {
+              position = heightLeft - imgHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+              heightLeft -= pageHeight;
+            }
+            
+            pdf.save(`${filename}.pdf`);
+            
+          } else if (typeof html2canvas !== 'undefined') {
+            // Fallback: Download as single PNG image
+            const canvas = await html2canvas(exportContainer, {
+              backgroundColor: '#000000',
+              scale: 2,
+              useCORS: true,
+              logging: false
             });
             
             const imgData = canvas.toDataURL('image/png');
@@ -2531,23 +2598,36 @@
             link.download = `${filename}.png`;
             link.href = imgData;
             link.click();
-          } else {
-            // Fallback: download charts as images
-            alert(`To download as PDF, add html2canvas library.\n\nDownloading charts as separate images...`);
             
-            ['clientViewsChart', 'clientFollowersChart', 'clientPostsChart', 'clientLikesChart'].forEach(chartId => {
-              const canvas = document.getElementById(chartId);
-              if (canvas) {
-                const link = document.createElement('a');
-                link.download = `${filename}_${chartId}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-              }
-            });
+          } else {
+            // Ultimate fallback: Create a printable window
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>${accountName} - ${weekLabel} ${year} Report</title>
+                <style>
+                  body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+                  @media print { body { background: #000 !important; -webkit-print-color-adjust: exact; } }
+                </style>
+              </head>
+              <body>
+                ${exportContainer.innerHTML}
+                <script>
+                  setTimeout(() => { window.print(); window.close(); }, 500);
+                </script>
+              </body>
+              </html>
+            `);
+            printWindow.document.close();
           }
         } catch (error) {
           console.error('Download error:', error);
-          alert('Download failed. Please try again.');
+          alert('Download failed: ' + error.message + '\n\nTry using your browser\'s print function (Ctrl+P) instead.');
+        } finally {
+          // Restore buttons
+          buttons.forEach(btn => btn.style.display = '');
         }
       },
       
