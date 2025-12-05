@@ -438,7 +438,7 @@
       <div class="question">what type of analytics?</div>
       <select id="analyticsTypeSelect">
         <option value="" disabled selected>-- select analytics type --</option>
-        <option value="easy">Weekly Analytics</option>
+        <option value="easy">Weekly Analytics (this week's progress)</option>
         <option value="custom">Custom Analytics</option>
       </select>
     </div>
@@ -1182,17 +1182,21 @@
           return null;
         }
         
-        // Filter videos for this week
-        const weekVideos = (accountData.videos || []).filter(v => 
+        // Get ALL videos for total views calculation
+        const allVideos = accountData.videos || [];
+        
+        // Filter videos posted this week for posts count
+        const weekVideos = allVideos.filter(v => 
           v.date >= startDate && v.date <= endDate
         );
         
         // Calculate weekly stats
+        // Views/likes/comments are TOTAL from all videos (not just this week's posts)
         const stats = {
-          views: weekVideos.reduce((sum, v) => sum + (v.views || 0), 0),
-          likes: weekVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
-          comments: weekVideos.reduce((sum, v) => sum + (v.comments || 0), 0),
-          posts: weekVideos.length,
+          views: allVideos.reduce((sum, v) => sum + (v.views || 0), 0),
+          likes: allVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
+          comments: allVideos.reduce((sum, v) => sum + (v.comments || 0), 0),
+          posts: weekVideos.length,  // Only posts from this week
           newFollowers: 0,
           currentFollowers: accountData.followers || 0
         };
