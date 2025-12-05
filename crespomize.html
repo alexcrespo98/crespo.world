@@ -547,14 +547,25 @@
       
       // Explicit account mapping across platforms
       // Maps a canonical name to the actual account names on each platform
+      // Update these if account names differ between platforms
       ACCOUNT_MAPPING: {
         'popdartsgame': { instagram: 'popdartsgame', tiktok: 'popdartsgame', youtube: 'popdartsgame' },
         'bucketgolfgame': { instagram: 'bucketgolfgame', tiktok: 'bucketgolfgame', youtube: 'bucketgolfgame' },
         'playbattlegolf': { instagram: 'playbattlegolf', tiktok: 'playbattlegolf', youtube: 'playbattlegolf' },
         'flinggolf': { instagram: 'flinggolf', tiktok: 'flinggolf', youtube: 'flinggolf' },
-        'golfponggames': { instagram: 'golfponggames', tiktok: 'golfponggames', youtube: 'golfponggames' },
+        'golfponggames': { instagram: 'golfpong.games', tiktok: 'golfponggames', youtube: 'golfponggames' },
         'discgogames': { instagram: 'discgogames', tiktok: 'discgogames', youtube: 'discgogames' },
-        'lowtidegolf': { instagram: 'lowtidegolf', tiktok: 'lowtidegolf', youtube: 'lowtidegolf' }
+        'lowtidegolf': { instagram: 'low_tide_golf', tiktok: 'lowtidegolf', youtube: 'lowtidegolf' }
+      },
+      
+      // Debug mode - set to true to see matching logs in console
+      DEBUG_MODE: false,
+      
+      // Debug logging helper
+      debugLog(...args) {
+        if (this.DEBUG_MODE) {
+          console.log(...args);
+        }
       },
       
       // Smoothness constants for exponential smoothing
@@ -1018,7 +1029,7 @@
           }
         });
         
-        console.log('Platform accounts found:', platformAccounts);
+        this.debugLog('Platform accounts found:', platformAccounts);
         
         // Track which accounts have been matched
         const usedAccounts = { instagram: new Set(), tiktok: new Set(), youtube: new Set() };
@@ -1055,7 +1066,7 @@
           // Only add if at least one platform matched
           if (match.instagram || match.tiktok || match.youtube) {
             matchedAccounts.push(match);
-            console.log(`Explicit match: ${canonicalName}`, match);
+            this.debugLog(`Explicit match: ${canonicalName}`, match);
           }
         });
         
@@ -1119,7 +1130,7 @@
           
           usedAccounts.instagram.add(igAccount);
           matchedAccounts.push(match);
-          console.log(`Fuzzy match (IG): ${igAccount}`, match);
+          this.debugLog(`Fuzzy match (IG): ${igAccount}`, match);
         });
         
         // Add any unmatched TikTok accounts
@@ -1133,7 +1144,7 @@
               youtube: null
             };
             matchedAccounts.push(match);
-            console.log(`Unmatched TikTok: ${ttAccount}`, match);
+            this.debugLog(`Unmatched TikTok: ${ttAccount}`, match);
           }
         });
         
@@ -1148,11 +1159,11 @@
               youtube: ytAccount
             };
             matchedAccounts.push(match);
-            console.log(`Unmatched YouTube: ${ytAccount}`, match);
+            this.debugLog(`Unmatched YouTube: ${ytAccount}`, match);
           }
         });
         
-        console.log('Final matched accounts:', matchedAccounts);
+        this.debugLog('Final matched accounts:', matchedAccounts);
         return matchedAccounts;
       },
       
@@ -1160,14 +1171,14 @@
       getAccountWeeklyStats(platform, accountName, startDate, endDate) {
         const workbook = this.easyGraphsData[`${platform}Workbook`];
         if (!workbook) {
-          console.log(`No workbook for ${platform}`);
+          this.debugLog(`No workbook for ${platform}`);
           return null;
         }
         
         // Parse account data
         const accountData = this.parseAccountDataFromWorkbook(workbook, accountName, platform, 'all');
         if (!accountData) {
-          console.log(`No account data for ${accountName} on ${platform}`);
+          this.debugLog(`No account data for ${accountName} on ${platform}`);
           return null;
         }
         
@@ -1187,8 +1198,10 @@
         };
         
         // Calculate new followers this week
-        // Filter out zero/null values first (they indicate scrape errors)
-        const validFollowersHistory = (accountData.followersHistory || []).filter(h => h.value > 0);
+        // Filter out zero/null/invalid values first (they indicate scrape errors)
+        const validFollowersHistory = (accountData.followersHistory || []).filter(h => 
+          h && h.value != null && typeof h.value === 'number' && h.value > 0
+        );
         
         if (validFollowersHistory.length > 0) {
           const weekHistory = validFollowersHistory.filter(h => 
@@ -1211,7 +1224,7 @@
           }
         }
         
-        console.log(`Stats for ${accountName} (${platform}):`, stats);
+        this.debugLog(`Stats for ${accountName} (${platform}):`, stats);
         return stats;
       },
       
