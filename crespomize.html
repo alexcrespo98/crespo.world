@@ -454,9 +454,20 @@
         <div class="stats-summary" id="easyStatsSummary"></div>
         <div id="easyChartsList"></div>
         <div class="export-section" style="text-align: center; margin-top: 2em;">
-          <button id="looksGoodBtn" class="looks-good-btn" onclick="app.exportClientReport()">
-            ✓ Looks Good - Export PDF
-          </button>
+          <div style="margin-bottom: 1em;">
+            <button id="looksGoodBtn" class="looks-good-btn" onclick="app.exportClientReport()">
+              ✓ Export All MoonMedia PDF
+            </button>
+          </div>
+          <div style="margin-top: 1em;">
+            <label style="color: #0f0; margin-right: 1em;">Export Individual Client Report:</label>
+            <select id="exportAccountSelect" style="background: #000; color: #0f0; border: 1px solid #0f0; padding: 0.5em;">
+              <option value="">-- select account --</option>
+            </select>
+            <button onclick="app.exportIndividualClientReport()" style="margin-left: 1em; background: #000; color: #0f0; border: 1px solid #0f0; padding: 0.5em 1em; cursor: pointer;">
+              Export Client PDF
+            </button>
+          </div>
         </div>
         <br>
         <button onclick="location.reload()">start over</button>
@@ -548,6 +559,7 @@
       // Explicit account mapping across platforms
       // Maps a canonical name to the actual account names on each platform
       // Update these if account names differ between platforms
+      // Set to null if an account doesn't exist on a platform
       ACCOUNT_MAPPING: {
         'popdartsgame': { instagram: 'popdartsgame', tiktok: 'popdartsgame', youtube: 'popdartsgame' },
         'bucketgolfgame': { instagram: 'bucketgolfgame', tiktok: 'bucketgolfgame', youtube: 'bucketgolfgame' },
@@ -555,7 +567,7 @@
         'flinggolf': { instagram: 'flinggolf', tiktok: 'flinggolf', youtube: 'flinggolf' },
         'golfponggames': { instagram: 'golfpong.games', tiktok: 'golfponggames', youtube: 'golfponggames' },
         'discgogames': { instagram: 'discgogames', tiktok: 'discgogames', youtube: 'discgogames' },
-        'lowtidegolf': { instagram: 'low_tide_golf', tiktok: 'lowtidegolf', youtube: 'lowtidegolf' }
+        'lowtidegolf': { instagram: 'low_tide_golf', tiktok: 'lowtidegolf', youtube: null }  // No YouTube
       },
       
       // Debug mode - set to true to see matching logs in console
@@ -1168,6 +1180,9 @@
       },
       
       // Get account stats for a specific week
+      // Calculates: 
+      // 1. Views from posts made that week
+      // 2. PLUS incremental views gained on recent posts (within 4 weeks) during that week
       getAccountWeeklyStats(platform, accountName, startDate, endDate) {
         const workbook = this.easyGraphsData[`${platform}Workbook`];
         if (!workbook) {
@@ -1175,34 +1190,81 @@
           return null;
         }
         
-        // Parse account data
+        // Parse account data with full history
         const accountData = this.parseAccountDataFromWorkbook(workbook, accountName, platform, 'all');
         if (!accountData) {
           this.debugLog(`No account data for ${accountName} on ${platform}`);
           return null;
         }
         
-        // Get ALL videos for total views calculation
         const allVideos = accountData.videos || [];
         
-        // Filter videos posted this week for posts count
+        // Filter videos posted this week
         const weekVideos = allVideos.filter(v => 
           v.date >= startDate && v.date <= endDate
         );
         
-        // Calculate weekly stats
-        // Views/likes/comments are TOTAL from all videos (not just this week's posts)
+        // Calculate views from posts made this week (full views for new posts)
+        let weeklyViews = weekVideos.reduce((sum, v) => sum + (v.views || 0), 0);
+        let weeklyLikes = weekVideos.reduce((sum, v) => sum + (v.likes || 0), 0);
+        let weeklyComments = weekVideos.reduce((sum, v) => sum + (v.comments || 0), 0);
+        
+        // Also include incremental views from recent posts (within 4 weeks before this week)
+        // that gained traction during this week
+        const fourWeeksBeforeStart = new Date(startDate);
+        fourWeeksBeforeStart.setDate(fourWeeksBeforeStart.getDate() - 28);
+        
+        const recentOlderVideos = allVideos.filter(v => 
+          v.date >= fourWeeksBeforeStart && v.date < startDate
+        );
+        
+        // For older posts, we need to estimate view gains during this week
+        // Using the viewsHistory if available, otherwise use a fraction of total views
+        if (accountData.viewsHistory && accountData.viewsHistory.length > 0) {
+          // Try to calculate actual view gains from history
+          const weekViewsHistory = accountData.viewsHistory.filter(h => 
+            h.date >= startDate && h.date <= endDate
+          ).sort((a, b) => a.date - b.date);
+          
+          const prevWeekViewsHistory = accountData.viewsHistory.filter(h => 
+            h.date >= fourWeeksBeforeStart && h.date < startDate
+          ).sort((a, b) => a.date - b.date);
+          
+          if (weekViewsHistory.length >= 1 && prevWeekViewsHistory.length >= 1) {
+            // Calculate view gain during this week
+            const weekEndViews = weekViewsHistory[weekViewsHistory.length - 1].value;
+            const weekStartViews = prevWeekViewsHistory[prevWeekViewsHistory.length - 1].value;
+            const viewGain = Math.max(0, weekEndViews - weekStartViews);
+            
+            // If we have actual view gain data, use it instead of summing post views
+            // This accounts for organic growth on older posts
+            if (viewGain > 0) {
+              weeklyViews = viewGain;
+            }
+          }
+        } else {
+          // Fallback: For recent older posts, add a portion of their views
+          // (assuming they got ~20% of their total views in each of the first few weeks)
+          for (const video of recentOlderVideos) {
+            const videoAge = Math.floor((startDate - video.date) / (7 * 24 * 60 * 60 * 1000)); // weeks old
+            if (videoAge <= 4 && video.views) {
+              // Estimate weekly view contribution (decay factor based on age)
+              const weeklyContribution = video.views * (0.15 / (videoAge + 1));
+              weeklyViews += Math.round(weeklyContribution);
+            }
+          }
+        }
+        
         const stats = {
-          views: allVideos.reduce((sum, v) => sum + (v.views || 0), 0),
-          likes: allVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
-          comments: allVideos.reduce((sum, v) => sum + (v.comments || 0), 0),
-          posts: weekVideos.length,  // Only posts from this week
+          views: weeklyViews,
+          likes: weeklyLikes,
+          comments: weeklyComments,
+          posts: weekVideos.length,
           newFollowers: 0,
           currentFollowers: accountData.followers || 0
         };
         
         // Calculate new followers this week
-        // Filter out zero/null/invalid values first (they indicate scrape errors)
         const validFollowersHistory = (accountData.followersHistory || []).filter(h => 
           h && h.value != null && typeof h.value === 'number' && h.value > 0
         );
@@ -1215,7 +1277,6 @@
           if (weekHistory.length >= 2) {
             stats.newFollowers = weekHistory[weekHistory.length - 1].value - weekHistory[0].value;
           } else if (weekHistory.length === 1) {
-            // Try to find the previous week's last value
             const prevWeekStart = new Date(startDate);
             prevWeekStart.setDate(prevWeekStart.getDate() - 7);
             const prevHistory = validFollowersHistory.filter(h => 
@@ -1300,6 +1361,20 @@
             <div class="value">${totalPosts}</div>
           </div>
         `;
+        
+        // Store account stats for export
+        this.weeklyAccountStats = accountStats;
+        this.weeklyMatchedAccounts = matchedAccounts;
+        this.weeklyStartDate = startDate;
+        this.weeklyEndDate = endDate;
+        this.weeklyLabel = weekLabel;
+        
+        // Populate the export account dropdown
+        const exportSelect = document.getElementById('exportAccountSelect');
+        if (exportSelect) {
+          exportSelect.innerHTML = '<option value="">-- select account --</option>' +
+            matchedAccounts.map(acc => `<option value="${acc.name}">@${acc.name}</option>`).join('');
+        }
         
         // Create per-account breakdown table
         this.createAccountBreakdownTable(container, accountStats);
@@ -2122,6 +2197,346 @@
         }
       },
       
+      // Export individual client report as PDF
+      async exportIndividualClientReport() {
+        const accountSelect = document.getElementById('exportAccountSelect');
+        const selectedAccount = accountSelect.value;
+        
+        if (!selectedAccount) {
+          alert('Please select an account to export.');
+          return;
+        }
+        
+        // Find the account data
+        const accountStats = this.weeklyAccountStats.find(a => a.name === selectedAccount);
+        if (!accountStats) {
+          alert('Account data not found.');
+          return;
+        }
+        
+        const weekLabel = this.weeklyLabel || this.currentEasyGraphsMonth;
+        const year = this.currentEasyGraphsYear || new Date().getFullYear();
+        const filename = `${selectedAccount}_${weekLabel.replace(/\s+/g, '_')}_${year}_report.pdf`;
+        
+        // Create a temporary container for the individual client report
+        const exportContainer = document.createElement('div');
+        exportContainer.style.position = 'fixed';
+        exportContainer.style.top = '0';
+        exportContainer.style.left = '0';
+        exportContainer.style.right = '0';
+        exportContainer.style.bottom = '0';
+        exportContainer.style.background = '#000';
+        exportContainer.style.padding = '20px';
+        exportContainer.style.overflow = 'auto';
+        exportContainer.style.zIndex = '9999';
+        exportContainer.id = 'individualExportContainer';
+        document.body.appendChild(exportContainer);
+        
+        // Create the individual client report content
+        exportContainer.innerHTML = `
+          <div style="max-width: 900px; margin: 0 auto; color: #0f0; font-family: monospace;">
+            <div style="text-align: center; margin-bottom: 2em;">
+              <h1 style="color: #0f0; font-size: 2em;">@${selectedAccount}</h1>
+              <h2 style="color: #0a0; font-size: 1.2em;">${weekLabel} ${year} Analytics Report</h2>
+              <p style="color: #080;">Prepared by MoonMedia</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; margin-bottom: 2em;">
+              <div style="background: #111; border: 1px solid #0f0; padding: 1em; text-align: center; border-radius: 8px;">
+                <h4 style="margin: 0; color: #0a0;">Total Views</h4>
+                <div style="font-size: 1.5em; color: #0f0;">${this.formatNumber(
+                  (accountStats.instagram?.views || 0) + 
+                  (accountStats.tiktok?.views || 0) + 
+                  (accountStats.youtube?.views || 0)
+                )}</div>
+              </div>
+              <div style="background: #111; border: 1px solid #0f0; padding: 1em; text-align: center; border-radius: 8px;">
+                <h4 style="margin: 0; color: #0a0;">New Followers</h4>
+                <div style="font-size: 1.5em; color: #0f0;">+${this.formatNumber(
+                  (accountStats.instagram?.newFollowers || 0) + 
+                  (accountStats.tiktok?.newFollowers || 0) + 
+                  (accountStats.youtube?.newFollowers || 0)
+                )}</div>
+              </div>
+              <div style="background: #111; border: 1px solid #0f0; padding: 1em; text-align: center; border-radius: 8px;">
+                <h4 style="margin: 0; color: #0a0;">Posts This Week</h4>
+                <div style="font-size: 1.5em; color: #0f0;">${
+                  (accountStats.instagram?.posts || 0) + 
+                  (accountStats.tiktok?.posts || 0) + 
+                  (accountStats.youtube?.posts || 0)
+                }</div>
+              </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1em; margin-bottom: 2em;">
+              <div style="background: #111; border: 1px solid #0f0; padding: 1em; border-radius: 8px;">
+                <h3 style="color: #0f0; margin-top: 0;">Views by Platform</h3>
+                <canvas id="clientViewsChart" height="200"></canvas>
+              </div>
+              <div style="background: #111; border: 1px solid #0f0; padding: 1em; border-radius: 8px;">
+                <h3 style="color: #0f0; margin-top: 0;">New Followers by Platform</h3>
+                <canvas id="clientFollowersChart" height="200"></canvas>
+              </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1em; margin-bottom: 2em;">
+              <div style="background: #111; border: 1px solid #0f0; padding: 1em; border-radius: 8px;">
+                <h3 style="color: #0f0; margin-top: 0;">Posts by Platform</h3>
+                <canvas id="clientPostsChart" height="200"></canvas>
+              </div>
+              <div style="background: #111; border: 1px solid #0f0; padding: 1em; border-radius: 8px;">
+                <h3 style="color: #0f0; margin-top: 0;">Likes by Platform</h3>
+                <canvas id="clientLikesChart" height="200"></canvas>
+              </div>
+            </div>
+            
+            <div style="background: #111; border: 1px solid #0f0; padding: 1em; border-radius: 8px; margin-bottom: 2em;">
+              <h3 style="color: #0f0; margin-top: 0;">Platform Breakdown</h3>
+              <table style="width: 100%; border-collapse: collapse; color: #0f0;">
+                <thead>
+                  <tr style="border-bottom: 1px solid #0f0;">
+                    <th style="padding: 10px; text-align: left;">Platform</th>
+                    <th style="padding: 10px; text-align: center;">Views</th>
+                    <th style="padding: 10px; text-align: center;">New Followers</th>
+                    <th style="padding: 10px; text-align: center;">Likes</th>
+                    <th style="padding: 10px; text-align: center;">Comments</th>
+                    <th style="padding: 10px; text-align: center;">Posts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom: 1px solid #060;">
+                    <td style="padding: 10px;">Instagram</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.instagram?.views || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">+${this.formatNumber(accountStats.instagram?.newFollowers || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.instagram?.likes || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.instagram?.comments || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${accountStats.instagram?.posts || 0}</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid #060;">
+                    <td style="padding: 10px;">TikTok</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.tiktok?.views || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">+${this.formatNumber(accountStats.tiktok?.newFollowers || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.tiktok?.likes || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.tiktok?.comments || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${accountStats.tiktok?.posts || 0}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px;">YouTube</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.youtube?.views || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">+${this.formatNumber(accountStats.youtube?.newFollowers || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.youtube?.likes || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${this.formatNumber(accountStats.youtube?.comments || 0)}</td>
+                    <td style="padding: 10px; text-align: center;">${accountStats.youtube?.posts || 0}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div style="text-align: center; margin-top: 2em;">
+              <button onclick="app.downloadClientReport('${selectedAccount}')" style="background: #0f0; color: #000; border: none; padding: 1em 2em; font-size: 1.2em; cursor: pointer; border-radius: 5px; margin-right: 1em;">
+                📥 Download Report
+              </button>
+              <button onclick="document.getElementById('individualExportContainer').remove()" style="background: #333; color: #0f0; border: 1px solid #0f0; padding: 1em 2em; font-size: 1.2em; cursor: pointer; border-radius: 5px;">
+                ✕ Close Preview
+              </button>
+            </div>
+          </div>
+        `;
+        
+        // Create the charts
+        this.createClientViewsChart('clientViewsChart', accountStats);
+        this.createClientFollowersChart('clientFollowersChart', accountStats);
+        this.createClientPostsChart('clientPostsChart', accountStats);
+        this.createClientLikesChart('clientLikesChart', accountStats);
+      },
+      
+      // Create views chart for individual client
+      createClientViewsChart(canvasId, accountStats) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: ['Instagram', 'TikTok', 'YouTube'],
+            datasets: [{
+              label: 'Views',
+              data: [
+                accountStats.instagram?.views || 0,
+                accountStats.tiktok?.views || 0,
+                accountStats.youtube?.views || 0
+              ],
+              backgroundColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { color: '#0f0' },
+                grid: { color: '#030' }
+              },
+              x: {
+                ticks: { color: '#0f0' },
+                grid: { display: false }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create followers chart for individual client
+      createClientFollowersChart(canvasId, accountStats) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: ['Instagram', 'TikTok', 'YouTube'],
+            datasets: [{
+              label: 'New Followers',
+              data: [
+                accountStats.instagram?.newFollowers || 0,
+                accountStats.tiktok?.newFollowers || 0,
+                accountStats.youtube?.newFollowers || 0
+              ],
+              backgroundColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { color: '#0f0' },
+                grid: { color: '#030' }
+              },
+              x: {
+                ticks: { color: '#0f0' },
+                grid: { display: false }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create posts chart for individual client
+      createClientPostsChart(canvasId, accountStats) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Instagram', 'TikTok', 'YouTube'],
+            datasets: [{
+              data: [
+                accountStats.instagram?.posts || 0,
+                accountStats.tiktok?.posts || 0,
+                accountStats.youtube?.posts || 0
+              ],
+              backgroundColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderColor: '#000',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { color: '#0f0' }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create likes chart for individual client
+      createClientLikesChart(canvasId, accountStats) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: ['Instagram', 'TikTok', 'YouTube'],
+            datasets: [{
+              label: 'Likes',
+              data: [
+                accountStats.instagram?.likes || 0,
+                accountStats.tiktok?.likes || 0,
+                accountStats.youtube?.likes || 0
+              ],
+              backgroundColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { color: '#0f0' },
+                grid: { color: '#030' }
+              },
+              x: {
+                ticks: { color: '#0f0' },
+                grid: { display: false }
+              }
+            }
+          }
+        });
+      },
+      
+      // Download individual client report
+      async downloadClientReport(accountName) {
+        const weekLabel = this.weeklyLabel || this.currentEasyGraphsMonth;
+        const year = this.currentEasyGraphsYear || new Date().getFullYear();
+        const filename = `${accountName}_${weekLabel.replace(/\s+/g, '_')}_${year}_report`;
+        
+        const exportContainer = document.getElementById('individualExportContainer');
+        
+        try {
+          if (typeof html2canvas !== 'undefined') {
+            const canvas = await html2canvas(exportContainer, {
+              backgroundColor: '#000000',
+              scale: 2
+            });
+            
+            const imgData = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `${filename}.png`;
+            link.href = imgData;
+            link.click();
+          } else {
+            // Fallback: download charts as images
+            alert(`To download as PDF, add html2canvas library.\n\nDownloading charts as separate images...`);
+            
+            ['clientViewsChart', 'clientFollowersChart', 'clientPostsChart', 'clientLikesChart'].forEach(chartId => {
+              const canvas = document.getElementById(chartId);
+              if (canvas) {
+                const link = document.createElement('a');
+                link.download = `${filename}_${chartId}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Download error:', error);
+          alert('Download failed. Please try again.');
+        }
+      },
+      
       // Platform selection
       async selectPlatform(platform) {
         this.selectedPlatform = platform;
@@ -2586,17 +3001,59 @@
               allUniqueVideoIds.add(videoId);
             }
             
-            // For views and likes, use the HIGHEST value across all scrapes
-            // (since they should never decrease - if they do, it's a scrape error)
+            // For views and likes, use the HIGHEST REALISTIC value across all scrapes
+            // Filter out anomalies: likes ≈ views, likes > views, implausibly low likes
             const metricLower = metric.toLowerCase();
             if (metricLower === 'views' || metricLower === 'likes') {
               let highestValue = 0;
+              let allValues = [];
+              
+              // Collect all values first
               for (let colIdx = 1; colIdx < row.length; colIdx++) {
                 const cellValue = parseInt(row[colIdx]) || 0;
-                if (cellValue > highestValue) {
-                  highestValue = cellValue;
+                if (cellValue > 0) {
+                  allValues.push({ colIdx, value: cellValue });
                 }
               }
+              
+              // For likes, we need to filter out anomalies
+              if (metricLower === 'likes' && allValues.length > 0) {
+                // Get the views for this video to detect anomalies
+                const viewsRow = allVideosMap.get(videoId);
+                const videoViews = viewsRow ? viewsRow.Views : null;
+                
+                // Filter out anomalous likes values
+                const realisticValues = allValues.filter(item => {
+                  if (videoViews) {
+                    // Reject if likes ≈ views (within 5% - likely extraction error)
+                    if (Math.abs(item.value - videoViews) / videoViews < 0.05) {
+                      return false;
+                    }
+                    // Reject if likes > views (impossible)
+                    if (item.value > videoViews) {
+                      return false;
+                    }
+                    // Reject if likes < 0.1% of views for significant views (implausibly low)
+                    if (videoViews > 5000 && item.value < videoViews * 0.001) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+                
+                // Use highest realistic value, or fall back to highest overall if all filtered
+                if (realisticValues.length > 0) {
+                  highestValue = Math.max(...realisticValues.map(v => v.value));
+                } else if (allValues.length > 0) {
+                  // All values are anomalous - use the median as best guess
+                  const sorted = allValues.map(v => v.value).sort((a, b) => a - b);
+                  highestValue = sorted[Math.floor(sorted.length / 2)];
+                }
+              } else {
+                // For views, just use highest
+                highestValue = allValues.length > 0 ? Math.max(...allValues.map(v => v.value)) : 0;
+              }
+              
               if (highestValue > 0) {
                 if (!allVideosMap.has(videoId)) {
                   allVideosMap.set(videoId, { id: videoId });
@@ -2841,16 +3298,54 @@
             if (metric === 'date_display') continue;
             
             if (mappedMetric) {
-              // For views and likes, use the HIGHEST value across all scrapes (since they should never go down)
-              // For other metrics, use the most recent non-empty value
+              // For views and likes, use the HIGHEST REALISTIC value across all scrapes
+              // Filter out anomalies: likes ≈ views, likes > views
               if (metric === 'views' || metric === 'likes') {
-                let highestValue = 0;
+                let allValues = [];
                 for (let colIdx = 1; colIdx < row.length; colIdx++) {
                   const cellValue = parseInt(row[colIdx]) || 0;
-                  if (cellValue > highestValue) {
-                    highestValue = cellValue;
+                  if (cellValue > 0) {
+                    allValues.push({ colIdx, value: cellValue });
                   }
                 }
+                
+                let highestValue = 0;
+                
+                if (metric === 'likes' && allValues.length > 0) {
+                  // Get views for this video to detect anomalies
+                  const viewsData = allVideosMap.get(videoId);
+                  const videoViews = viewsData ? viewsData.Views : null;
+                  
+                  // Filter out anomalous likes
+                  const realisticValues = allValues.filter(item => {
+                    if (videoViews) {
+                      // Reject if likes ≈ views (within 5%)
+                      if (Math.abs(item.value - videoViews) / videoViews < 0.05) {
+                        return false;
+                      }
+                      // Reject if likes > views
+                      if (item.value > videoViews) {
+                        return false;
+                      }
+                      // Reject if likes < 0.1% of views for significant views
+                      if (videoViews > 5000 && item.value < videoViews * 0.001) {
+                        return false;
+                      }
+                    }
+                    return true;
+                  });
+                  
+                  if (realisticValues.length > 0) {
+                    highestValue = Math.max(...realisticValues.map(v => v.value));
+                  } else if (allValues.length > 0) {
+                    // All anomalous - use median
+                    const sorted = allValues.map(v => v.value).sort((a, b) => a - b);
+                    highestValue = sorted[Math.floor(sorted.length / 2)];
+                  }
+                } else {
+                  highestValue = allValues.length > 0 ? Math.max(...allValues.map(v => v.value)) : 0;
+                }
+                
                 if (highestValue > 0) {
                   if (!allVideosMap.has(videoId)) {
                     allVideosMap.set(videoId, { id: videoId });
