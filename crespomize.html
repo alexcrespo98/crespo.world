@@ -545,6 +545,18 @@
         youtube: '1yRLZpJLdaB9oPZtjcwIeJx-6q8lGF2dO'
       },
       
+      // Explicit account mapping across platforms
+      // Maps a canonical name to the actual account names on each platform
+      ACCOUNT_MAPPING: {
+        'popdartsgame': { instagram: 'popdartsgame', tiktok: 'popdartsgame', youtube: 'popdartsgame' },
+        'bucketgolfgame': { instagram: 'bucketgolfgame', tiktok: 'bucketgolfgame', youtube: 'bucketgolfgame' },
+        'playbattlegolf': { instagram: 'playbattlegolf', tiktok: 'playbattlegolf', youtube: 'playbattlegolf' },
+        'flinggolf': { instagram: 'flinggolf', tiktok: 'flinggolf', youtube: 'flinggolf' },
+        'golfponggames': { instagram: 'golfponggames', tiktok: 'golfponggames', youtube: 'golfponggames' },
+        'discgogames': { instagram: 'discgogames', tiktok: 'discgogames', youtube: 'discgogames' },
+        'lowtidegolf': { instagram: 'lowtidegolf', tiktok: 'lowtidegolf', youtube: 'lowtidegolf' }
+      },
+      
       // Smoothness constants for exponential smoothing
       SMOOTHNESS: {
         MIN_LEVEL: 1,
@@ -990,7 +1002,7 @@
         this.currentEasyGraphsYear = weekEnd.getFullYear();
       },
       
-      // Match accounts across platforms using fuzzy matching
+      // Match accounts across platforms using explicit mapping first, then fuzzy matching
       matchAccountsAcrossPlatforms() {
         const platformAccounts = {
           instagram: [],
@@ -1006,13 +1018,54 @@
           }
         });
         
+        console.log('Platform accounts found:', platformAccounts);
+        
+        // Track which accounts have been matched
+        const usedAccounts = { instagram: new Set(), tiktok: new Set(), youtube: new Set() };
+        const matchedAccounts = [];
+        
+        // STEP 1: Use explicit account mapping first
+        Object.entries(this.ACCOUNT_MAPPING).forEach(([canonicalName, mapping]) => {
+          const match = {
+            name: canonicalName,
+            normalizedName: canonicalName.toLowerCase(),
+            instagram: null,
+            tiktok: null,
+            youtube: null
+          };
+          
+          // Check if mapped accounts exist in each platform
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            const mappedAccount = mapping[platform];
+            if (mappedAccount && platformAccounts[platform].includes(mappedAccount)) {
+              match[platform] = mappedAccount;
+              usedAccounts[platform].add(mappedAccount);
+            } else if (mappedAccount) {
+              // Try case-insensitive match
+              const found = platformAccounts[platform].find(
+                a => a.toLowerCase() === mappedAccount.toLowerCase()
+              );
+              if (found) {
+                match[platform] = found;
+                usedAccounts[platform].add(found);
+              }
+            }
+          });
+          
+          // Only add if at least one platform matched
+          if (match.instagram || match.tiktok || match.youtube) {
+            matchedAccounts.push(match);
+            console.log(`Explicit match: ${canonicalName}`, match);
+          }
+        });
+        
+        // STEP 2: Fuzzy matching for remaining accounts
         // Account name normalization patterns
         const ACCOUNT_PREFIX_PATTERNS = /^(the_?|official_?)/i;
         const ACCOUNT_SUFFIX_PATTERNS = /(_?official|_?tv|_?shorts|_?reels|_?yt|_?ig|_?tt)$/i;
         const ACCOUNT_SEPARATOR_PATTERN = /[._-]/g;
-        const MIN_MATCH_LENGTH = 3; // Minimum length for substring matching to avoid false positives
+        const MIN_MATCH_LENGTH = 3;
         
-        // Normalize account name for matching (lowercase, remove common prefixes/suffixes)
         const normalizeAccountName = (name) => {
           return name.toLowerCase()
             .replace(ACCOUNT_PREFIX_PATTERNS, '')
@@ -1021,26 +1074,21 @@
             .trim();
         };
         
-        // Check if two normalized names match (with minimum length threshold)
         const namesMatch = (name1, name2) => {
           if (name1 === name2) return true;
-          // Only do substring matching if both names meet minimum length
           if (name1.length >= MIN_MATCH_LENGTH && name2.length >= MIN_MATCH_LENGTH) {
             return name1.includes(name2) || name2.includes(name1);
           }
           return false;
         };
         
-        // Find matching accounts across platforms
-        const matchedAccounts = [];
-        const usedAccounts = { instagram: new Set(), tiktok: new Set(), youtube: new Set() };
-        
-        // Start with Instagram accounts and find matches
+        // Match remaining Instagram accounts
         platformAccounts.instagram.forEach(igAccount => {
-          const normalized = normalizeAccountName(igAccount);
+          if (usedAccounts.instagram.has(igAccount)) return;
           
+          const normalized = normalizeAccountName(igAccount);
           const match = {
-            name: igAccount, // Use original name
+            name: igAccount,
             normalizedName: normalized,
             instagram: igAccount,
             tiktok: null,
@@ -1071,46 +1119,57 @@
           
           usedAccounts.instagram.add(igAccount);
           matchedAccounts.push(match);
+          console.log(`Fuzzy match (IG): ${igAccount}`, match);
         });
         
         // Add any unmatched TikTok accounts
         platformAccounts.tiktok.forEach(ttAccount => {
           if (!usedAccounts.tiktok.has(ttAccount)) {
-            matchedAccounts.push({
+            const match = {
               name: ttAccount,
               normalizedName: normalizeAccountName(ttAccount),
               instagram: null,
               tiktok: ttAccount,
               youtube: null
-            });
+            };
+            matchedAccounts.push(match);
+            console.log(`Unmatched TikTok: ${ttAccount}`, match);
           }
         });
         
         // Add any unmatched YouTube accounts
         platformAccounts.youtube.forEach(ytAccount => {
           if (!usedAccounts.youtube.has(ytAccount)) {
-            matchedAccounts.push({
+            const match = {
               name: ytAccount,
               normalizedName: normalizeAccountName(ytAccount),
               instagram: null,
               tiktok: null,
               youtube: ytAccount
-            });
+            };
+            matchedAccounts.push(match);
+            console.log(`Unmatched YouTube: ${ytAccount}`, match);
           }
         });
         
-        console.log('Matched accounts across platforms:', matchedAccounts);
+        console.log('Final matched accounts:', matchedAccounts);
         return matchedAccounts;
       },
       
       // Get account stats for a specific week
       getAccountWeeklyStats(platform, accountName, startDate, endDate) {
         const workbook = this.easyGraphsData[`${platform}Workbook`];
-        if (!workbook) return null;
+        if (!workbook) {
+          console.log(`No workbook for ${platform}`);
+          return null;
+        }
         
         // Parse account data
         const accountData = this.parseAccountDataFromWorkbook(workbook, accountName, platform, 'all');
-        if (!accountData) return null;
+        if (!accountData) {
+          console.log(`No account data for ${accountName} on ${platform}`);
+          return null;
+        }
         
         // Filter videos for this week
         const weekVideos = (accountData.videos || []).filter(v => 
@@ -1128,8 +1187,11 @@
         };
         
         // Calculate new followers this week
-        if (accountData.followersHistory && accountData.followersHistory.length > 0) {
-          const weekHistory = accountData.followersHistory.filter(h => 
+        // Filter out zero/null values first (they indicate scrape errors)
+        const validFollowersHistory = (accountData.followersHistory || []).filter(h => h.value > 0);
+        
+        if (validFollowersHistory.length > 0) {
+          const weekHistory = validFollowersHistory.filter(h => 
             h.date >= startDate && h.date <= endDate
           ).sort((a, b) => a.date - b.date);
           
@@ -1139,7 +1201,7 @@
             // Try to find the previous week's last value
             const prevWeekStart = new Date(startDate);
             prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-            const prevHistory = accountData.followersHistory.filter(h => 
+            const prevHistory = validFollowersHistory.filter(h => 
               h.date >= prevWeekStart && h.date < startDate
             ).sort((a, b) => a.date - b.date);
             
@@ -1149,6 +1211,7 @@
           }
         }
         
+        console.log(`Stats for ${accountName} (${platform}):`, stats);
         return stats;
       },
       
