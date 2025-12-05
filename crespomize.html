@@ -438,16 +438,16 @@
       <div class="question">what type of analytics?</div>
       <select id="analyticsTypeSelect">
         <option value="" disabled selected>-- select analytics type --</option>
-        <option value="easy">Easy Graphs (for client reports)</option>
+        <option value="easy">Weekly Analytics (this week's progress)</option>
         <option value="custom">Custom Analytics</option>
       </select>
     </div>
 
-    <!-- Easy Graphs Section -->
+    <!-- Easy Graphs Section (now Weekly Analytics) -->
     <div id="easyGraphsSection" class="step hidden">
-      <div class="question">select month for client report:</div>
+      <div class="question">select week for analytics:</div>
       <select id="monthSelect">
-        <option value="" disabled selected>-- select month --</option>
+        <option value="" disabled selected>-- select week --</option>
       </select>
       <div id="easyGraphsContainer" class="hidden">
         <div class="question" id="easyGraphsTitle"></div>
@@ -908,28 +908,43 @@
         }
       },
       
-      // Populate month dropdown with current and past 12 months
+      // Populate week dropdown with current and past 12 weeks
       populateMonthDropdown() {
         const monthSelect = document.getElementById('monthSelect');
-        monthSelect.innerHTML = '<option value="" disabled selected>-- select month --</option>';
+        monthSelect.innerHTML = '<option value="" disabled selected>-- select week --</option>';
         
         const now = new Date();
-        const currentDay = now.getDate();
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                        'July', 'August', 'September', 'October', 'November', 'December'];
         
-        // Add current month and previous 12 months
+        // Get the start of the current week (Monday)
+        const currentWeekStart = new Date(now);
+        const dayOfWeek = now.getDay();
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday = 0, so 6 days back to Monday
+        currentWeekStart.setDate(now.getDate() - daysToMonday);
+        currentWeekStart.setHours(0, 0, 0, 0);
+        
+        // Add current week and previous 12 weeks
         for (let i = 0; i <= 12; i++) {
-          const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const monthName = months[date.getMonth()];
-          const year = date.getFullYear();
-          const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          const weekStart = new Date(currentWeekStart);
+          weekStart.setDate(weekStart.getDate() - (i * 7));
           
-          let label = `${monthName} ${year}`;
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          weekEnd.setHours(23, 59, 59, 999);
           
-          // Check if it's the current month (partial)
+          const value = weekStart.toISOString().split('T')[0]; // YYYY-MM-DD format
+          
+          const formatDate = (d) => {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${months[d.getMonth()]} ${d.getDate()}`;
+          };
+          
+          let label = `${formatDate(weekStart)} - ${formatDate(weekEnd)}, ${weekEnd.getFullYear()}`;
+          
+          // Mark current week
           if (i === 0) {
-            label += ' (partial)';
+            label = 'This Week (' + label + ')';
+          } else if (i === 1) {
+            label = 'Last Week (' + label + ')';
           }
           
           const option = document.createElement('option');
@@ -939,29 +954,591 @@
         }
       },
       
-      // Select month for easy graphs
-      async selectMonthForEasyGraphs(monthValue) {
-        const [year, month] = monthValue.split('-').map(Number);
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = new Date(year, month, 0, 23, 59, 59); // Last day of month
+      // Select week for easy graphs (renamed from selectMonthForEasyGraphs but keeping name for compatibility)
+      async selectMonthForEasyGraphs(weekStartValue) {
+        // Parse the week start date
+        const weekStart = new Date(weekStartValue + 'T00:00:00');
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        weekEnd.setHours(23, 59, 59, 999);
         
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                        'July', 'August', 'September', 'October', 'November', 'December'];
-        const monthName = months[month - 1];
+        const formatDate = (d) => {
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return `${months[d.getMonth()]} ${d.getDate()}`;
+        };
+        
+        const weekLabel = `${formatDate(weekStart)} - ${formatDate(weekEnd)}, ${weekEnd.getFullYear()}`;
         
         // Show loading
         document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('loading').textContent = 'generating graphs...';
+        document.getElementById('loading').textContent = 'generating weekly analytics...';
         
-        // Render the easy graphs
-        await this.renderEasyGraphs(startDate, endDate, monthName, year);
+        // Render the weekly graphs
+        await this.renderWeeklyGraphs(weekStart, weekEnd, weekLabel);
         
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('easyGraphsContainer').classList.remove('hidden');
         
-        // Store current month for PDF export
-        this.currentEasyGraphsMonth = monthName;
-        this.currentEasyGraphsYear = year;
+        // Store current week for PDF export
+        this.currentEasyGraphsMonth = weekLabel;
+        this.currentEasyGraphsYear = weekEnd.getFullYear();
+      },
+      
+      // Match accounts across platforms using fuzzy matching
+      matchAccountsAcrossPlatforms() {
+        const platformAccounts = {
+          instagram: [],
+          tiktok: [],
+          youtube: []
+        };
+        
+        // Get account names from each platform
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          const workbook = this.easyGraphsData[`${platform}Workbook`];
+          if (workbook && workbook.SheetNames) {
+            platformAccounts[platform] = workbook.SheetNames;
+          }
+        });
+        
+        // Normalize account name for matching (lowercase, remove common prefixes/suffixes)
+        const normalizeAccountName = (name) => {
+          return name.toLowerCase()
+            .replace(/^(the_?|official_?)/i, '')
+            .replace(/(_?official|_?tv|_?shorts|_?reels|_?yt|_?ig|_?tt)$/i, '')
+            .replace(/[._-]/g, '')
+            .trim();
+        };
+        
+        // Find matching accounts across platforms
+        const matchedAccounts = [];
+        const usedAccounts = { instagram: new Set(), tiktok: new Set(), youtube: new Set() };
+        
+        // Start with Instagram accounts and find matches
+        platformAccounts.instagram.forEach(igAccount => {
+          const normalized = normalizeAccountName(igAccount);
+          
+          const match = {
+            name: igAccount, // Use original name
+            normalizedName: normalized,
+            instagram: igAccount,
+            tiktok: null,
+            youtube: null
+          };
+          
+          // Find matching TikTok account
+          platformAccounts.tiktok.forEach(ttAccount => {
+            if (!usedAccounts.tiktok.has(ttAccount)) {
+              const ttNormalized = normalizeAccountName(ttAccount);
+              if (ttNormalized === normalized || 
+                  ttNormalized.includes(normalized) || 
+                  normalized.includes(ttNormalized)) {
+                match.tiktok = ttAccount;
+                usedAccounts.tiktok.add(ttAccount);
+              }
+            }
+          });
+          
+          // Find matching YouTube account
+          platformAccounts.youtube.forEach(ytAccount => {
+            if (!usedAccounts.youtube.has(ytAccount)) {
+              const ytNormalized = normalizeAccountName(ytAccount);
+              if (ytNormalized === normalized || 
+                  ytNormalized.includes(normalized) || 
+                  normalized.includes(ytNormalized)) {
+                match.youtube = ytAccount;
+                usedAccounts.youtube.add(ytAccount);
+              }
+            }
+          });
+          
+          usedAccounts.instagram.add(igAccount);
+          matchedAccounts.push(match);
+        });
+        
+        // Add any unmatched TikTok accounts
+        platformAccounts.tiktok.forEach(ttAccount => {
+          if (!usedAccounts.tiktok.has(ttAccount)) {
+            matchedAccounts.push({
+              name: ttAccount,
+              normalizedName: normalizeAccountName(ttAccount),
+              instagram: null,
+              tiktok: ttAccount,
+              youtube: null
+            });
+          }
+        });
+        
+        // Add any unmatched YouTube accounts
+        platformAccounts.youtube.forEach(ytAccount => {
+          if (!usedAccounts.youtube.has(ytAccount)) {
+            matchedAccounts.push({
+              name: ytAccount,
+              normalizedName: normalizeAccountName(ytAccount),
+              instagram: null,
+              tiktok: null,
+              youtube: ytAccount
+            });
+          }
+        });
+        
+        console.log('Matched accounts across platforms:', matchedAccounts);
+        return matchedAccounts;
+      },
+      
+      // Get account stats for a specific week
+      getAccountWeeklyStats(platform, accountName, startDate, endDate) {
+        const workbook = this.easyGraphsData[`${platform}Workbook`];
+        if (!workbook) return null;
+        
+        // Parse account data
+        const accountData = this.parseAccountDataFromWorkbook(workbook, accountName, platform, 'all');
+        if (!accountData) return null;
+        
+        // Filter videos for this week
+        const weekVideos = (accountData.videos || []).filter(v => 
+          v.date >= startDate && v.date <= endDate
+        );
+        
+        // Calculate weekly stats
+        const stats = {
+          views: weekVideos.reduce((sum, v) => sum + (v.views || 0), 0),
+          likes: weekVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
+          comments: weekVideos.reduce((sum, v) => sum + (v.comments || 0), 0),
+          posts: weekVideos.length,
+          newFollowers: 0,
+          currentFollowers: accountData.followers || 0
+        };
+        
+        // Calculate new followers this week
+        if (accountData.followersHistory && accountData.followersHistory.length > 0) {
+          const weekHistory = accountData.followersHistory.filter(h => 
+            h.date >= startDate && h.date <= endDate
+          ).sort((a, b) => a.date - b.date);
+          
+          if (weekHistory.length >= 2) {
+            stats.newFollowers = weekHistory[weekHistory.length - 1].value - weekHistory[0].value;
+          } else if (weekHistory.length === 1) {
+            // Try to find the previous week's last value
+            const prevWeekStart = new Date(startDate);
+            prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+            const prevHistory = accountData.followersHistory.filter(h => 
+              h.date >= prevWeekStart && h.date < startDate
+            ).sort((a, b) => a.date - b.date);
+            
+            if (prevHistory.length > 0) {
+              stats.newFollowers = weekHistory[0].value - prevHistory[prevHistory.length - 1].value;
+            }
+          }
+        }
+        
+        return stats;
+      },
+      
+      // Render weekly graphs (replaces renderEasyGraphs for weekly mode)
+      async renderWeeklyGraphs(startDate, endDate, weekLabel) {
+        const container = document.getElementById('easyChartsList');
+        container.innerHTML = '';
+        
+        // Reset chart instances
+        this.chartInstances = {};
+        
+        document.getElementById('easyGraphsTitle').textContent = 
+          `Weekly Analytics: ${weekLabel}`;
+        
+        // Match accounts across platforms
+        const matchedAccounts = this.matchAccountsAcrossPlatforms();
+        
+        // Calculate stats for each matched account
+        const accountStats = [];
+        let totalViews = 0;
+        let totalLikes = 0;
+        let totalComments = 0;
+        let totalNewFollowers = 0;
+        let totalPosts = 0;
+        
+        matchedAccounts.forEach(account => {
+          const stats = {
+            name: account.name,
+            instagram: account.instagram ? this.getAccountWeeklyStats('instagram', account.instagram, startDate, endDate) : null,
+            tiktok: account.tiktok ? this.getAccountWeeklyStats('tiktok', account.tiktok, startDate, endDate) : null,
+            youtube: account.youtube ? this.getAccountWeeklyStats('youtube', account.youtube, startDate, endDate) : null
+          };
+          
+          // Aggregate totals
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            if (stats[platform]) {
+              totalViews += stats[platform].views || 0;
+              totalLikes += stats[platform].likes || 0;
+              totalComments += stats[platform].comments || 0;
+              totalNewFollowers += stats[platform].newFollowers || 0;
+              totalPosts += stats[platform].posts || 0;
+            }
+          });
+          
+          accountStats.push(stats);
+        });
+        
+        // Render stats summary
+        const statsContainer = document.getElementById('easyStatsSummary');
+        statsContainer.innerHTML = `
+          <div class="stat-card">
+            <h4>TOTAL VIEWS THIS WEEK</h4>
+            <div class="value">${this.formatNumber(totalViews)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>NEW FOLLOWERS</h4>
+            <div class="value">+${this.formatNumber(totalNewFollowers)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL LIKES</h4>
+            <div class="value">${this.formatNumber(totalLikes)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>POSTS THIS WEEK</h4>
+            <div class="value">${totalPosts}</div>
+          </div>
+        `;
+        
+        // Create per-account breakdown table
+        this.createAccountBreakdownTable(container, accountStats);
+        
+        // Create platform comparison chart for the week
+        this.createWeeklyPlatformComparisonChart(container, accountStats);
+        
+        // Create views by account chart
+        this.createWeeklyViewsByAccountChart(container, accountStats);
+        
+        // Create new followers by account chart
+        this.createWeeklyFollowersByAccountChart(container, accountStats);
+      },
+      
+      // Create account breakdown table for weekly analytics
+      createAccountBreakdownTable(container, accountStats) {
+        const tableDiv = document.createElement('div');
+        tableDiv.className = 'chart-container';
+        tableDiv.style.overflowX = 'auto';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Account Performance Breakdown';
+        tableDiv.appendChild(header);
+        
+        const table = document.createElement('table');
+        table.style.cssText = 'width: 100%; border-collapse: collapse; color: #0f0; font-family: monospace;';
+        
+        // Create header row
+        const thead = document.createElement('thead');
+        thead.innerHTML = `
+          <tr style="border-bottom: 2px solid #0f0;">
+            <th style="padding: 10px; text-align: left;">Account</th>
+            <th style="padding: 10px; text-align: center;">IG Views</th>
+            <th style="padding: 10px; text-align: center;">TT Views</th>
+            <th style="padding: 10px; text-align: center;">YT Views</th>
+            <th style="padding: 10px; text-align: center;">Total Views</th>
+            <th style="padding: 10px; text-align: center;">New Followers</th>
+            <th style="padding: 10px; text-align: center;">Posts</th>
+          </tr>
+        `;
+        table.appendChild(thead);
+        
+        // Create body rows
+        const tbody = document.createElement('tbody');
+        accountStats.forEach(account => {
+          const igStats = account.instagram || { views: 0, newFollowers: 0, posts: 0 };
+          const ttStats = account.tiktok || { views: 0, newFollowers: 0, posts: 0 };
+          const ytStats = account.youtube || { views: 0, newFollowers: 0, posts: 0 };
+          
+          const totalViews = (igStats.views || 0) + (ttStats.views || 0) + (ytStats.views || 0);
+          const totalNewFollowers = (igStats.newFollowers || 0) + (ttStats.newFollowers || 0) + (ytStats.newFollowers || 0);
+          const totalPosts = (igStats.posts || 0) + (ttStats.posts || 0) + (ytStats.posts || 0);
+          
+          // Only show accounts with activity
+          if (totalViews > 0 || totalNewFollowers > 0 || totalPosts > 0) {
+            const row = document.createElement('tr');
+            row.style.borderBottom = '1px solid rgba(0, 255, 0, 0.3)';
+            row.innerHTML = `
+              <td style="padding: 8px; text-align: left;">@${account.name}</td>
+              <td style="padding: 8px; text-align: center; color: #E1306C;">${this.formatNumber(igStats.views || 0)}</td>
+              <td style="padding: 8px; text-align: center; color: #00f2ea;">${this.formatNumber(ttStats.views || 0)}</td>
+              <td style="padding: 8px; text-align: center; color: #FF0000;">${this.formatNumber(ytStats.views || 0)}</td>
+              <td style="padding: 8px; text-align: center; font-weight: bold;">${this.formatNumber(totalViews)}</td>
+              <td style="padding: 8px; text-align: center; color: ${totalNewFollowers >= 0 ? '#0f0' : '#ff0'};">+${this.formatNumber(totalNewFollowers)}</td>
+              <td style="padding: 8px; text-align: center;">${totalPosts}</td>
+            `;
+            tbody.appendChild(row);
+          }
+        });
+        table.appendChild(tbody);
+        
+        tableDiv.appendChild(table);
+        container.appendChild(tableDiv);
+      },
+      
+      // Create weekly platform comparison chart
+      createWeeklyPlatformComparisonChart(container, accountStats) {
+        // Aggregate by platform
+        const platformTotals = {
+          instagram: { views: 0, likes: 0, newFollowers: 0, posts: 0 },
+          tiktok: { views: 0, likes: 0, newFollowers: 0, posts: 0 },
+          youtube: { views: 0, likes: 0, newFollowers: 0, posts: 0 }
+        };
+        
+        accountStats.forEach(account => {
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            if (account[platform]) {
+              platformTotals[platform].views += account[platform].views || 0;
+              platformTotals[platform].likes += account[platform].likes || 0;
+              platformTotals[platform].newFollowers += account[platform].newFollowers || 0;
+              platformTotals[platform].posts += account[platform].posts || 0;
+            }
+          });
+        });
+        
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'weekly-platform-comparison';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Views by Platform This Week';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        this.chartInstances['weekly-platform-comparison'] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: ['Instagram', 'TikTok', 'YouTube'],
+            datasets: [{
+              label: 'Views',
+              data: [
+                platformTotals.instagram.views,
+                platformTotals.tiktok.views,
+                platformTotals.youtube.views
+              ],
+              backgroundColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                callbacks: {
+                  label: (context) => 'Views: ' + this.formatNumber(context.parsed.y)
+                }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { color: '#0f0', font: { family: 'monospace' } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create weekly views by account chart
+      createWeeklyViewsByAccountChart(container, accountStats) {
+        // Get accounts with views, sorted by total views
+        const accountsWithViews = accountStats
+          .map(account => {
+            const total = (account.instagram?.views || 0) + 
+                          (account.tiktok?.views || 0) + 
+                          (account.youtube?.views || 0);
+            return { name: account.name, total, ...account };
+          })
+          .filter(a => a.total > 0)
+          .sort((a, b) => b.total - a.total);
+        
+        if (accountsWithViews.length === 0) return;
+        
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'weekly-views-by-account';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Views by Account This Week';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        this.chartInstances['weekly-views-by-account'] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: accountsWithViews.map(a => '@' + a.name),
+            datasets: [
+              {
+                label: 'Instagram',
+                data: accountsWithViews.map(a => a.instagram?.views || 0),
+                backgroundColor: '#E1306C'
+              },
+              {
+                label: 'TikTok',
+                data: accountsWithViews.map(a => a.tiktok?.views || 0),
+                backgroundColor: '#00f2ea'
+              },
+              {
+                label: 'YouTube',
+                data: accountsWithViews.map(a => a.youtube?.views || 0),
+                backgroundColor: '#FF0000'
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            plugins: {
+              legend: {
+                display: true,
+                labels: { color: '#0f0', font: { family: 'monospace' } }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                callbacks: {
+                  label: (context) => context.dataset.label + ': ' + this.formatNumber(context.parsed.y)
+                }
+              }
+            },
+            scales: {
+              x: {
+                stacked: true,
+                ticks: { color: '#0f0', font: { family: 'monospace', size: 10 } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                stacked: true,
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create weekly new followers by account chart
+      createWeeklyFollowersByAccountChart(container, accountStats) {
+        // Get accounts with follower growth
+        const accountsWithGrowth = accountStats
+          .map(account => {
+            const total = (account.instagram?.newFollowers || 0) + 
+                          (account.tiktok?.newFollowers || 0) + 
+                          (account.youtube?.newFollowers || 0);
+            return { name: account.name, total, ...account };
+          })
+          .filter(a => a.total !== 0)
+          .sort((a, b) => b.total - a.total);
+        
+        if (accountsWithGrowth.length === 0) return;
+        
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'weekly-followers-by-account';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'New Followers by Account This Week';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        this.chartInstances['weekly-followers-by-account'] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: accountsWithGrowth.map(a => '@' + a.name),
+            datasets: [
+              {
+                label: 'Instagram',
+                data: accountsWithGrowth.map(a => a.instagram?.newFollowers || 0),
+                backgroundColor: '#E1306C'
+              },
+              {
+                label: 'TikTok',
+                data: accountsWithGrowth.map(a => a.tiktok?.newFollowers || 0),
+                backgroundColor: '#00f2ea'
+              },
+              {
+                label: 'YouTube',
+                data: accountsWithGrowth.map(a => a.youtube?.newFollowers || 0),
+                backgroundColor: '#FF0000'
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            plugins: {
+              legend: {
+                display: true,
+                labels: { color: '#0f0', font: { family: 'monospace' } }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                callbacks: {
+                  label: (context) => context.dataset.label + ': +' + this.formatNumber(context.parsed.y)
+                }
+              }
+            },
+            scales: {
+              x: {
+                stacked: true,
+                ticks: { color: '#0f0', font: { family: 'monospace', size: 10 } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                stacked: true,
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => '+' + this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
       },
       
       // Render easy graphs for client report
@@ -1671,6 +2248,11 @@
         let totalPosts = 0;
         let allVideos = [];
         
+        // Aggregate followers history across all accounts
+        // Using timestamp-based aggregation similar to parseMoonMediaTotal
+        let followersByTimestamp = {};
+        let highestKnownFollowersByAccount = {};
+        
         accounts.forEach(sheetName => {
           const data = this.parseAccountDataFromWorkbook(workbook, sheetName, platform, timeRangeDays);
           if (data) {
@@ -1679,6 +2261,58 @@
             totalPosts += data.postsScraped || 0;
             if (data.videos) {
               allVideos = allVideos.concat(data.videos);
+            }
+            
+            // Aggregate followers history for this account
+            if (data.followersHistory && data.followersHistory.length > 0) {
+              data.followersHistory.forEach(item => {
+                if (!this.isValidDate(item.date)) return;
+                
+                const dateKey = item.date.toISOString();
+                if (!followersByTimestamp[dateKey]) {
+                  followersByTimestamp[dateKey] = { 
+                    date: item.date, 
+                    accountValues: {} 
+                  };
+                }
+                followersByTimestamp[dateKey].accountValues[sheetName] = item.value;
+              });
+            }
+          }
+        });
+        
+        // Build aggregated followers history using highest known values
+        // (followers should never decrease - lower values are scrape errors)
+        const sortedFollowersTimestamps = Object.values(followersByTimestamp)
+          .filter(item => this.isValidDate(item.date))
+          .sort((a, b) => a.date - b.date);
+        
+        const followersHistory = [];
+        accounts.forEach(acc => { highestKnownFollowersByAccount[acc] = 0; });
+        
+        // Build history using highest value seen UP TO each timestamp
+        sortedFollowersTimestamps.forEach(item => {
+          // Update current values for accounts that have data at this timestamp
+          // Only update if the new value is higher (followers shouldn't decrease)
+          Object.keys(item.accountValues).forEach(acc => {
+            const newValue = item.accountValues[acc];
+            if (newValue > highestKnownFollowersByAccount[acc]) {
+              highestKnownFollowersByAccount[acc] = newValue;
+            }
+          });
+          
+          // Sum all current highest known values
+          const cumulativeTotal = Object.values(highestKnownFollowersByAccount).reduce((sum, val) => sum + val, 0);
+          
+          // Only add if we have a meaningful total
+          if (cumulativeTotal > 0) {
+            // Check if this is different from the last entry to avoid duplicates
+            const lastEntry = followersHistory[followersHistory.length - 1];
+            if (!lastEntry || lastEntry.value !== cumulativeTotal) {
+              followersHistory.push({
+                date: item.date,
+                value: cumulativeTotal
+              });
             }
           }
         });
@@ -1692,7 +2326,8 @@
           totalViews: totalViews,
           postsScraped: totalPosts,
           videos: allVideos,
-          accountCount: accounts.length
+          accountCount: accounts.length,
+          followersHistory: followersHistory
         };
       },
       
@@ -2235,25 +2870,11 @@
           }
         }
         
-        // Filter follower history to only include dates that have post data
-        // This fixes early scrapes that only had follower data
-        if (columnsWithPostData.size > 0) {
-          const firstPostDataColumnIdx = Math.min(...columnsWithPostData);
-          const firstPostDataDate = new Date(headers[firstPostDataColumnIdx]);
-          
-          // Keep follower data only from dates when we also have post data
-          followersHistory = followersHistory.filter(item => {
-            // Find the column index for this date
-            const dateStr = item.date.toISOString();
-            for (let colIdx = 0; colIdx < headers.length; colIdx++) {
-              const headerDate = new Date(headers[colIdx]);
-              if (headerDate.toISOString() === dateStr) {
-                return columnsWithPostData.has(colIdx) || item.date >= firstPostDataDate;
-              }
-            }
-            return item.date >= firstPostDataDate;
-          });
-        }
+        // NOTE: We no longer filter follower history based on post data availability
+        // Early scrapes may only have follower counts without video data, but those
+        // follower counts are still valid and should be included in the graph.
+        // The key insight is that follower counts should never decrease, so we can
+        // safely include all valid data points and rely on interpolation to handle gaps.
         
         // Process and clean data
         followersHistory = this.interpolateHistoricalData(followersHistory);
