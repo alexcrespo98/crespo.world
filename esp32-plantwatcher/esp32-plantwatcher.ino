@@ -372,53 +372,55 @@ void handleRoot() {
   </div>
   
   <script>
-    async function loadData() {
-      try {
-        const res = await fetch('/api/sensors');
-        const data = await res.json();
-        
-        // Environment
-        let envHtml = '';
-        if (data.temperature !== null && data.temperature !== undefined) {
-          const tempC = data.temperature.toFixed(1);
-          const tempF = (data.temperature * 9/5 + 32).toFixed(1);
-          const hum = data.humidity.toFixed(1);
-          envHtml += '<div class="env">🌡️ ' + tempC + '°C (' + tempF + '°F)</div>';
-          envHtml += '<div class="env">💧 ' + hum + '% Humidity</div>';
-        } else {
-          envHtml = '<div style="color:#f00">DHT sensor not connected</div>';
-        }
-        document.getElementById('environment').innerHTML = envHtml;
-        
-        // Soil sensors
-        let html = '';
-        data.sensors.forEach(s => {
-          const status = s.connected ? (s.moisture.toFixed(1) + '%') : 'Disconnected';
-          const icon = s.connected ? (s.moisture < 30 ? '🌵' : s.moisture < 60 ? '🌿' : '💧') : '❌';
-          html += '<div class="sensor">' + icon + ' Sensor ' + s.id + ': ' + status + '</div>';
+    function loadData() {
+      fetch('/api/sensors')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          // Environment
+          var envHtml = '';
+          if (data.temperature !== null && data.temperature !== undefined) {
+            var tempC = data.temperature.toFixed(1);
+            var tempF = (data.temperature * 9/5 + 32).toFixed(1);
+            var hum = data.humidity.toFixed(1);
+            envHtml += '<div class="env">🌡️ ' + tempC + '°C (' + tempF + '°F)</div>';
+            envHtml += '<div class="env">💧 ' + hum + '% Humidity</div>';
+          } else {
+            envHtml = '<div style="color:#f00">DHT sensor not connected</div>';
+          }
+          document.getElementById('environment').innerHTML = envHtml;
+          
+          // Soil sensors
+          var html = '';
+          for (var i = 0; i < data.sensors.length; i++) {
+            var s = data.sensors[i];
+            var status = s.connected ? (s.moisture.toFixed(1) + '%') : 'Disconnected';
+            var icon = s.connected ? (s.moisture < 30 ? '🌵' : s.moisture < 60 ? '🌿' : '💧') : '❌';
+            html += '<div class="sensor">' + icon + ' Sensor ' + s.id + ': ' + status + '</div>';
+          }
+          document.getElementById('sensors').innerHTML = html;
+          
+          // Relay state
+          var relayBtn = document.getElementById('relayBtn');
+          relayBtn.textContent = 'Relay: ' + data.relay.toUpperCase();
+          relayBtn.className = data.relay === 'on' ? 'relay-btn relay-on' : 'relay-btn';
+        })
+        .catch(function(e) {
+          console.error('Failed to load data:', e);
         });
-        document.getElementById('sensors').innerHTML = html;
-        
-        // Relay state
-        const relayBtn = document.getElementById('relayBtn');
-        relayBtn.textContent = 'Relay: ' + data.relay.toUpperCase();
-        relayBtn.className = data.relay === 'on' ? 'relay-btn relay-on' : 'relay-btn';
-      } catch(e) {
-        console.error('Failed to load data:', e);
-      }
     }
     
-    async function toggleRelay() {
-      try {
-        await fetch('/api/relay', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({state: 'toggle'})
+    function toggleRelay() {
+      fetch('/api/relay', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({state: 'toggle'})
+      })
+        .then(function() {
+          setTimeout(loadData, 100);
+        })
+        .catch(function(e) {
+          alert('Failed to toggle relay');
         });
-        setTimeout(loadData, 100);
-      } catch(e) {
-        alert('Failed to toggle relay');
-      }
     }
     
     setInterval(loadData, 2000);
