@@ -380,8 +380,11 @@ void handleRoot() {
         // Environment
         let envHtml = '';
         if (data.temperature !== null && data.temperature !== undefined) {
-          envHtml += `<div class="env">🌡️ ${data.temperature.toFixed(1)}°C (${(data.temperature * 9/5 + 32).toFixed(1)}°F)</div>`;
-          envHtml += `<div class="env">💧 ${data.humidity.toFixed(1)}% Humidity</div>`;
+          const tempC = data.temperature.toFixed(1);
+          const tempF = (data.temperature * 9/5 + 32).toFixed(1);
+          const hum = data.humidity.toFixed(1);
+          envHtml += '<div class="env">🌡️ ' + tempC + '°C (' + tempF + '°F)</div>';
+          envHtml += '<div class="env">💧 ' + hum + '% Humidity</div>';
         } else {
           envHtml = '<div style="color:#f00">DHT sensor not connected</div>';
         }
@@ -390,15 +393,15 @@ void handleRoot() {
         // Soil sensors
         let html = '';
         data.sensors.forEach(s => {
-          const status = s.connected ? `${s.moisture.toFixed(1)}%` : 'Disconnected';
+          const status = s.connected ? (s.moisture.toFixed(1) + '%') : 'Disconnected';
           const icon = s.connected ? (s.moisture < 30 ? '🌵' : s.moisture < 60 ? '🌿' : '💧') : '❌';
-          html += `<div class="sensor">${icon} Sensor ${s.id}: ${status}</div>`;
+          html += '<div class="sensor">' + icon + ' Sensor ' + s.id + ': ' + status + '</div>';
         });
         document.getElementById('sensors').innerHTML = html;
         
         // Relay state
         const relayBtn = document.getElementById('relayBtn');
-        relayBtn.textContent = `Relay: ${data.relay.toUpperCase()}`;
+        relayBtn.textContent = 'Relay: ' + data.relay.toUpperCase();
         relayBtn.className = data.relay === 'on' ? 'relay-btn relay-on' : 'relay-btn';
       } catch(e) {
         console.error('Failed to load data:', e);
