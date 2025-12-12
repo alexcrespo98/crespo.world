@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>plantwatcher - crespo.world</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      background: #000;
+      color: #0f0;
+      font-family: 'Courier New', monospace;
+      padding: 1em;
+      min-height: 100vh;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      text-align: center;
+      font-size: 2em;
+      margin: 0.5em 0;
+      text-shadow: 0 0 10px #0f0;
+      animation: glow 2s ease-in-out infinite;
+    }
+    
+    @keyframes glow {
+      0%, 100% { text-shadow: 0 0 10px #0f0; }
+      50% { text-shadow: 0 0 20px #0f0, 0 0 30px #0f0; }
+    }
+    
+    /* Connection Setup */
+    .setup-panel {
+      background: #001100;
+      border: 2px solid #0f0;
+      border-radius: 10px;
+      padding: 1.5em;
+      margin: 1em 0;
+    }
+    
+    .setup-panel h2 {
+      margin-bottom: 1em;
+      font-size: 1.3em;
+    }
+    
+    .form-group {
+      margin-bottom: 1em;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5em;
+      color: #0a0;
+    }
+    
+    .form-group input {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.7em;
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 1em;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      box-shadow: 0 0 10px #0f0;
+    }
+    
+    .btn {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 0.7em 1.5em;
+      font-family: monospace;
+      font-size: 1em;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: all 0.2s;
+      margin-right: 0.5em;
+    }
+    
+    .btn:hover {
+      background: #0f0;
+      color: #000;
+      box-shadow: 0 0 15px #0f0;
+    }
+    
+    .btn:active {
+      transform: scale(0.95);
+    }
+    
+    .btn-danger {
+      border-color: #f00;
+      color: #f00;
+    }
+    
+    .btn-danger:hover {
+      background: #f00;
+      color: #000;
+      box-shadow: 0 0 15px #f00;
+    }
+    
+    /* Status Bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1em;
+      padding: 1em;
+      background: #001100;
+      border: 2px solid #0f0;
+      border-radius: 10px;
+      margin: 1em 0;
+      flex-wrap: wrap;
+    }
+    
+    .status-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f00;
+      box-shadow: 0 0 10px #f00;
+      animation: pulse-red 1s ease-in-out infinite;
+    }
+    
+    .status-dot.connected {
+      background: #0f0;
+      box-shadow: 0 0 10px #0f0;
+      animation: pulse-green 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-red {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    .status-text {
+      font-size: 1.1em;
+    }
+    
+    .status-info {
+      color: #0a0;
+      font-size: 0.9em;
+    }
+    
+    /* Dashboard Grid */
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1em;
+      margin: 1em 0;
+    }
+    
+    .panel {
+      background: #001100;
+      border: 2px solid #0f0;
+      border-radius: 10px;
+      padding: 1.5em;
+    }
+    
+    .panel h2 {
+      margin-bottom: 1em;
+      font-size: 1.3em;
+      border-bottom: 1px solid #0f0;
+      padding-bottom: 0.5em;
+    }
+    
+    /* Environment Display */
+    .env-reading {
+      margin: 1em 0;
+      font-size: 1.5em;
+      text-align: center;
+      padding: 0.5em;
+      background: #000;
+      border: 1px solid #0f0;
+      border-radius: 5px;
+    }
+    
+    .env-reading .value {
+      font-size: 2em;
+      font-weight: bold;
+      color: #0f0;
+    }
+    
+    .env-reading .unit {
+      font-size: 0.8em;
+      color: #0a0;
+    }
+    
+    .env-error {
+      color: #f00;
+      text-align: center;
+      padding: 1em;
+    }
+    
+    /* Soil Sensors */
+    .sensor {
+      margin: 0.7em 0;
+      padding: 1em;
+      background: #000;
+      border: 2px solid #0f0;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .sensor.disconnected {
+      border-color: #555;
+      color: #555;
+    }
+    
+    .sensor-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      font-size: 1.1em;
+    }
+    
+    .sensor-icon {
+      font-size: 1.5em;
+    }
+    
+    .sensor-value {
+      font-size: 1.3em;
+      font-weight: bold;
+    }
+    
+    .sensor-value.dry {
+      color: #f00;
+    }
+    
+    .sensor-value.good {
+      color: #0f0;
+    }
+    
+    .sensor-value.wet {
+      color: #0af;
+    }
+    
+    .moisture-bar {
+      width: 100%;
+      height: 8px;
+      background: #111;
+      border-radius: 4px;
+      margin-top: 0.5em;
+      overflow: hidden;
+    }
+    
+    .moisture-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #f00, #ff0, #0f0, #0af);
+      transition: width 0.5s ease;
+      border-radius: 4px;
+    }
+    
+    /* Relay Control */
+    .relay-control {
+      text-align: center;
+      padding: 2em 1em;
+    }
+    
+    .relay-btn {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: #000;
+      border: 4px solid #0f0;
+      color: #0f0;
+      font-size: 1.5em;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+      position: relative;
+    }
+    
+    .relay-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 30px #0f0;
+    }
+    
+    .relay-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .relay-btn.on {
+      background: #0f0;
+      color: #000;
+      box-shadow: 0 0 40px #0f0;
+      animation: relay-pulse 1s ease-in-out infinite;
+    }
+    
+    @keyframes relay-pulse {
+      0%, 100% { box-shadow: 0 0 40px #0f0; }
+      50% { box-shadow: 0 0 60px #0f0, 0 0 80px #0f0; }
+    }
+    
+    .relay-icon {
+      font-size: 3em;
+      margin-bottom: 0.2em;
+    }
+    
+    .relay-status {
+      font-size: 0.6em;
+      margin-top: 0.5em;
+    }
+    
+    /* Device Info */
+    .info-item {
+      margin: 0.7em 0;
+      padding: 0.7em;
+      background: #000;
+      border: 1px solid #0f0;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .info-label {
+      color: #0a0;
+    }
+    
+    .info-value {
+      color: #0f0;
+      font-weight: bold;
+    }
+    
+    /* Last Update */
+    .last-update {
+      text-align: center;
+      color: #0a0;
+      font-size: 0.9em;
+      margin: 1em 0;
+    }
+    
+    /* Error Message */
+    .error-message {
+      background: #200;
+      border: 2px solid #f00;
+      color: #f00;
+      padding: 1em;
+      border-radius: 5px;
+      margin: 1em 0;
+      display: none;
+    }
+    
+    .error-message.show {
+      display: block;
+    }
+    
+    /* Loading Spinner */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #0f0;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 1.5em;
+      }
+      
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+      
+      .status-bar {
+        font-size: 0.9em;
+      }
+      
+      .relay-btn {
+        width: 150px;
+        height: 150px;
+        font-size: 1.2em;
+      }
+    }
+    
+    /* Hide setup when connected */
+    .setup-panel.hidden {
+      display: none;
+    }
+    
+    .dashboard.hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌱 plantwatcher</h1>
+    
+    <!-- Connection Setup -->
+    <div class="setup-panel" id="setupPanel">
+      <h2>⚙️ ESP32 Configuration</h2>
+      <div class="form-group">
+        <label for="esp32Ip">ESP32 IP Address:</label>
+        <input type="text" id="esp32Ip" placeholder="192.168.1.150" autocomplete="off">
+        <p style="color: #0a0; font-size: 0.9em; margin-top: 0.5em;">
+          Find this in your ESP32's Serial Monitor after it connects to WiFi
+        </p>
+      </div>
+      <div>
+        <button class="btn" onclick="connect()">🔌 Connect</button>
+        <button class="btn" onclick="testConnection()">🧪 Test</button>
+      </div>
+    </div>
+    
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Not Connected</span>
+      <span class="status-info" id="statusInfo"></span>
+    </div>
+    
+    <!-- Error Message -->
+    <div class="error-message" id="errorMessage"></div>
+    
+    <!-- Main Dashboard -->
+    <div class="dashboard hidden" id="dashboard">
+      
+      <!-- Environment Panel -->
+      <div class="panel">
+        <h2>🌡️ Environment</h2>
+        <div id="environmentData">
+          <div class="env-reading">
+            <div>Temperature</div>
+            <div class="value" id="tempValue">--</div>
+            <div class="unit" id="tempUnit"></div>
+          </div>
+          <div class="env-reading">
+            <div>Humidity</div>
+            <div class="value" id="humidityValue">--</div>
+            <div class="unit">%</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Soil Moisture Panel -->
+      <div class="panel" style="grid-column: span 1;">
+        <h2>💧 Soil Moisture</h2>
+        <div id="sensorsData"></div>
+      </div>
+      
+      <!-- Relay Control Panel -->
+      <div class="panel">
+        <h2>💦 Watering Control</h2>
+        <div class="relay-control">
+          <button class="relay-btn" id="relayBtn" onclick="toggleRelay()">
+            <div class="relay-icon">💧</div>
+            <div>RELAY</div>
+            <div class="relay-status" id="relayStatus">OFF</div>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Device Info Panel -->
+      <div class="panel">
+        <h2>📊 Device Status</h2>
+        <div id="deviceInfo"></div>
+      </div>
+      
+    </div>
+    
+    <div class="last-update" id="lastUpdate"></div>
+    
+  </div>
+
+  <script>
+    // Global state
+    let esp32Ip = '';
+    let connected = false;
+    let updateInterval = null;
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSavedIp();
+    });
+    
+    // Load saved IP from localStorage
+    function loadSavedIp() {
+      const savedIp = localStorage.getItem('esp32Ip');
+      if (savedIp) {
+        document.getElementById('esp32Ip').value = savedIp;
+        esp32Ip = savedIp;
+        // Auto-connect if IP is saved
+        connect();
+      }
+    }
+    
+    // Save IP to localStorage
+    function saveIp(ip) {
+      localStorage.setItem('esp32Ip', ip);
+    }
+    
+    // Connect to ESP32
+    async function connect() {
+      const ipInput = document.getElementById('esp32Ip').value.trim();
+      
+      if (!ipInput) {
+        showError('Please enter an IP address');
+        return;
+      }
+      
+      // Validate IP format
+      const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (!ipRegex.test(ipInput)) {
+        showError('Invalid IP address format');
+        return;
+      }
+      
+      esp32Ip = ipInput;
+      saveIp(esp32Ip);
+      
+      // Try to connect
+      updateStatus('Connecting...', false);
+      
+      try {
+        const response = await fetch(`http://${esp32Ip}/api/status`);
+        if (response.ok) {
+          connected = true;
+          updateStatus('Connected', true);
+          document.getElementById('setupPanel').classList.add('hidden');
+          document.getElementById('dashboard').classList.remove('hidden');
+          
+          // Start polling
+          startUpdating();
+        } else {
+          throw new Error('Connection failed');
+        }
+      } catch (error) {
+        connected = false;
+        updateStatus('Connection Failed', false);
+        showError(`Could not connect to ${esp32Ip}. Make sure:<br>
+          1. ESP32 is powered on and connected to WiFi<br>
+          2. You're on the same WiFi network<br>
+          3. The IP address is correct`);
+      }
+    }
+    
+    // Test connection
+    async function testConnection() {
+      const ipInput = document.getElementById('esp32Ip').value.trim();
+      
+      if (!ipInput) {
+        showError('Please enter an IP address first');
+        return;
+      }
+      
+      updateStatus('Testing...', false);
+      
+      try {
+        const response = await fetch(`http://${ipInput}/api/status`, {
+          method: 'GET',
+          mode: 'cors'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          showError(`✅ Connection successful!<br>Device IP: ${data.ip}<br>Uptime: ${data.uptime}`, 'success');
+          updateStatus('Test Successful', true);
+        } else {
+          throw new Error('Test failed');
+        }
+      } catch (error) {
+        showError(`❌ Connection test failed. Check IP address and network.`);
+        updateStatus('Test Failed', false);
+      }
+    }
+    
+    // Start polling for updates
+    function startUpdating() {
+      // Clear existing interval
+      if (updateInterval) {
+        clearInterval(updateInterval);
+      }
+      
+      // Initial update
+      updateData();
+      
+      // Poll every 2 seconds
+      updateInterval = setInterval(updateData, 2000);
+    }
+    
+    // Update all data from ESP32
+    async function updateData() {
+      if (!connected || !esp32Ip) return;
+      
+      try {
+        // Fetch sensor data
+        const sensorsResponse = await fetch(`http://${esp32Ip}/api/sensors`);
+        const sensorsData = await sensorsResponse.json();
+        
+        // Fetch status data
+        const statusResponse = await fetch(`http://${esp32Ip}/api/status`);
+        const statusData = await statusResponse.json();
+        
+        // Update UI
+        updateEnvironment(sensorsData);
+        updateSensors(sensorsData);
+        updateRelay(sensorsData);
+        updateDeviceInfo(statusData);
+        updateLastUpdate();
+        
+        // Update connection status
+        if (!connected) {
+          connected = true;
+          updateStatus('Connected', true);
+        }
+        
+      } catch (error) {
+        console.error('Update failed:', error);
+        if (connected) {
+          connected = false;
+          updateStatus('Connection Lost', false);
+          showError('Lost connection to ESP32. Retrying...');
+        }
+      }
+    }
+    
+    // Update environment display
+    function updateEnvironment(data) {
+      const tempValue = document.getElementById('tempValue');
+      const tempUnit = document.getElementById('tempUnit');
+      const humidityValue = document.getElementById('humidityValue');
+      const envData = document.getElementById('environmentData');
+      
+      if (data.dhtConnected && data.temperature !== null) {
+        tempValue.textContent = data.temperature.toFixed(1);
+        tempUnit.textContent = `°C (${data.temperatureF.toFixed(1)}°F)`;
+        humidityValue.textContent = data.humidity.toFixed(1);
+        envData.style.display = 'block';
+      } else {
+        envData.innerHTML = '<div class="env-error">❌ DHT Sensor Disconnected</div>';
+      }
+    }
+    
+    // Update soil sensors display
+    function updateSensors(data) {
+      const container = document.getElementById('sensorsData');
+      let html = '';
+      
+      data.sensors.forEach(sensor => {
+        const connected = sensor.connected;
+        const moisture = connected ? sensor.moisture : 0;
+        
+        let icon = '❌';
+        let statusClass = 'disconnected';
+        let valueClass = '';
+        
+        if (connected) {
+          statusClass = '';
+          if (moisture < 30) {
+            icon = '🌵';
+            valueClass = 'dry';
+          } else if (moisture < 60) {
+            icon = '🌿';
+            valueClass = 'good';
+          } else {
+            icon = '💧';
+            valueClass = 'wet';
+          }
+        }
+        
+        html += `
+          <div class="sensor ${statusClass}">
+            <div style="flex: 1;">
+              <div class="sensor-label">
+                <span class="sensor-icon">${icon}</span>
+                <span>Sensor ${sensor.id}</span>
+              </div>
+              ${connected ? `
+                <div class="moisture-bar">
+                  <div class="moisture-fill" style="width: ${moisture}%"></div>
+                </div>
+              ` : ''}
+            </div>
+            <div class="sensor-value ${valueClass}">
+              ${connected ? moisture.toFixed(1) + '%' : 'N/A'}
+            </div>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html;
+    }
+    
+    // Update relay display
+    function updateRelay(data) {
+      const relayBtn = document.getElementById('relayBtn');
+      const relayStatus = document.getElementById('relayStatus');
+      const isOn = data.relay === 'on';
+      
+      if (isOn) {
+        relayBtn.classList.add('on');
+        relayStatus.textContent = 'ON';
+      } else {
+        relayBtn.classList.remove('on');
+        relayStatus.textContent = 'OFF';
+      }
+    }
+    
+    // Update device info
+    function updateDeviceInfo(data) {
+      const container = document.getElementById('deviceInfo');
+      
+      const signalQuality = data.rssi > -50 ? 'Excellent' : 
+                           data.rssi > -60 ? 'Good' : 
+                           data.rssi > -70 ? 'Fair' : 'Poor';
+      
+      container.innerHTML = `
+        <div class="info-item">
+          <span class="info-label">IP Address</span>
+          <span class="info-value">${data.ip}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">WiFi Network</span>
+          <span class="info-value">${data.ssid}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Signal Strength</span>
+          <span class="info-value">${data.rssi} dBm (${signalQuality})</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Uptime</span>
+          <span class="info-value">${data.uptime}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Free Memory</span>
+          <span class="info-value">${(data.freeHeap / 1024).toFixed(1)} KB</span>
+        </div>
+      `;
+    }
+    
+    // Toggle relay
+    async function toggleRelay() {
+      if (!connected) return;
+      
+      try {
+        const response = await fetch(`http://${esp32Ip}/api/relay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ state: 'toggle' })
+        });
+        
+        if (response.ok) {
+          // Update will happen on next poll
+          setTimeout(updateData, 100);
+        } else {
+          showError('Failed to toggle relay');
+        }
+      } catch (error) {
+        showError('Failed to communicate with ESP32');
+      }
+    }
+    
+    // Update status display
+    function updateStatus(text, isConnected) {
+      const dot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      const statusInfo = document.getElementById('statusInfo');
+      
+      statusText.textContent = text;
+      
+      if (isConnected) {
+        dot.classList.add('connected');
+        statusInfo.textContent = `${esp32Ip}`;
+      } else {
+        dot.classList.remove('connected');
+        statusInfo.textContent = '';
+      }
+    }
+    
+    // Update last update timestamp
+    function updateLastUpdate() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString();
+      document.getElementById('lastUpdate').textContent = `Last updated: ${timeStr}`;
+    }
+    
+    // Show error message
+    function showError(message, type = 'error') {
+      const errorEl = document.getElementById('errorMessage');
+      errorEl.innerHTML = message;
+      errorEl.style.borderColor = type === 'success' ? '#0f0' : '#f00';
+      errorEl.style.backgroundColor = type === 'success' ? '#001100' : '#200';
+      errorEl.style.color = type === 'success' ? '#0f0' : '#f00';
+      errorEl.classList.add('show');
+      
+      setTimeout(() => {
+        errorEl.classList.remove('show');
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
