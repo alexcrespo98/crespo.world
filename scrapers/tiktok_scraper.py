@@ -45,10 +45,13 @@ def ensure_pil():
 
 OUTPUT_EXCEL = "tiktok_analytics_tracker.xlsx"
 
-# Set Tesseract path for Windows
+# Set Tesseract path (cross-platform)
 try:
     import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    import platform
+    if platform.system() == 'Windows':
+        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    # On Linux/Ubuntu, tesseract should be in PATH or at /usr/bin/tesseract
 except:
     pass
 
@@ -178,7 +181,10 @@ class TikTokScraper:
         import pytesseract
         
         url = f"https://tokcount.com/?user={username}"
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+        # Use temp directory for cross-platform compatibility
+        temp_dir = os.path.join(os.path.expanduser("~"), ".tiktok_scraper_temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        desktop_path = temp_dir
         
         # Setup Chrome options
         chrome_options = Options()
