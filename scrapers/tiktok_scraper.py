@@ -182,9 +182,8 @@ class TikTokScraper:
         
         url = f"https://tokcount.com/?user={username}"
         # Use temp directory for cross-platform compatibility
-        temp_dir = os.path.join(os.path.expanduser("~"), ".tiktok_scraper_temp")
-        os.makedirs(temp_dir, exist_ok=True)
-        desktop_path = temp_dir
+        screenshot_dir = os.path.join(os.path.expanduser("~"), ".tiktok_scraper_temp")
+        os.makedirs(screenshot_dir, exist_ok=True)
         
         # Setup Chrome options
         chrome_options = Options()
@@ -212,7 +211,7 @@ class TikTokScraper:
             for i, scroll_pos in enumerate(scroll_positions):
                 driver.execute_script(f"window.scrollTo(0, {scroll_pos});")
                 time.sleep(1)
-                filename = os.path.join(desktop_path, f"tokcount_temp_{username}_{i+1}.png")
+                filename = os.path.join(screenshot_dir, f"tokcount_temp_{username}_{i+1}.png")
                 driver.save_screenshot(filename)
                 screenshot_files.append(filename)
             

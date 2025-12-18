@@ -30,30 +30,49 @@ if command -v rclone &> /dev/null; then
     rclone version
 else
     echo -e "${YELLOW}📦 rclone not found. Installing...${NC}"
-    
-    # Install rclone (download, verify, then execute for security)
-    # Note: This uses the official rclone installation script from rclone.org
-    echo "Downloading rclone install script..."
-    curl -o /tmp/rclone-install.sh https://rclone.org/install.sh
-    
-    # Offer to inspect the script before execution
     echo ""
-    echo "The install script has been downloaded to /tmp/rclone-install.sh"
-    read -p "Do you want to inspect the script before execution? (y/n): " inspect
-    if [[ "$inspect" == "y" ]]; then
-        less /tmp/rclone-install.sh
+    echo "Choose installation method:"
+    echo "1. Snap (recommended - most secure)"
+    echo "2. Official install script (requires inspection/confirmation)"
+    echo ""
+    read -p "Enter choice (1 or 2): " install_method
+    
+    if [[ "$install_method" == "1" ]]; then
+        # Install via snap (most secure)
+        echo "Installing rclone via snap..."
+        if command -v snap &> /dev/null; then
+            sudo snap install rclone --classic
+        else
+            echo -e "${RED}❌ Snap not available on this system${NC}"
+            echo "Falling back to official install script..."
+            install_method="2"
+        fi
     fi
     
-    read -p "Proceed with rclone installation? (y/n): " proceed
-    if [[ "$proceed" != "y" ]]; then
-        echo "Installation cancelled."
+    if [[ "$install_method" == "2" ]]; then
+        # Install via official script (with user verification)
+        echo "Downloading rclone install script..."
+        curl -o /tmp/rclone-install.sh https://rclone.org/install.sh
+        
+        # Offer to inspect the script before execution
+        echo ""
+        echo "The install script has been downloaded to /tmp/rclone-install.sh"
+        read -p "Do you want to inspect the script before execution? (y/n): " inspect
+        if [[ "$inspect" == "y" ]]; then
+            less /tmp/rclone-install.sh
+        fi
+        
+        read -p "Proceed with rclone installation? (y/n): " proceed
+        if [[ "$proceed" != "y" ]]; then
+            echo "Installation cancelled."
+            rm /tmp/rclone-install.sh
+            exit 1
+        fi
+        
+        echo "Installing rclone..."
+        sudo bash /tmp/rclone-install.sh
         rm /tmp/rclone-install.sh
-        exit 1
     fi
-    
-    echo "Installing rclone..."
-    sudo bash /tmp/rclone-install.sh
-    rm /tmp/rclone-install.sh
     
     if command -v rclone &> /dev/null; then
         echo -e "${GREEN}✅ rclone installed successfully${NC}"

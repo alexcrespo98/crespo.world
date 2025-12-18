@@ -136,9 +136,27 @@ The script will:
 4. Test upload permissions
 5. Set up folder structure
 
-### Manual Setup
+### Manual Setup (More Secure)
 
-If you prefer manual setup:
+For enhanced security, you can manually install rclone via package manager:
+
+```bash
+# Option 1: Snap (recommended on Ubuntu)
+sudo snap install rclone
+
+# Option 2: Manual installation from official site
+# Visit https://rclone.org/downloads/ and download the appropriate version
+wget https://downloads.rclone.org/rclone-current-linux-amd64.zip
+unzip rclone-current-linux-amd64.zip
+cd rclone-*-linux-amd64
+sudo cp rclone /usr/bin/
+sudo chown root:root /usr/bin/rclone
+sudo chmod 755 /usr/bin/rclone
+cd ..
+rm -rf rclone-*-linux-amd64*
+```
+
+Then configure manually:
 
 ```bash
 # Install rclone
@@ -750,23 +768,28 @@ chrome_options.add_argument('--disable-dev-shm-usage')
 ### 3. Schedule Regular Scrapes
 
 ```bash
-# Note: Master scraper is currently interactive-only
-# For automated scraping, run individual scrapers directly:
+# Note: Both master scraper and individual scrapers are interactive
+# For fully automated scraping, you would need to:
+# 1. Modify scrapers to accept environment variables or config files
+# 2. Use expect scripts to handle prompts
+# 3. Create wrapper scripts that pre-select options
 
-# Use cron for automated scraping
-crontab -e
+# Current design requires manual execution or interactive automation
 
-# Example (runs Instagram scraper every Monday at 2 AM):
-# 0 2 * * 1 cd ~/crespo.world/scrapers && python3 instagram_scraper.py
+# Example using expect (advanced):
+# #!/usr/bin/expect
+# spawn python3 instagram_scraper.py
+# expect "Enter your choice"
+# send "1\r"
+# expect "Press ENTER"
+# send "\r"
+# expect eof
 
-# Example (runs all three scrapers sequentially):
-# 0 2 * * 1 cd ~/crespo.world/scrapers && python3 instagram_scraper.py && python3 youtube_scraper.py && python3 tiktok_scraper.py
+# Alternative: Create a config file system for each scraper
+# Future enhancement: Add non-interactive mode with config files
 
 # View cron logs
 grep CRON /var/log/syslog
-
-# Alternative: For non-interactive master scraper, individual scrapers
-# would need to be run with environment variables or config files
 ```
 
 ---

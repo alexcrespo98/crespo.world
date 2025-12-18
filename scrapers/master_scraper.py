@@ -22,6 +22,9 @@ import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Constants
+DEEP_SCRAPE_MAX_POSTS = 9999999  # Used for unlimited scraping in deep mode
+
 # Add the scrapers directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -368,10 +371,10 @@ class MasterScraper:
                 print("\n⚠️  Note: TikTok scraper will prompt for additional configuration")
             
             # TikTok scraper accepts max_posts parameter (verified in tiktok_scraper.py line 691)
-            # For deep scrapes, pass a large number (9999999) as per scraper's design (line 607)
+            # For deep scrapes, pass DEEP_SCRAPE_MAX_POSTS as per scraper's design (line 607)
             # Passing None would trigger the scraper's interactive prompt
             if tt_config.get('deep'):
-                max_posts_arg = 9999999  # Deep scrape - effectively unlimited
+                max_posts_arg = DEEP_SCRAPE_MAX_POSTS  # Deep scrape - effectively unlimited
             else:
                 max_posts_arg = tt_config.get('count', 100)
             scraper.run(max_posts=max_posts_arg)
