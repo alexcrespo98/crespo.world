@@ -462,11 +462,94 @@ class TikTokScraper:
         
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
 
-    def upload_to_google_drive(self):
-        """Upload to Google Drive if configured"""
+    def validate_data_before_upload(self, new_data):
+        """
+        Validate that new data contains sufficient information before uploading.
+        Prevents overwriting good data with incomplete scrapes.
+        
+        Returns: (should_upload: bool, reason: str)
+        """
+        import pandas as pd
+        
+        # If no existing file, always upload
+        if not os.path.exists(OUTPUT_EXCEL):
+            return True, "No existing file - safe to upload"
+        
+        try:
+            existing_data = pd.read_excel(OUTPUT_EXCEL, sheet_name=None, index_col=0)
+        except Exception as e:
+            print(f"  ⚠️  Could not read existing Excel: {e}")
+            return True, "Could not read existing file - proceeding with upload"
+        
+        issues = []
+        
+        for username, new_df in new_data.items():
+            if username not in existing_data:
+                continue
+            
+            old_df = existing_data[username]
+            
+            if old_df.empty or len(old_df.columns) == 0:
+                continue
+            
+            old_cols = [c for c in old_df.columns]
+            if not old_cols:
+                continue
+            
+            last_old_col = sorted(old_cols)[-1]
+            
+            if new_df.empty or len(new_df.columns) == 0:
+                issues.append(f"@{username}: New data is empty")
+                continue
+            
+            new_cols = list(new_df.columns)
+            current_col = new_cols[-1]
+            
+            # Check posts count
+            try:
+                old_posts = old_df.loc["posts_scraped", last_old_col] if "posts_scraped" in old_df.index else 0
+                new_posts = new_df.loc["posts_scraped", current_col] if "posts_scraped" in new_df.index else 0
+                
+                old_posts = int(old_posts) if pd.notna(old_posts) else 0
+                new_posts = int(new_posts) if pd.notna(new_posts) else 0
+                
+                # Allow 10% tolerance
+                min_acceptable = int(old_posts * 0.9)
+                
+                if new_posts < min_acceptable:
+                    issues.append(f"@{username}: New scrape has {new_posts} posts vs {old_posts} previously")
+            except Exception as e:
+                print(f"  ⚠️  Could not compare posts for @{username}: {e}")
+        
+        if issues:
+            print("\n" + "="*70)
+            print("⚠️  DATA VALIDATION WARNING")
+            print("="*70)
+            print("\nNew data appears to have less content than previous scrape:")
+            for issue in issues:
+                print(f"  • {issue}")
+            print("\n❌ Upload BLOCKED to prevent data loss.")
+            return False, "Insufficient data - upload blocked"
+        
+        return True, "Data validation passed"
+
+    def upload_to_google_drive(self, all_account_data=None):
+        """
+        Upload to Google Drive with data validation.
+        
+        Args:
+            all_account_data: Optional dict of account data for validation.
+        """
         print("\n" + "="*70)
         print("☁️  Uploading to Google Drive...")
         print("="*70)
+        
+        # Validate data if provided
+        if all_account_data:
+            should_upload, reason = self.validate_data_before_upload(all_account_data)
+            print(f"  📊 Validation: {reason}")
+            if not should_upload:
+                return False
         
         try:
             result = subprocess.run(['rclone', 'version'], 
@@ -807,14 +890,14 @@ class TikTokScraper:
             # Save to Excel
             print("\n" + "="*70)
             self.save_to_excel(all_account_data)
-            self.upload_to_google_drive()
+            self.upload_to_google_drive(all_account_data)
             
             # Handle early terminations
             if self.early_terminations:
                 self.handle_early_terminations(all_account_data, timestamp_col)
                 # Save updated results
                 self.save_to_excel(all_account_data)
-                self.upload_to_google_drive()
+                self.upload_to_google_drive(all_account_data)
             
             print("\n✅ All accounts scraped successfully!")
             print(f"📁 Updated: '{OUTPUT_EXCEL}'")
