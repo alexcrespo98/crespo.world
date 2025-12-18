@@ -371,6 +371,7 @@ class MasterScraper:
                 print("\n⚠️  Note: TikTok scraper will prompt for additional configuration")
             
             # TikTok scraper accepts max_posts parameter (verified in tiktok_scraper.py line 691)
+            # Note: Internally, the scraper converts max_posts to max_videos for scrape_tiktok_profile
             # For deep scrapes, pass DEEP_SCRAPE_MAX_POSTS as per scraper's design (line 607)
             # Passing None would trigger the scraper's interactive prompt
             if tt_config.get('deep'):
