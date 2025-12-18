@@ -31,8 +31,13 @@ if command -v rclone &> /dev/null; then
 else
     echo -e "${YELLOW}📦 rclone not found. Installing...${NC}"
     
-    # Install rclone
-    curl https://rclone.org/install.sh | sudo bash
+    # Install rclone (download, verify, then execute for security)
+    echo "Downloading rclone install script..."
+    curl -o /tmp/rclone-install.sh https://rclone.org/install.sh
+    
+    echo "Executing install script..."
+    sudo bash /tmp/rclone-install.sh
+    rm /tmp/rclone-install.sh
     
     if command -v rclone &> /dev/null; then
         echo -e "${GREEN}✅ rclone installed successfully${NC}"

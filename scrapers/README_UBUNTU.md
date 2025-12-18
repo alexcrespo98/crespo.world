@@ -2,6 +2,17 @@
 
 Complete guide for setting up and running Instagram, YouTube, and TikTok scrapers on Ubuntu with Google Drive integration.
 
+## Important Note on Master Scraper
+
+The master scraper provides a unified interface for selecting modes and platforms, but the individual scrapers (`instagram_scraper.py`, `youtube_scraper.py`, `tiktok_scraper.py`) retain their own interactive prompts. This design preserves the functionality and reliability of the individual scrapers while adding orchestration capabilities.
+
+**What this means:**
+- The master scraper handles mode selection (Normal, Custom, Deep, Test)
+- Individual scrapers may still prompt for browser selection, confirmation, etc.
+- This is by design to maintain scraper stability and avoid breaking changes
+
+**Future Enhancement:** Individual scrapers could be refactored to accept mode parameters directly for full non-interactive operation.
+
 ## Table of Contents
 - [System Requirements](#system-requirements)
 - [Installation](#installation)

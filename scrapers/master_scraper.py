@@ -269,9 +269,10 @@ class MasterScraper:
             # Initialize scraper
             scraper = InstagramScraper()
             
-            # The individual scrapers have their own run() methods with prompts
-            # To truly integrate, we'd need to refactor them, but per requirements
-            # we should keep them largely unchanged
+            # NOTE: The individual scrapers have their own run() methods with prompts.
+            # Per requirements, individual scrapers should remain largely unchanged.
+            # The master scraper provides mode selection, but the scrapers handle their own execution.
+            # Future enhancement: Add mode parameters to individual scrapers for full integration.
             scraper.run()
             
             if not test_mode:
@@ -313,9 +314,10 @@ class MasterScraper:
             # Initialize scraper
             scraper = YoutubeScraper()
             
+            # NOTE: YouTube scraper has its own interactive prompts.
+            # The master scraper provides guidance but the scraper handles configuration.
             if test_mode:
-                print("\n⚠️  Note: Test mode requires running scraper interactively")
-                print("   The scraper will prompt for configuration.")
+                print("\n⚠️  Note: YouTube scraper will prompt for test mode configuration")
             
             scraper.run()
             
@@ -360,12 +362,13 @@ class MasterScraper:
             # Initialize scraper
             scraper = TikTokScraper()
             
+            # NOTE: TikTok scraper accepts max_posts parameter but has its own prompts.
+            # The master scraper passes the count, but the scraper handles the rest.
             if test_mode:
-                print("\n⚠️  Note: Test mode requires running scraper interactively")
-                print("   The scraper will prompt for configuration.")
+                print("\n⚠️  Note: TikTok scraper will prompt for additional configuration")
             
-            # TikTok scraper accepts max_posts parameter
-            scraper.run(max_posts=tt_config['count'])
+            # TikTok scraper accepts max_posts parameter (verified in tiktok_scraper.py line 691)
+            scraper.run(max_posts=tt_config['count'] if not tt_config['deep'] else None)
             
             if not test_mode:
                 self.files_updated.append('tiktok_analytics_tracker.xlsx')
