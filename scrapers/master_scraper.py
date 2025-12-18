@@ -368,7 +368,9 @@ class MasterScraper:
                 print("\n⚠️  Note: TikTok scraper will prompt for additional configuration")
             
             # TikTok scraper accepts max_posts parameter (verified in tiktok_scraper.py line 691)
-            scraper.run(max_posts=tt_config['count'] if not tt_config['deep'] else None)
+            # Pass None for deep scrapes to let the scraper handle unlimited posts
+            max_posts_arg = None if tt_config.get('deep') else tt_config.get('count')
+            scraper.run(max_posts=max_posts_arg)
             
             if not test_mode:
                 self.files_updated.append('tiktok_analytics_tracker.xlsx')

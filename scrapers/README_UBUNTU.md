@@ -750,14 +750,23 @@ chrome_options.add_argument('--disable-dev-shm-usage')
 ### 3. Schedule Regular Scrapes
 
 ```bash
+# Note: Master scraper is currently interactive-only
+# For automated scraping, run individual scrapers directly:
+
 # Use cron for automated scraping
 crontab -e
 
-# Add (runs every Monday at 2 AM):
-0 2 * * 1 cd ~/crespo.world/scrapers && python3 master_scraper.py --mode normal
+# Example (runs Instagram scraper every Monday at 2 AM):
+# 0 2 * * 1 cd ~/crespo.world/scrapers && python3 instagram_scraper.py
+
+# Example (runs all three scrapers sequentially):
+# 0 2 * * 1 cd ~/crespo.world/scrapers && python3 instagram_scraper.py && python3 youtube_scraper.py && python3 tiktok_scraper.py
 
 # View cron logs
 grep CRON /var/log/syslog
+
+# Alternative: For non-interactive master scraper, individual scrapers
+# would need to be run with environment variables or config files
 ```
 
 ---

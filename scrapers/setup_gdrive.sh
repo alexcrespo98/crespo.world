@@ -32,10 +32,13 @@ else
     echo -e "${YELLOW}📦 rclone not found. Installing...${NC}"
     
     # Install rclone (download, verify, then execute for security)
+    # Note: This uses the official rclone installation script from rclone.org
+    # For additional security, you can manually verify the script before execution
     echo "Downloading rclone install script..."
     curl -o /tmp/rclone-install.sh https://rclone.org/install.sh
     
     echo "Executing install script..."
+    echo "NOTE: The script will install rclone from the official repository"
     sudo bash /tmp/rclone-install.sh
     rm /tmp/rclone-install.sh
     
