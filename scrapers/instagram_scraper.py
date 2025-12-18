@@ -76,6 +76,9 @@ class InstagramScraper:
     # Logarithmic outlier detection threshold (number of standard deviations from expected)
     LOG_OUTLIER_THRESHOLD_STDEV = 2.5  # Flag posts with likes/views > 2.5 stdev from expected
     
+    # Data validation threshold (prevent uploads with insufficient data)
+    DATA_VALIDATION_THRESHOLD = 0.9  # New data must have at least 90% of previous count
+    
     def __init__(self):
         self.driver = None
         self.incognito_driver = None  # For fallback on rate limiting
@@ -2316,8 +2319,8 @@ class InstagramScraper:
                 old_reels = int(old_reels) if pd.notna(old_reels) else 0
                 new_reels = int(new_reels) if pd.notna(new_reels) else 0
                 
-                # Allow some tolerance (10%) for deep scrapes that might get slightly different results
-                min_acceptable = int(old_reels * 0.9)
+                # Allow some tolerance for deep scrapes that might get slightly different results
+                min_acceptable = int(old_reels * self.DATA_VALIDATION_THRESHOLD)
                 
                 if new_reels < min_acceptable:
                     issues.append(f"@{username}: New scrape has {new_reels} reels vs {old_reels} previously (below 90% threshold)")

@@ -53,6 +53,9 @@ API_KEY = "AIzaSyCj1JF5t2F_vonT8UUuEqdQAeWyjz5BOPE"
 GDRIVE_FILE_ID = "1yRLZpJLdaB9oPZtjcwIeJx-6q8lGF2dO"
 
 class YoutubeScraper:
+    # Data validation threshold (prevent uploads with insufficient data)
+    DATA_VALIDATION_THRESHOLD = 0.9  # New data must have at least 90% of previous count
+    
     def __init__(self):
         self.interrupted = False
         self.current_data = {}
@@ -915,8 +918,8 @@ class YoutubeScraper:
                 old_videos = int(old_videos) if pd.notna(old_videos) else 0
                 new_videos = int(new_videos) if pd.notna(new_videos) else 0
                 
-                # Allow 10% tolerance
-                min_acceptable = int(old_videos * 0.9)
+                # Allow tolerance defined by DATA_VALIDATION_THRESHOLD
+                min_acceptable = int(old_videos * self.DATA_VALIDATION_THRESHOLD)
                 
                 if new_videos < min_acceptable:
                     issues.append(f"@{channel}: New scrape has {new_videos} videos vs {old_videos} previously")

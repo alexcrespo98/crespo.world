@@ -56,6 +56,9 @@ except:
     pass
 
 class TikTokScraper:
+    # Data validation threshold (prevent uploads with insufficient data)
+    DATA_VALIDATION_THRESHOLD = 0.9  # New data must have at least 90% of previous count
+    
     def __init__(self):
         self.interrupted = False
         self.current_data = {}
@@ -513,8 +516,8 @@ class TikTokScraper:
                 old_posts = int(old_posts) if pd.notna(old_posts) else 0
                 new_posts = int(new_posts) if pd.notna(new_posts) else 0
                 
-                # Allow 10% tolerance
-                min_acceptable = int(old_posts * 0.9)
+                # Allow tolerance defined by DATA_VALIDATION_THRESHOLD
+                min_acceptable = int(old_posts * self.DATA_VALIDATION_THRESHOLD)
                 
                 if new_posts < min_acceptable:
                     issues.append(f"@{username}: New scrape has {new_posts} posts vs {old_posts} previously")
