@@ -716,10 +716,10 @@ class TikTokScraper:
                 print("\nFetching account stats...")
                 tokcount_followers, tokcount_likes = self.get_tokcount_stats("popdartsgame")
                 
-                # Get detailed post metrics - FIX: use max_videos instead of max_posts
+                # Get detailed post metrics
                 print("\nScraping posts...")
                 videos_data, ytdlp_followers, ytdlp_likes = self.scrape_tiktok_profile(
-                    "popdartsgame", max_videos=15  # Changed from max_posts to max_videos
+                    "popdartsgame", max_videos=15  # Parameter name is max_videos per method signature
                 )
                 
                 # Use best available data

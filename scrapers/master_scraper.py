@@ -368,8 +368,12 @@ class MasterScraper:
                 print("\n⚠️  Note: TikTok scraper will prompt for additional configuration")
             
             # TikTok scraper accepts max_posts parameter (verified in tiktok_scraper.py line 691)
-            # Pass None for deep scrapes to let the scraper handle unlimited posts
-            max_posts_arg = None if tt_config.get('deep') else tt_config.get('count')
+            # For deep scrapes, pass a large number (9999999) as per scraper's design (line 607)
+            # Passing None would trigger the scraper's interactive prompt
+            if tt_config.get('deep'):
+                max_posts_arg = 9999999  # Deep scrape - effectively unlimited
+            else:
+                max_posts_arg = tt_config.get('count', 100)
             scraper.run(max_posts=max_posts_arg)
             
             if not test_mode:

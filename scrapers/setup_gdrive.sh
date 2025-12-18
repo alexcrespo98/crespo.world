@@ -33,12 +33,25 @@ else
     
     # Install rclone (download, verify, then execute for security)
     # Note: This uses the official rclone installation script from rclone.org
-    # For additional security, you can manually verify the script before execution
     echo "Downloading rclone install script..."
     curl -o /tmp/rclone-install.sh https://rclone.org/install.sh
     
-    echo "Executing install script..."
-    echo "NOTE: The script will install rclone from the official repository"
+    # Offer to inspect the script before execution
+    echo ""
+    echo "The install script has been downloaded to /tmp/rclone-install.sh"
+    read -p "Do you want to inspect the script before execution? (y/n): " inspect
+    if [[ "$inspect" == "y" ]]; then
+        less /tmp/rclone-install.sh
+    fi
+    
+    read -p "Proceed with rclone installation? (y/n): " proceed
+    if [[ "$proceed" != "y" ]]; then
+        echo "Installation cancelled."
+        rm /tmp/rclone-install.sh
+        exit 1
+    fi
+    
+    echo "Installing rclone..."
     sudo bash /tmp/rclone-install.sh
     rm /tmp/rclone-install.sh
     
