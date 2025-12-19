@@ -44,17 +44,14 @@ ACCOUNTS_TO_TRACK = [
 ]
 
 INSTAGRAM_COOKIES = [
-    {'name': 'sessionid',  'value': '8438482535%3AMPEOwRDuMthipr%3A27%3AAYg09FuxGLdBcOFbnZ2mITkxs965IY4io5LNvfWfRtw', 'domain': '.instagram.com'},
-    {'name': 'csrftoken',  'value': 'PDZd_D2WZI-jbxK42IHbh7', 'domain': '.instagram.com'},
+    {'name': 'datr',       'value': 'FI9FaThKc4gAvqKXjFdg_hY_', 'domain': '.instagram.com'},
     {'name': 'ds_user_id', 'value': '8438482535', 'domain': '.instagram.com'},
-    {'name': 'mid',        'value': 'aScXdwALAAHefecqIK7Kolvd0S83', 'domain': '.instagram.com'},
-    {'name': 'ig_did',     'value': 'BDB1F779-BEE2-4C1B-BB51-B7BF706BFE25', 'domain': '.instagram.com'},
-    {'name': 'datr',       'value': 'dxcnaSrRabzedk6Hc5PLcevi', 'domain': '.instagram.com'},
-    {'name': 'rur',        'value': '"EAG\0548438482535\0541796418371:01fef0e9c40545c1730f319e0a46fb88ef55394b73a0b6ae0edf366f413b7c19f0f0bbc6"', 'domain': '.instagram.com'},
-    {'name': 'wd',         'value': '879x639', 'domain': '.instagram.com'},
-    {'name': 'dpr',        'value': '1.5', 'domain': '.instagram.com'},
-    {'name': 'ps_n',       'value': '1', 'domain': '.instagram.com'},
-    {'name': 'ps_l',       'value': '1', 'domain': '.instagram.com'},
+    {'name': 'csrftoken',  'value': 'P_rsl9ZgVj-izzrcPMLqzX', 'domain': '.instagram.com'},
+    {'name': 'ig_did',     'value': '10205D5F-E3A4-4DA9-A0D3-A3E7B4AFB1B7', 'domain': '.instagram.com'},
+    {'name': 'wd',         'value': '834x683', 'domain': '.instagram.com'},
+    {'name': 'mid',        'value': 'aUWPFAAEAAFwngF_FtmARPDnx5sI', 'domain': '.instagram.com'},
+    {'name': 'sessionid',  'value': '8438482535%3AnDuZdWBoonkF8h%3A18%3AAYivLFo5iOWpnhVFyu5BiiFk7Ps6Sh-1JXWqic44jQ', 'domain': '.instagram.com'},
+    {'name': 'rur',        'value': '"NHA\0548438482535\0541797702323:01fe2d648012ec3d0fdc62c16270498e533bf8a37cb1e62b7b9018ca03100e8405304216"', 'domain': '.instagram.com'},
 ]
 
 # Login credentials for Instagram
