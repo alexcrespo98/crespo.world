@@ -44,17 +44,14 @@ ACCOUNTS_TO_TRACK = [
 ]
 
 INSTAGRAM_COOKIES = [
-    {'name': 'sessionid',  'value': '8438482535%3AMPEOwRDuMthipr%3A27%3AAYg09FuxGLdBcOFbnZ2mITkxs965IY4io5LNvfWfRtw', 'domain': '.instagram.com'},
-    {'name': 'csrftoken',  'value': 'PDZd_D2WZI-jbxK42IHbh7', 'domain': '.instagram.com'},
+    {'name': 'datr',       'value': 'FI9FaThKc4gAvqKXjFdg_hY_', 'domain': '.instagram.com'},
     {'name': 'ds_user_id', 'value': '8438482535', 'domain': '.instagram.com'},
-    {'name': 'mid',        'value': 'aScXdwALAAHefecqIK7Kolvd0S83', 'domain': '.instagram.com'},
-    {'name': 'ig_did',     'value': 'BDB1F779-BEE2-4C1B-BB51-B7BF706BFE25', 'domain': '.instagram.com'},
-    {'name': 'datr',       'value': 'dxcnaSrRabzedk6Hc5PLcevi', 'domain': '.instagram.com'},
-    {'name': 'rur',        'value': '"EAG\0548438482535\0541796418371:01fef0e9c40545c1730f319e0a46fb88ef55394b73a0b6ae0edf366f413b7c19f0f0bbc6"', 'domain': '.instagram.com'},
-    {'name': 'wd',         'value': '879x639', 'domain': '.instagram.com'},
-    {'name': 'dpr',        'value': '1.5', 'domain': '.instagram.com'},
-    {'name': 'ps_n',       'value': '1', 'domain': '.instagram.com'},
-    {'name': 'ps_l',       'value': '1', 'domain': '.instagram.com'},
+    {'name': 'csrftoken',  'value': 'P_rsl9ZgVj-izzrcPMLqzX', 'domain': '.instagram.com'},
+    {'name': 'ig_did',     'value': '10205D5F-E3A4-4DA9-A0D3-A3E7B4AFB1B7', 'domain': '.instagram.com'},
+    {'name': 'wd',         'value': '834x683', 'domain': '.instagram.com'},
+    {'name': 'mid',        'value': 'aUWPFAAEAAFwngF_FtmARPDnx5sI', 'domain': '.instagram.com'},
+    {'name': 'sessionid',  'value': '8438482535%3AnDuZdWBoonkF8h%3A18%3AAYivLFo5iOWpnhVFyu5BiiFk7Ps6Sh-1JXWqic44jQ', 'domain': '.instagram.com'},
+    {'name': 'rur',        'value': '"NHA\0548438482535\0541797702323:01fe2d648012ec3d0fdc62c16270498e533bf8a37cb1e62b7b9018ca03100e8405304216"', 'domain': '.instagram.com'},
 ]
 
 # Login credentials for Instagram
@@ -75,6 +72,9 @@ class InstagramScraper:
     
     # Logarithmic outlier detection threshold (number of standard deviations from expected)
     LOG_OUTLIER_THRESHOLD_STDEV = 2.5  # Flag posts with likes/views > 2.5 stdev from expected
+    
+    # Data validation threshold (prevent uploads with insufficient data)
+    DATA_VALIDATION_THRESHOLD = 0.9  # New data must have at least 90% of previous count
     
     def __init__(self):
         self.driver = None
@@ -2262,10 +2262,104 @@ class InstagramScraper:
                 df.to_excel(writer, sheet_name=sheet_name)
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
 
-    def upload_to_google_drive(self):
+    def validate_data_before_upload(self, new_data):
+        """
+        Validate that new data contains sufficient information before uploading.
+        Prevents overwriting good data with incomplete scrapes.
+        
+        Returns: (should_upload: bool, reason: str)
+        """
+        import pandas as pd
+        
+        # If no existing file, always upload
+        if not os.path.exists(OUTPUT_EXCEL):
+            return True, "No existing file - safe to upload"
+        
+        try:
+            # Load existing data from Google Drive backup or local file
+            existing_data = pd.read_excel(OUTPUT_EXCEL, sheet_name=None, index_col=0)
+        except Exception as e:
+            print(f"  ⚠️  Could not read existing Excel: {e}")
+            return True, "Could not read existing file - proceeding with upload"
+        
+        issues = []
+        
+        for username, new_df in new_data.items():
+            if username not in existing_data:
+                continue  # New account, safe to upload
+            
+            old_df = existing_data[username]
+            
+            # Get the most recent column from existing data (before current scrape)
+            if old_df.empty or len(old_df.columns) == 0:
+                continue
+            
+            old_cols = [c for c in old_df.columns]
+            if not old_cols:
+                continue
+            
+            last_old_col = sorted(old_cols)[-1]
+            
+            # Get current column from new data
+            if new_df.empty or len(new_df.columns) == 0:
+                issues.append(f"@{username}: New data is empty")
+                continue
+            
+            new_cols = list(new_df.columns)
+            current_col = new_cols[-1]
+            
+            # Check reels count
+            try:
+                old_reels = old_df.loc["reels_scraped", last_old_col] if "reels_scraped" in old_df.index else 0
+                new_reels = new_df.loc["reels_scraped", current_col] if "reels_scraped" in new_df.index else 0
+                
+                old_reels = int(old_reels) if pd.notna(old_reels) else 0
+                new_reels = int(new_reels) if pd.notna(new_reels) else 0
+                
+                # Allow some tolerance for deep scrapes that might get slightly different results
+                min_acceptable = int(old_reels * self.DATA_VALIDATION_THRESHOLD)
+                
+                if new_reels < min_acceptable:
+                    issues.append(f"@{username}: New scrape has {new_reels} reels vs {old_reels} previously (below 90% threshold)")
+            except Exception as e:
+                print(f"  ⚠️  Could not compare reels for @{username}: {e}")
+        
+        if issues:
+            print("\n" + "="*70)
+            print("⚠️  DATA VALIDATION WARNING")
+            print("="*70)
+            print("\nNew data appears to have less content than previous scrape:")
+            for issue in issues:
+                print(f"  • {issue}")
+            print("\nThis usually happens when:")
+            print("  • Instagram rate-limited the scraper")
+            print("  • Cookies expired and login failed")
+            print("  • Network issues interrupted the scrape")
+            print("\n❌ Upload BLOCKED to prevent data loss.")
+            print("   Fix the issues and run the scraper again.")
+            return False, "Insufficient data - upload blocked"
+        
+        return True, "Data validation passed"
+
+    def upload_to_google_drive(self, all_account_data=None):
+        """
+        Upload to Google Drive with data validation.
+        
+        Args:
+            all_account_data: Optional dict of account data for validation.
+                             If provided, validates before uploading.
+        """
         print("\n" + "="*70)
         print("☁️  Uploading to Google Drive...")
         print("="*70)
+        
+        # Validate data if provided
+        if all_account_data:
+            should_upload, reason = self.validate_data_before_upload(all_account_data)
+            print(f"  📊 Validation: {reason}")
+            if not should_upload:
+                return False
+        
         try:
             result = subprocess.run(['rclone', 'version'], 
                 capture_output=True, 
@@ -3944,9 +4038,75 @@ class InstagramScraper:
                     }
                     continue
             
+            # Check if we got NO data at all (possible cookie expiration)
+            total_reels = sum(result.get('reels_count', 0) for result in scrape_results.values())
+            if total_reels == 0 and len(scrape_results) > 0:
+                print("\n" + "="*70)
+                print("⚠️  NO DATA RETRIEVED FROM ANY ACCOUNT")
+                print("="*70)
+                print("\nThis usually indicates expired cookies or login issues.")
+                print("All accounts returned 0 reels.")
+                
+                retry_choice = input("\n🔄 Would you like to update cookies and retry? (y/n): ").strip().lower()
+                
+                if retry_choice == 'y':
+                    print("\n" + "="*70)
+                    print("🍪 UPDATING COOKIES")
+                    print("="*70)
+                    
+                    # Prompt for new cookies
+                    success, self.driver = self.handle_cookie_update(self.driver)
+                    
+                    if success:
+                        print("\n✅ Cookies updated! Retrying scrape...")
+                        # Clear previous results
+                        scrape_results.clear()
+                        all_account_data.clear()
+                        
+                        # Retry all accounts
+                        for idx, username in enumerate(accounts, 1):
+                            print("\n" + "="*70)
+                            print(f"📱 [{idx}/{len(accounts)}] Processing @{username} (RETRY)")
+                            print("="*70)
+                            
+                            try:
+                                reels_data, followers, pinned_count = self.scrape_instagram_account(
+                                    self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=False
+                                )
+                                
+                                scrape_results[username] = {
+                                    'reels_count': len(reels_data),
+                                    'followers': followers,
+                                    'pinned_count': pinned_count,
+                                    'deep_scrape': deep_scrape
+                                }
+                                
+                                existing_df = existing_data.get(username, pd.DataFrame())
+                                df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
+                                all_account_data[username] = df
+                                self.current_data = all_account_data
+                                
+                                print(f"\n  ✅ @{username} complete!")
+                                print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
+                                print(f"  🎬 Reels: {len(reels_data)}")
+                            
+                            except Exception as e:
+                                print(f"\n  ❌ Error with @{username}: {e}")
+                                scrape_results[username] = {
+                                    'reels_count': 0,
+                                    'followers': None,
+                                    'pinned_count': 0,
+                                    'deep_scrape': deep_scrape
+                                }
+                                continue
+                    else:
+                        print("\n❌ Cookie update failed. Saving partial results...")
+                else:
+                    print("\n⚠️  Skipping cookie update. Saving partial results...")
+            
             # Save results
             self.save_to_excel(all_account_data)
-            self.upload_to_google_drive()
+            self.upload_to_google_drive(all_account_data)
             
             print("\n" + "="*70)
             print("✅ All scraping complete!")
