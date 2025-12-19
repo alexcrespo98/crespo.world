@@ -180,6 +180,7 @@ class TikTokScraper:
         """Get followers and likes for a TikTok user from TokCount using screenshots + OCR"""
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
         from PIL import Image
         import pytesseract
         
@@ -197,6 +198,11 @@ class TikTokScraper:
         chrome_options.add_argument("--log-level=3")
         chrome_options.add_argument("--disable-logging")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        # Add ad blocking
+        chrome_options.add_argument("--disable-popup-blocking")
+        chrome_options.add_experimental_option("prefs", {
+            "profile.default_content_setting_values.notifications": 2
+        })
         
         print(f"  🔍 Fetching TokCount stats...")
         
@@ -206,7 +212,56 @@ class TikTokScraper:
         try:
             driver = webdriver.Chrome(options=chrome_options)
             driver.get(url)
-            time.sleep(8)
+            
+            # Initial wait for page load
+            print(f"  ⏳ Waiting for page to load and numbers to settle...")
+            time.sleep(5)
+            
+            # Try to close any popups/ads
+            try:
+                # Common close button selectors
+                close_buttons = driver.find_elements(By.CSS_SELECTOR, 
+                    "button[aria-label='Close'], .close, .modal-close, [class*='close'], [id*='close']")
+                for btn in close_buttons:
+                    try:
+                        if btn.is_displayed():
+                            btn.click()
+                            time.sleep(0.5)
+                    except:
+                        pass
+            except:
+                pass
+            
+            # Wait for numbers to settle (they change rapidly at first)
+            # Check multiple times to see when numbers stabilize
+            print(f"  ⏳ Waiting for counter to stabilize...")
+            stable_count = 0
+            last_text = ""
+            
+            for attempt in range(6):  # Check up to 6 times
+                time.sleep(3)  # Wait 3 seconds between checks
+                try:
+                    # Get page text
+                    current_text = driver.find_element(By.TAG_NAME, "body").text
+                    
+                    # Extract numbers
+                    current_numbers = re.findall(r'\d{1,3}(?:,\d{3})+|\b\d{6,}\b', current_text)
+                    
+                    # Check if numbers are similar to last check
+                    if current_numbers and current_text == last_text:
+                        stable_count += 1
+                        if stable_count >= 2:  # Numbers stable for 2 checks
+                            print(f"  ✅ Counter stabilized")
+                            break
+                    else:
+                        stable_count = 0
+                    
+                    last_text = current_text
+                except:
+                    pass
+            
+            # Additional wait to be safe
+            time.sleep(2)
             
             # Take screenshots at different scroll positions
             scroll_positions = [0, 200, 400, 600, 800]
