@@ -554,7 +554,12 @@ class TikTokScraper:
             if not old_cols:
                 continue
             
-            last_old_col = sorted(old_cols)[-1]
+            # Convert all columns to strings before sorting to avoid datetime/str comparison
+            # Then find the actual column object that matches the sorted result
+            sorted_str_cols = sorted([str(c) for c in old_cols])
+            last_old_col_str = sorted_str_cols[-1]
+            # Find the actual column object that matches this string
+            last_old_col = next((c for c in old_cols if str(c) == last_old_col_str), old_cols[-1])
             
             if new_df.empty or len(new_df.columns) == 0:
                 issues.append(f"@{username}: New data is empty")
@@ -753,7 +758,7 @@ class TikTokScraper:
             else:
                 print("❌ Invalid choice. Please enter 1, 2, or 3")
 
-    def retry_failed_scrapes(self, failed_accounts):
+    def retry_failed_scrapes(self, failed_accounts, auto_retry=False):
         """Retry screenshot scraping for accounts that returned N/A"""
         if not failed_accounts:
             return {}
@@ -765,14 +770,23 @@ class TikTokScraper:
         for username in failed_accounts:
             print(f"  • @{username}")
         
-        while True:
-            retry = input("\n🔄 Would you like to retry screenshot scraping? (y/n): ").strip().lower()
-            if retry in ["y", "yes"]:
-                break
-            elif retry in ["n", "no"]:
-                return {}
-            else:
-                print("❌ Please type 'y' or 'n'.")
+        # Auto-retry if enabled, otherwise prompt
+        if auto_retry:
+            print("\n🔄 Auto-retry enabled, retrying screenshot scraping...")
+            retry = True
+        else:
+            while True:
+                retry_input = input("\n🔄 Would you like to retry screenshot scraping? (y/n): ").strip().lower()
+                if retry_input in ["y", "yes"]:
+                    retry = True
+                    break
+                elif retry_input in ["n", "no"]:
+                    return {}
+                else:
+                    print("❌ Please type 'y' or 'n'.")
+        
+        if not retry:
+            return {}
         
         print("\n📸 Retrying screenshot scrapes...")
         retry_results = {}
@@ -828,7 +842,7 @@ class TikTokScraper:
                 except Exception as e:
                     print(f"  ❌ Retry failed: {e}")
 
-    def run(self, max_posts=None):
+    def run(self, max_posts=None, auto_mode=False, auto_retry=False):
         """Main execution function"""
         import pandas as pd
         
@@ -840,8 +854,10 @@ class TikTokScraper:
         
         # Get scrape configuration if not provided
         test_mode = False
-        if max_posts is None:
+        if max_posts is None and not auto_mode:
             max_posts, test_mode = self.get_scrape_config()
+        elif max_posts is None:
+            max_posts = 100  # Default for auto mode
         
         if test_mode:
             # TEST MODE - Only scrape @popdartsgame and display in terminal
@@ -934,7 +950,7 @@ class TikTokScraper:
                     continue
             
             # Retry failed screenshot scrapes
-            retry_results = self.retry_failed_scrapes(failed_screenshot_accounts)
+            retry_results = self.retry_failed_scrapes(failed_screenshot_accounts, auto_retry=auto_retry)
             
             # Update data with retry results
             if retry_results:
