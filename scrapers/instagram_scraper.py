@@ -3915,7 +3915,7 @@ class InstagramScraper:
             else:
                 print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
-    def run(self):
+    def run(self, max_posts=None, auto_mode=False, auto_retry=False):
         """Main execution function"""
         import pandas as pd
         
@@ -3925,8 +3925,18 @@ class InstagramScraper:
         print("📸 Instagram Reels Analytics Tracker v5.0")
         print("="*70)
         
-        browser_choice = self.select_browser()
-        max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode = self.get_scrape_mode()
+        # Skip prompts in auto mode
+        if auto_mode:
+            browser_choice = 'chrome'  # Default browser for auto mode
+            max_reels = max_posts if max_posts else 100
+            deep_scrape = False
+            test_mode = False
+            deep_deep = False
+            enhanced_test_mode = False
+            arrow_optimization_mode = False
+        else:
+            browser_choice = self.select_browser()
+            max_reels, deep_scrape, test_mode, deep_deep, enhanced_test_mode, arrow_optimization_mode = self.get_scrape_mode()
         
         # Handle arrow optimization mode (test main page methods)
         if arrow_optimization_mode:
@@ -3976,7 +3986,8 @@ class InstagramScraper:
         print("   Strategy: Hover FIRST → URL SECOND → Cross-validate → Merge")
         print("   Output: Verbose (shows errors, corrections, salvage status)")
         
-        input("\n▶️  Press ENTER to start scraping...")
+        if not auto_mode:
+            input("\n▶️  Press ENTER to start scraping...")
         
         self.driver = self.setup_driver(browser=browser_choice)
         existing_data = self.load_existing_excel()

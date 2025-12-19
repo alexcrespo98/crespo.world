@@ -985,7 +985,7 @@ class YoutubeScraper:
             else:
                 print("Invalid choice. Please enter 1, 2, or 3.")
 
-    def run(self):
+    def run(self, max_posts=None, auto_mode=False, auto_retry=False):
         """Main execution function"""
         import pandas as pd
         
@@ -1012,7 +1012,12 @@ class YoutubeScraper:
             return
         
         # Get scrape mode
-        max_videos, deep_scrape, test_mode = self.get_scrape_mode()
+        if auto_mode:
+            max_videos = max_posts if max_posts else 100
+            deep_scrape = max_posts is None  # Deep scrape if no max_posts specified in auto mode
+            test_mode = False
+        else:
+            max_videos, deep_scrape, test_mode = self.get_scrape_mode()
         
         # Set up accounts to scrape
         if test_mode:
@@ -1034,7 +1039,8 @@ class YoutubeScraper:
                 print(f"\n📊 Mode: {max_videos} videos per channel")
                 expected_videos = max_videos
         
-        input("\n▶️ Press ENTER to start scraping...")
+        if not auto_mode:
+            input("\n▶️ Press ENTER to start scraping...")
         
         # Load existing data
         existing_data = self.load_existing_excel()

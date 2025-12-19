@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import the actual scrapers from the same directory
 from instagram_scraper import InstagramScraper, ACCOUNTS_TO_TRACK as INSTA_ACCOUNTS
-from youtube_scrape import YoutubeScraper, ACCOUNTS_TO_TRACK as YOUTUBE_ACCOUNTS
+from youtube_scraper import YoutubeScraper, ACCOUNTS_TO_TRACK as YOUTUBE_ACCOUNTS
 from tiktok_scraper import TikTokScraper
 
 
@@ -170,7 +170,7 @@ class MasterScraper:
             else:
                 print("Invalid choice. Please enter 1-5.")
     
-    def run_instagram_scraper(self, config):
+    def run_instagram_scraper(self, config, auto_mode=False, auto_retry=False):
         """Run the Instagram scraper with the specified configuration"""
         print("\n" + "="*70)
         print("📸 RUNNING INSTAGRAM SCRAPER")
@@ -189,9 +189,8 @@ class MasterScraper:
             else:
                 print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} reels per account")
             
-            # Note: The Instagram scraper has its own run() method which prompts for mode
-            # For master scraper integration, we call run() and let user interact with it
-            scraper.run()
+            # Pass parameters to scraper
+            scraper.run(max_posts=config['max_posts'], auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -200,7 +199,7 @@ class MasterScraper:
             traceback.print_exc()
             return False
     
-    def run_youtube_scraper(self, config):
+    def run_youtube_scraper(self, config, auto_mode=False, auto_retry=False):
         """Run the YouTube scraper with the specified configuration"""
         print("\n" + "="*70)
         print("🎬 RUNNING YOUTUBE SCRAPER")
@@ -216,9 +215,8 @@ class MasterScraper:
             else:
                 print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} videos per channel")
             
-            # Note: The YouTube scraper has its own run() method which prompts for mode
-            # For master scraper integration, we call run() and let user interact
-            scraper.run()
+            # Pass parameters to scraper
+            scraper.run(max_posts=config['max_posts'], auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -227,7 +225,7 @@ class MasterScraper:
             traceback.print_exc()
             return False
     
-    def run_tiktok_scraper(self, config):
+    def run_tiktok_scraper(self, config, auto_mode=False, auto_retry=False):
         """Run the TikTok scraper with the specified configuration"""
         print("\n" + "="*70)
         print("🎵 RUNNING TIKTOK SCRAPER")
@@ -243,8 +241,8 @@ class MasterScraper:
             else:
                 print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} videos per account")
             
-            # The TikTok scraper has its own run() method
-            scraper.run()
+            # Pass parameters to scraper
+            scraper.run(max_posts=config['max_posts'], auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -353,6 +351,16 @@ def main():
         default='all',
         help='Platform to scrape (default: all)'
     )
+    parser.add_argument(
+        '--non-interactive',
+        action='store_true',
+        help='Run in non-interactive mode (no prompts, use defaults)'
+    )
+    parser.add_argument(
+        '--auto-retry-followers',
+        action='store_true',
+        help='Automatically retry failed follower scrapes once'
+    )
     
     args = parser.parse_args()
     
@@ -360,16 +368,26 @@ def main():
     scraper = MasterScraper()
     
     try:
-        # If command line args provided, use them; otherwise use interactive mode
-        if args.mode:
+        # If command line args provided or non-interactive mode, use them; otherwise use interactive mode
+        if args.mode or args.non_interactive:
             # Build config from command line args
-            config = {
-                'mode': args.mode,
-                'max_posts': args.posts if args.mode == 'custom' else (15 if args.mode == 'test' else None),
-                'deep_scrape': args.mode == 'deep',
-                'deep_deep': args.deep_deep and args.mode == 'deep',
-                'test_mode': args.mode == 'test'
-            }
+            if args.mode:
+                config = {
+                    'mode': args.mode,
+                    'max_posts': args.posts if args.mode == 'custom' else (15 if args.mode == 'test' else None),
+                    'deep_scrape': args.mode == 'deep',
+                    'deep_deep': args.deep_deep and args.mode == 'deep',
+                    'test_mode': args.mode == 'test'
+                }
+            else:
+                # Default config for non-interactive mode
+                config = {
+                    'mode': 'custom',
+                    'max_posts': args.posts,
+                    'deep_scrape': False,
+                    'deep_deep': False,
+                    'test_mode': False
+                }
             
             platforms = {
                 'instagram': args.platform in ['all', 'instagram'],
@@ -380,20 +398,30 @@ def main():
             print("\n" + "="*70)
             print("🚀 MASTER SOCIAL MEDIA SCRAPER v2.0")
             print("="*70)
-            print(f"\nMode: {args.mode}")
+            print(f"\nMode: {config['mode']}")
             print(f"Platform: {args.platform}")
-            print(f"Posts: {args.posts}")
+            print(f"Posts: {config['max_posts']}")
+            if args.non_interactive:
+                print("Non-interactive: Yes")
+            if args.auto_retry_followers:
+                print("Auto-retry followers: Yes")
             
             results = {}
             
             if platforms.get('instagram'):
-                results['instagram'] = scraper.run_instagram_scraper(config)
+                results['instagram'] = scraper.run_instagram_scraper(
+                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_followers
+                )
             
             if platforms.get('youtube'):
-                results['youtube'] = scraper.run_youtube_scraper(config)
+                results['youtube'] = scraper.run_youtube_scraper(
+                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_followers
+                )
             
             if platforms.get('tiktok'):
-                results['tiktok'] = scraper.run_tiktok_scraper(config)
+                results['tiktok'] = scraper.run_tiktok_scraper(
+                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_followers
+                )
             
             scraper.display_summary(platforms, results)
         else:
