@@ -28,3 +28,6 @@ livecounts_test_*.json
 *_state_*.json
 *_diagnostic_*.json
 test.xlsx
+
+# Scraper temp directories
+.tiktok_scraper_temp/

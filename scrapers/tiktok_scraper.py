@@ -45,14 +45,20 @@ def ensure_pil():
 
 OUTPUT_EXCEL = "tiktok_analytics_tracker.xlsx"
 
-# Set Tesseract path for Windows
+# Set Tesseract path (cross-platform)
 try:
     import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    import platform
+    if platform.system() == 'Windows':
+        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    # On Linux/Ubuntu, tesseract should be in PATH or at /usr/bin/tesseract
 except:
     pass
 
 class TikTokScraper:
+    # Data validation threshold (prevent uploads with insufficient data)
+    DATA_VALIDATION_THRESHOLD = 0.9  # New data must have at least 90% of previous count
+    
     def __init__(self):
         self.interrupted = False
         self.current_data = {}
@@ -174,11 +180,14 @@ class TikTokScraper:
         """Get followers and likes for a TikTok user from TokCount using screenshots + OCR"""
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
         from PIL import Image
         import pytesseract
         
         url = f"https://tokcount.com/?user={username}"
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+        # Use temp directory for cross-platform compatibility
+        screenshot_dir = os.path.join(os.path.expanduser("~"), ".tiktok_scraper_temp")
+        os.makedirs(screenshot_dir, exist_ok=True)
         
         # Setup Chrome options
         chrome_options = Options()
@@ -189,6 +198,11 @@ class TikTokScraper:
         chrome_options.add_argument("--log-level=3")
         chrome_options.add_argument("--disable-logging")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        # Add ad blocking
+        chrome_options.add_argument("--disable-popup-blocking")
+        chrome_options.add_experimental_option("prefs", {
+            "profile.default_content_setting_values.notifications": 2
+        })
         
         print(f"  🔍 Fetching TokCount stats...")
         
@@ -198,7 +212,56 @@ class TikTokScraper:
         try:
             driver = webdriver.Chrome(options=chrome_options)
             driver.get(url)
-            time.sleep(8)
+            
+            # Initial wait for page load
+            print(f"  ⏳ Waiting for page to load and numbers to settle...")
+            time.sleep(5)
+            
+            # Try to close any popups/ads
+            try:
+                # Common close button selectors
+                close_buttons = driver.find_elements(By.CSS_SELECTOR, 
+                    "button[aria-label='Close'], .close, .modal-close, [class*='close'], [id*='close']")
+                for btn in close_buttons:
+                    try:
+                        if btn.is_displayed():
+                            btn.click()
+                            time.sleep(0.5)
+                    except:
+                        pass
+            except:
+                pass
+            
+            # Wait for numbers to settle (they change rapidly at first)
+            # Check multiple times to see when numbers stabilize
+            print(f"  ⏳ Waiting for counter to stabilize...")
+            stable_count = 0
+            last_text = ""
+            
+            for attempt in range(6):  # Check up to 6 times
+                time.sleep(3)  # Wait 3 seconds between checks
+                try:
+                    # Get page text
+                    current_text = driver.find_element(By.TAG_NAME, "body").text
+                    
+                    # Extract numbers
+                    current_numbers = re.findall(r'\d{1,3}(?:,\d{3})+|\b\d{6,}\b', current_text)
+                    
+                    # Check if numbers are similar to last check
+                    if current_numbers and current_text == last_text:
+                        stable_count += 1
+                        if stable_count >= 2:  # Numbers stable for 2 checks
+                            print(f"  ✅ Counter stabilized")
+                            break
+                    else:
+                        stable_count = 0
+                    
+                    last_text = current_text
+                except:
+                    pass
+            
+            # Additional wait to be safe
+            time.sleep(2)
             
             # Take screenshots at different scroll positions
             scroll_positions = [0, 200, 400, 600, 800]
@@ -206,7 +269,7 @@ class TikTokScraper:
             for i, scroll_pos in enumerate(scroll_positions):
                 driver.execute_script(f"window.scrollTo(0, {scroll_pos});")
                 time.sleep(1)
-                filename = os.path.join(desktop_path, f"tokcount_temp_{username}_{i+1}.png")
+                filename = os.path.join(screenshot_dir, f"tokcount_temp_{username}_{i+1}.png")
                 driver.save_screenshot(filename)
                 screenshot_files.append(filename)
             
@@ -457,11 +520,94 @@ class TikTokScraper:
         
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
 
-    def upload_to_google_drive(self):
-        """Upload to Google Drive if configured"""
+    def validate_data_before_upload(self, new_data):
+        """
+        Validate that new data contains sufficient information before uploading.
+        Prevents overwriting good data with incomplete scrapes.
+        
+        Returns: (should_upload: bool, reason: str)
+        """
+        import pandas as pd
+        
+        # If no existing file, always upload
+        if not os.path.exists(OUTPUT_EXCEL):
+            return True, "No existing file - safe to upload"
+        
+        try:
+            existing_data = pd.read_excel(OUTPUT_EXCEL, sheet_name=None, index_col=0)
+        except Exception as e:
+            print(f"  ⚠️  Could not read existing Excel: {e}")
+            return True, "Could not read existing file - proceeding with upload"
+        
+        issues = []
+        
+        for username, new_df in new_data.items():
+            if username not in existing_data:
+                continue
+            
+            old_df = existing_data[username]
+            
+            if old_df.empty or len(old_df.columns) == 0:
+                continue
+            
+            old_cols = [c for c in old_df.columns]
+            if not old_cols:
+                continue
+            
+            last_old_col = sorted(old_cols)[-1]
+            
+            if new_df.empty or len(new_df.columns) == 0:
+                issues.append(f"@{username}: New data is empty")
+                continue
+            
+            new_cols = list(new_df.columns)
+            current_col = new_cols[-1]
+            
+            # Check posts count
+            try:
+                old_posts = old_df.loc["posts_scraped", last_old_col] if "posts_scraped" in old_df.index else 0
+                new_posts = new_df.loc["posts_scraped", current_col] if "posts_scraped" in new_df.index else 0
+                
+                old_posts = int(old_posts) if pd.notna(old_posts) else 0
+                new_posts = int(new_posts) if pd.notna(new_posts) else 0
+                
+                # Allow tolerance defined by DATA_VALIDATION_THRESHOLD
+                min_acceptable = int(old_posts * self.DATA_VALIDATION_THRESHOLD)
+                
+                if new_posts < min_acceptable:
+                    issues.append(f"@{username}: New scrape has {new_posts} posts vs {old_posts} previously")
+            except Exception as e:
+                print(f"  ⚠️  Could not compare posts for @{username}: {e}")
+        
+        if issues:
+            print("\n" + "="*70)
+            print("⚠️  DATA VALIDATION WARNING")
+            print("="*70)
+            print("\nNew data appears to have less content than previous scrape:")
+            for issue in issues:
+                print(f"  • {issue}")
+            print("\n❌ Upload BLOCKED to prevent data loss.")
+            return False, "Insufficient data - upload blocked"
+        
+        return True, "Data validation passed"
+
+    def upload_to_google_drive(self, all_account_data=None):
+        """
+        Upload to Google Drive with data validation.
+        
+        Args:
+            all_account_data: Optional dict of account data for validation.
+        """
         print("\n" + "="*70)
         print("☁️  Uploading to Google Drive...")
         print("="*70)
+        
+        # Validate data if provided
+        if all_account_data:
+            should_upload, reason = self.validate_data_before_upload(all_account_data)
+            print(f"  📊 Validation: {reason}")
+            if not should_upload:
+                return False
         
         try:
             result = subprocess.run(['rclone', 'version'], 
@@ -710,10 +856,10 @@ class TikTokScraper:
                 print("\nFetching account stats...")
                 tokcount_followers, tokcount_likes = self.get_tokcount_stats("popdartsgame")
                 
-                # Get detailed post metrics - FIX: use max_videos instead of max_posts
+                # Get detailed post metrics
                 print("\nScraping posts...")
                 videos_data, ytdlp_followers, ytdlp_likes = self.scrape_tiktok_profile(
-                    "popdartsgame", max_videos=15  # Changed from max_posts to max_videos
+                    "popdartsgame", max_videos=15  # Parameter name is max_videos per method signature
                 )
                 
                 # Use best available data
@@ -802,14 +948,14 @@ class TikTokScraper:
             # Save to Excel
             print("\n" + "="*70)
             self.save_to_excel(all_account_data)
-            self.upload_to_google_drive()
+            self.upload_to_google_drive(all_account_data)
             
             # Handle early terminations
             if self.early_terminations:
                 self.handle_early_terminations(all_account_data, timestamp_col)
                 # Save updated results
                 self.save_to_excel(all_account_data)
-                self.upload_to_google_drive()
+                self.upload_to_google_drive(all_account_data)
             
             print("\n✅ All accounts scraped successfully!")
             print(f"📁 Updated: '{OUTPUT_EXCEL}'")
