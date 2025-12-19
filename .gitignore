@@ -28,3 +28,7 @@ livecounts_test_*.json
 *_state_*.json
 *_diagnostic_*.json
 test.xlsx
+
+# Auto scraper files
+auto_scraper.log
+auto_scraper.pid
