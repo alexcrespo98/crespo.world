@@ -32,3 +32,7 @@ test.xlsx
 # Auto scraper files
 auto_scraper.log
 auto_scraper.pid
+
+# Agent system files
+agents/config/.env
+.env

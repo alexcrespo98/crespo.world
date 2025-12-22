@@ -1,0 +1,19 @@
+# Core dependencies for AI Agent System
+
+# LLM Client Libraries (optional, install only what you need)
+# openai>=1.0.0  # For OpenAI GPT models
+# anthropic>=0.7.0  # For Anthropic Claude models
+
+# WebDAV for Nextcloud (optional, for production Nextcloud storage)
+# webdavclient3>=3.14.0
+
+# Database drivers (optional, install only what you need)
+# psycopg2-binary>=2.9.0  # For PostgreSQL
+# mysql-connector-python>=8.0.0  # For MySQL
+
+# Utility libraries
+python-dotenv>=1.0.0  # For loading .env files
+
+# No additional dependencies for core functionality
+# The system uses only Python standard library for core components
+# Optional libraries above enable specific features
