@@ -2371,8 +2371,25 @@
       
       // Export monthly report PDF
       exportMonthlyReport() {
-        alert('Monthly report export functionality coming soon! For now, please use screenshot tools to capture the charts.');
-        // TODO: Implement PDF export similar to exportClientReport()
+        // For now, show a helpful message
+        // TODO: Implement full PDF export similar to exportClientReport()
+        const message = document.createElement('div');
+        message.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000; color: #0f0; border: 3px solid #0f0; padding: 2em; border-radius: 10px; z-index: 10000; text-align: center; font-family: monospace; max-width: 500px;';
+        message.innerHTML = `
+          <h3 style="margin-top: 0; color: #ffff00;">Export Feature Coming Soon!</h3>
+          <p>For now, please use screenshot tools to capture the charts.</p>
+          <p style="margin-bottom: 0;">Press any key or click to close.</p>
+        `;
+        document.body.appendChild(message);
+        
+        const closeMessage = () => {
+          document.body.removeChild(message);
+          document.removeEventListener('click', closeMessage);
+          document.removeEventListener('keydown', closeMessage);
+        };
+        
+        document.addEventListener('click', closeMessage);
+        document.addEventListener('keydown', closeMessage);
       },
       
       // Render easy graphs for client report
