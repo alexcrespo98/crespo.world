@@ -134,6 +134,41 @@
       font-weight: bold;
       color: #0f0;
     }
+    .stats-top-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1em;
+      margin-bottom: 1em;
+    }
+    .stats-bottom-row {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    .stat-card.compact {
+      padding: 1em;
+    }
+    .stat-card.compact .value {
+      font-size: 1.5em;
+    }
+    .stat-card.wide {
+      padding: 1.5em;
+    }
+    .stat-card .growth {
+      font-size: 0.9em;
+      margin-top: 0.3em;
+      font-weight: bold;
+    }
+    .stat-card .growth.positive {
+      color: #0f0;
+    }
+    .stat-card .growth.negative {
+      color: #ff0050;
+    }
+    @media (max-width: 900px) {
+      .stats-top-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
     .moonmedia-option {
       font-weight: bold;
       color: #ffff00;
@@ -1224,39 +1259,59 @@
           });
         });
         
-        // Display summary statistics
+        // Calculate follower growth percentage
+        let followerGrowth = 0;
+        if (this.currentMonthlyAccountStats && this.currentMonthlyAccountStats.length > 0) {
+          let totalFollowersStart = 0;
+          this.currentMonthlyAccountStats.forEach(client => {
+            ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+              if (client[platform]) {
+                totalFollowersStart += client[platform].followersStart || 0;
+              }
+            });
+          });
+          if (totalFollowersStart > 0) {
+            followerGrowth = ((totalFollowersEnd - totalFollowersStart) / totalFollowersStart) * 100;
+          }
+        }
+        
+        // Calculate views per second
+        let viewsPerSecond = 0;
+        if (totalViews > 0 && this.currentMonthlyStartDate && this.currentMonthlyEndDate) {
+          const timeSpanSeconds = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+          if (timeSpanSeconds > 0) {
+            viewsPerSecond = totalViews / timeSpanSeconds;
+          }
+        }
+        
+        // Display summary statistics with new layout
         statsContainer.innerHTML = `
-          <div class="stat-card">
-            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
+          <div class="stats-top-row">
+            <div class="stat-card compact">
+              <h4>❤️ TOTAL LIKES</h4>
+              <div class="value">${this.formatNumber(totalLikes)}</div>
+            </div>
+            <div class="stat-card compact">
+              <h4>💬 TOTAL COMMENTS</h4>
+              <div class="value">${this.formatNumber(totalComments)}</div>
+            </div>
+            <div class="stat-card compact">
+              <h4>🔄 TOTAL SHARES</h4>
+              <div class="value">${this.formatNumber(totalShares)}</div>
+            </div>
+            <div class="stat-card compact">
+              <h4>👥 TOTAL FOLLOWERS</h4>
+              <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
+              <div class="growth ${followerGrowth >= 0 ? 'positive' : 'negative'}">
+                ${followerGrowth >= 0 ? '+' : ''}${followerGrowth.toFixed(2)}%
+              </div>
+            </div>
           </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL LIKES</h4>
-            <div class="value">${this.formatNumber(totalLikes)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL VIEWS</h4>
-            <div class="value">${this.formatNumber(totalViews)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL COMMENTS</h4>
-            <div class="value">${this.formatNumber(totalComments)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL SHARES</h4>
-            <div class="value">${this.formatNumber(totalShares)}</div>
+          <div class="stats-bottom-row">
+            <div class="stat-card wide">
+              <h4>⚡ VIEWS PER SECOND</h4>
+              <div class="value">${viewsPerSecond.toFixed(2)}</div>
+            </div>
           </div>
         `;
         
@@ -1330,71 +1385,57 @@
           }
         });
         
-        // Display summary statistics
-        let statsHTML = `
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
-          </div>
-        `;
-        
-        // Add engagement metric cards
-        statsHTML += `
-          <div class="stat-card">
-            <h4>INSTAGRAM LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
-          </div>
-        `;
-        
-        if (totalShares > 0) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
-            </div>
-          `;
+        // Calculate follower growth percentage
+        let followerGrowth = 0;
+        let totalFollowersStart = 0;
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          if (clientStats[platform]) {
+            totalFollowersStart += clientStats[platform].followersStart || 0;
+          }
+        });
+        if (totalFollowersStart > 0) {
+          followerGrowth = ((totalFollowersEnd - totalFollowersStart) / totalFollowersStart) * 100;
         }
         
+        // Calculate views per second
+        let viewsPerSecond = 0;
+        if (totalViews > 0 && this.currentMonthlyStartDate && this.currentMonthlyEndDate) {
+          const timeSpanSeconds = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+          if (timeSpanSeconds > 0) {
+            viewsPerSecond = totalViews / timeSpanSeconds;
+          }
+        }
+        
+        // Display summary statistics with new layout
+        let statsHTML = `
+          <div class="stats-top-row">
+            <div class="stat-card compact">
+              <h4>❤️ TOTAL LIKES</h4>
+              <div class="value">${this.formatNumber(totalLikes)}</div>
+            </div>
+            <div class="stat-card compact">
+              <h4>💬 TOTAL COMMENTS</h4>
+              <div class="value">${this.formatNumber(totalComments)}</div>
+            </div>
+            <div class="stat-card compact">
+              <h4>🔄 TOTAL SHARES</h4>
+              <div class="value">${this.formatNumber(totalShares)}</div>
+            </div>
+            <div class="stat-card compact">
+              <h4>👥 TOTAL FOLLOWERS</h4>
+              <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
+              <div class="growth ${followerGrowth >= 0 ? 'positive' : 'negative'}">
+                ${followerGrowth >= 0 ? '+' : ''}${followerGrowth.toFixed(2)}%
+              </div>
+            </div>
+          </div>
+          <div class="stats-bottom-row">
+            <div class="stat-card wide">
+              <h4>⚡ VIEWS PER SECOND</h4>
+              <div class="value">${viewsPerSecond.toFixed(2)}</div>
+            </div>
+          </div>
+        `;
         statsContainer.innerHTML = statsHTML;
         
         // Create normalized follower growth chart
@@ -2708,6 +2749,146 @@
         
         if (allMonthlyPosts.length === 0) return;
         
+        // Sort posts by date for time-series charts
+        allMonthlyPosts.sort((a, b) => a.date - b.date);
+        
+        // Create Combined Engagement Metrics Chart (Likes + Comments + Shares + Sum)
+        const combinedLikesData = allMonthlyPosts.map(v => ({ x: v.date, y: v.likes || 0 }));
+        const combinedCommentsData = allMonthlyPosts.map(v => ({ x: v.date, y: v.comments || 0 }));
+        const combinedSharesData = allMonthlyPosts.map(v => ({ x: v.date, y: v.shares || 0 }));
+        const sumTotalData = allMonthlyPosts.map(v => ({ 
+          x: v.date, 
+          y: (v.likes || 0) + (v.comments || 0) + (v.shares || 0)
+        }));
+        
+        const combinedChartDiv = document.createElement('div');
+        combinedChartDiv.className = 'chart-container';
+        
+        const combinedCanvas = document.createElement('canvas');
+        combinedCanvas.id = 'monthly-combined-engagement';
+        
+        const combinedHeader = document.createElement('h3');
+        combinedHeader.textContent = '📊 Combined Engagement Metrics';
+        
+        // Add log scale toggle badge
+        const scaleBadge = document.createElement('span');
+        scaleBadge.className = 'scale-badge inactive';
+        scaleBadge.textContent = 'LINEAR';
+        scaleBadge.setAttribute('data-chart-id', 'monthly-combined-engagement');
+        scaleBadge.onclick = () => this.toggleLogScale('monthly-combined-engagement');
+        scaleBadge.style.cssText = 'display: inline-block; background: #333; color: #666; padding: 0.3em 0.6em; border-radius: 3px; font-size: 0.8em; margin-left: 0.5em; font-weight: bold; cursor: pointer; user-select: none;';
+        
+        combinedHeader.appendChild(scaleBadge);
+        
+        combinedChartDiv.appendChild(combinedHeader);
+        combinedChartDiv.appendChild(combinedCanvas);
+        container.appendChild(combinedChartDiv);
+        
+        const combinedCtx = combinedCanvas.getContext('2d');
+        
+        this.chartInstances['monthly-combined-engagement'] = new Chart(combinedCtx, {
+          type: 'scatter',
+          data: {
+            datasets: [
+              {
+                label: 'Likes',
+                data: combinedLikesData,
+                borderColor: '#ff6b6b',
+                backgroundColor: 'rgba(255, 107, 107, 0.3)',
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                borderWidth: 2,
+                showLine: true,
+                order: 3
+              },
+              {
+                label: 'Comments',
+                data: combinedCommentsData,
+                borderColor: '#1abc9c',
+                backgroundColor: 'rgba(26, 188, 156, 0.3)',
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                borderWidth: 2,
+                showLine: true,
+                order: 2
+              },
+              {
+                label: 'Shares',
+                data: combinedSharesData,
+                borderColor: '#e74c3c',
+                backgroundColor: 'rgba(231, 76, 60, 0.3)',
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                borderWidth: 2,
+                showLine: true,
+                order: 1
+              },
+              {
+                label: 'Sum Total',
+                data: sumTotalData,
+                borderColor: '#ffd700',
+                backgroundColor: 'transparent',
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                borderWidth: 3,
+                borderDash: [5, 5],
+                showLine: true,
+                order: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'day',
+                  displayFormats: { day: 'MMM d' }
+                },
+                ticks: { color: '#0f0', font: { family: 'monospace' } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                type: 'linear',
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+        
         // Top performing posts by views
         const topPosts = [...allMonthlyPosts]
           .sort((a, b) => (b.views || 0) - (a.views || 0))
@@ -2863,13 +3044,85 @@
       
       // Export monthly report PDF
       exportMonthlyReport() {
-        // For now, show a helpful message
-        // TODO: Implement full PDF export similar to exportClientReport()
+        // Collect summary metrics from the current monthly view
+        const statsCards = document.querySelectorAll('#monthlyStatsSummary .stat-card');
+        const summaryData = [];
+        
+        statsCards.forEach(card => {
+          const title = card.querySelector('h4')?.textContent || '';
+          const value = card.querySelector('.value')?.textContent || '';
+          const growth = card.querySelector('.growth')?.textContent || '';
+          summaryData.push({ title, value, growth });
+        });
+        
+        // Get month label
+        const monthLabel = this.currentMonthlyMonth && this.currentMonthlyYear 
+          ? `${this.getMonthName(this.currentMonthlyMonth)} ${this.currentMonthlyYear}`
+          : 'Monthly Report';
+        
+        // Create export data for Excel
+        const exportData = [
+          ['Monthly Analytics Report'],
+          ['Month', monthLabel],
+          ['Export Date', new Date().toISOString()],
+          [],
+          ['Summary Metrics'],
+          ['Metric', 'Value', 'Growth']
+        ];
+        
+        // Add summary metrics
+        summaryData.forEach(item => {
+          exportData.push([item.title, item.value, item.growth]);
+        });
+        
+        exportData.push([]);
+        exportData.push(['Account Performance Data']);
+        
+        // Add account stats if available
+        if (this.currentMonthlyAccountStats) {
+          exportData.push(['Account', 'Platform', 'Followers Start', 'Followers End', 'Growth', 'Posts', 'Total Likes', 'Total Views', 'Total Comments', 'Total Shares']);
+          
+          this.currentMonthlyAccountStats.forEach(account => {
+            ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+              if (account[platform]) {
+                const stats = account[platform];
+                const growth = (stats.followersEnd || 0) - (stats.followersStart || 0);
+                const totalLikes = (stats.monthVideos || []).reduce((sum, v) => sum + (v.likes || 0), 0);
+                const totalViews = (stats.monthVideos || []).reduce((sum, v) => sum + (v.views || 0), 0);
+                const totalComments = (stats.monthVideos || []).reduce((sum, v) => sum + (v.comments || 0), 0);
+                const totalShares = (stats.monthVideos || []).reduce((sum, v) => sum + (v.shares || 0), 0);
+                
+                exportData.push([
+                  account.name,
+                  platform,
+                  stats.followersStart || 0,
+                  stats.followersEnd || 0,
+                  growth,
+                  stats.posts || 0,
+                  totalLikes,
+                  totalViews,
+                  totalComments,
+                  totalShares
+                ]);
+              }
+            });
+          });
+        }
+        
+        // Create workbook and export
+        const ws = XLSX.utils.aoa_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Monthly Report');
+        
+        const filename = `monthly_report_${monthLabel.replace(/\s/g, '_')}_${Date.now()}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        
+        // Show success message
         const message = document.createElement('div');
         message.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000; color: #0f0; border: 3px solid #0f0; padding: 2em; border-radius: 10px; z-index: 10000; text-align: center; font-family: monospace; max-width: 500px;';
         message.innerHTML = `
-          <h3 style="margin-top: 0; color: #ffff00;">Export Feature Coming Soon!</h3>
-          <p>For now, please use screenshot tools to capture the charts.</p>
+          <h3 style="margin-top: 0; color: #ffff00;">✓ Export Successful!</h3>
+          <p>Monthly report downloaded as Excel file.</p>
           <p style="margin-bottom: 0;">Press any key or click to close.</p>
         `;
         document.body.appendChild(message);
@@ -2880,8 +3133,17 @@
           document.removeEventListener('keydown', closeMessage);
         };
         
-        document.addEventListener('click', closeMessage);
-        document.addEventListener('keydown', closeMessage);
+        setTimeout(() => {
+          document.addEventListener('click', closeMessage);
+          document.addEventListener('keydown', closeMessage);
+        }, 100);
+      },
+      
+      // Helper function to get month name
+      getMonthName(monthIndex) {
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+        return months[monthIndex];
       },
       
       // Render easy graphs for client report
