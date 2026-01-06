@@ -1333,7 +1333,7 @@
             <span class="toggle-badge ${this.monthlyStatsPercentageMode ? '' : 'inactive'}" id="monthlyStatsToggle" onclick="app.toggleMonthlyStatsMode()">
               ${this.monthlyStatsPercentageMode ? 'PERCENTAGE' : 'RAW NUMBERS'}
             </span>
-            <button class="export-stats-btn" onclick="crespomizeApp.exportMonthlyStats('Total Moon Media')">Export Stats</button>
+            <button class="export-stats-btn" onclick="app.exportMonthlyStats('Total Moon Media')">Export Stats</button>
           </div>
         `;
         
@@ -1507,7 +1507,7 @@
             <span class="toggle-badge ${this.monthlyStatsPercentageMode ? '' : 'inactive'}" id="monthlyStatsToggle" onclick="app.toggleMonthlyStatsMode()">
               ${this.monthlyStatsPercentageMode ? 'PERCENTAGE' : 'RAW NUMBERS'}
             </span>
-            <button class="export-stats-btn" onclick="crespomizeApp.exportMonthlyStats('${clientName}')">Export Stats</button>
+            <button class="export-stats-btn" onclick="app.exportMonthlyStats('${clientName}')">Export Stats</button>
           </div>
         `;
         
