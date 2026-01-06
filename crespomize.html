@@ -124,12 +124,6 @@
       border-radius: 5px;
       padding: 1.5em;
     }
-    .stat-card.large {
-      grid-column: span 2;
-    }
-    .stat-card.full-width {
-      grid-column: 1 / -1;
-    }
     .stat-card h4 {
       margin: 0 0 0.5em 0;
       color: #0f0;
@@ -139,58 +133,6 @@
       font-size: 1.8em;
       font-weight: bold;
       color: #0f0;
-    }
-    .change-indicator {
-      font-size: 0.9em;
-      margin-left: 0.5em;
-      font-weight: normal;
-    }
-    .change-indicator.positive {
-      color: #00ff00;
-    }
-    .change-indicator.negative {
-      color: #ff0000;
-    }
-    .stat-controls {
-      margin-bottom: 1em;
-      text-align: right;
-    }
-    .toggle-badge {
-      display: inline-block;
-      background: #0f0;
-      color: #000;
-      padding: 0.3em 0.6em;
-      border-radius: 3px;
-      font-size: 0.8em;
-      margin-left: 0.5em;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-      user-select: none;
-    }
-    .toggle-badge:hover {
-      background: #00d2d3;
-      box-shadow: 0 0 10px #0f0;
-    }
-    .toggle-badge.inactive {
-      background: #333;
-      color: #666;
-    }
-    .export-stats-btn {
-      background: #000;
-      color: #0f0;
-      border: 2px solid #0f0;
-      padding: 0.5em 1em;
-      margin-left: 0.5em;
-      cursor: pointer;
-      font-family: monospace;
-      font-size: 0.9em;
-      transition: all 0.3s;
-    }
-    .export-stats-btn:hover {
-      background: #0f0;
-      color: #000;
-      box-shadow: 0 0 10px #0f0;
     }
     .moonmedia-option {
       font-weight: bold;
@@ -575,130 +517,6 @@
       </select>
       <div id="monthlyGraphsContainer" class="hidden">
         <div class="question" id="monthlyGraphsTitle"></div>
-        
-        <!-- Test Different Views Section -->
-        <div id="testViewsSection" style="margin: 2em 0; padding: 1.5em; border: 2px solid #0f0; border-radius: 5px; background: #0a0a0a;">
-          <h3 style="color: #0f0; margin-bottom: 1em;">🧪 Test Different Views</h3>
-          <p style="font-size: 0.9em; margin-bottom: 1.5em; opacity: 0.8;">Configure how you want to visualize your data. Changes apply globally to all accounts.</p>
-          
-          <!-- View Configuration Options -->
-          <div id="viewConfigOptions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5em; margin-bottom: 1.5em;">
-            
-            <!-- Display Style Options -->
-            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
-              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">📊 Display Style</h4>
-              <div style="display: flex; flex-direction: column; gap: 0.5em;">
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="radio" name="displayStyle" value="1" checked onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Standard Grid (default)</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="radio" name="displayStyle" value="2" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Compact Boxes (smaller fonts)</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="radio" name="displayStyle" value="3" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Vertical List</span>
-                </label>
-              </div>
-            </div>
-            
-            <!-- Chart Type Options -->
-            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
-              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">📈 Chart Type</h4>
-              <div style="display: flex; flex-direction: column; gap: 0.5em;">
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="radio" name="chartType" value="1" checked onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Pie Chart (distribution)</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="radio" name="chartType" value="2" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Doughnut Chart (with center total)</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="radio" name="chartType" value="3" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Bar Chart (horizontal)</span>
-                </label>
-                <label style="display: flex; align-items; cursor: pointer;">
-                  <input type="radio" name="chartType" value="4" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">No Chart (stats only)</span>
-                </label>
-              </div>
-            </div>
-            
-            <!-- Platform Display Options -->
-            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
-              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">🎯 Platform Details</h4>
-              <div style="display: flex; flex-direction: column; gap: 0.5em;">
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showPlatforms" value="1" checked onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Show Individual Platforms</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showEngagement" value="1" checked onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Show Engagement Metrics</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showPercentages" value="1" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Show Percentages</span>
-                </label>
-              </div>
-            </div>
-            
-            <!-- Metrics to Display -->
-            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
-              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">📋 Metrics to Show</h4>
-              <div style="display: flex; flex-direction: column; gap: 0.5em;">
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showFollowers" value="1" checked disabled> 
-                  <span style="margin-left: 0.5em;">Total Followers (always on)</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showLikes" value="1" checked onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Total Likes</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showViews" value="1" checked onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Total Views</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showComments" value="1" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Total Comments</span>
-                </label>
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                  <input type="checkbox" name="showShares" value="1" onchange="app.updateViewPreview()"> 
-                  <span style="margin-left: 0.5em;">Total Shares</span>
-                </label>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Preview Demo Interface -->
-          <div id="viewPreviewDemo" style="margin: 1.5em 0; padding: 1.5em; border: 2px dashed #0f0; border-radius: 5px; background: #050505;">
-            <h4 style="color: #0f0; margin-bottom: 1em; text-align: center;">👁️ Preview</h4>
-            <div id="previewContent"></div>
-          </div>
-          
-          <!-- Action Buttons -->
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5em;">
-            <div>
-              <button onclick="app.applyViewConfiguration()" style="background: #0f0; color: #000; font-weight: bold; padding: 0.8em 1.5em;">
-                ✓ Apply Configuration
-              </button>
-              <button onclick="app.resetViewConfiguration()" style="margin-left: 0.5em;">
-                Reset to Default
-              </button>
-            </div>
-            <div style="display: flex; gap: 0.5em; align-items: center;">
-              <input type="text" id="configChoiceString" readonly 
-                style="background: #000; color: #0f0; border: 1px solid #0f0; padding: 0.5em; font-family: monospace; width: 200px; text-align: center;"
-                placeholder="Configuration code">
-              <button onclick="app.copyChoiceString()" title="Copy configuration code">
-                📋 Copy Code
-              </button>
-            </div>
-          </div>
-        </div>
         
         <!-- Tab Navigation -->
         <div class="monthly-tabs-container">
@@ -1329,9 +1147,6 @@
         document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
         document.getElementById('monthlyGraphsTitle').textContent = `Monthly Analytics: ${monthLabel}`;
         
-        // Initialize the view preview
-        this.updateViewPreview();
-        
         // Switch to default tab (Total Moon Media)
         this.switchMonthlyTab('total');
       },
@@ -1377,28 +1192,19 @@
         );
         
         // Aggregate metrics across all clients and platforms
-        let totalFollowersStart = 0;
         let totalFollowersEnd = 0;
         let totalLikes = 0;
         let totalViews = 0;
         let totalComments = 0;
         let totalShares = 0;
-        let platformFollowers = { 
-          instagram: { start: 0, end: 0 }, 
-          tiktok: { start: 0, end: 0 }, 
-          youtube: { start: 0, end: 0 } 
-        };
+        let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
         
         clientStats.forEach(client => {
           ['instagram', 'tiktok', 'youtube'].forEach(platform => {
             if (client[platform]) {
-              const followersStart = client[platform].followersStart || 0;
-              const followersEnd = client[platform].followersEnd || 0;
-              totalFollowersStart += followersStart;
-              totalFollowersEnd += followersEnd;
-              platformFollowers[platform].start += followersStart;
-              platformFollowers[platform].end += followersEnd;
+              totalFollowersEnd += client[platform].followersEnd || 0;
+              platformFollowers[platform] += client[platform].followersEnd || 0;
               
               // Aggregate engagement metrics from month videos
               if (client[platform].monthVideos) {
@@ -1412,90 +1218,30 @@
               
               // Collect follower history data for combined chart
               if (client[platform].dailyFollowerData && client[platform].dailyFollowerData.length > 0) {
-                // For each data point, we need to aggregate across clients by date
-                client[platform].dailyFollowerData.forEach(point => {
-                  // Create a copy to avoid modifying original data
-                  combinedFollowerData[platform].push({ 
-                    date: point.date, 
-                    followers: point.followers 
-                  });
-                });
+                combinedFollowerData[platform].push(...client[platform].dailyFollowerData);
               }
             }
           });
         });
         
-        // Calculate hours in the month for Views/Hour
-        const monthStart = new Date(this.currentMonthlyStartDate);
-        const monthEnd = new Date(this.currentMonthlyEndDate);
-        const hoursInMonth = (monthEnd - monthStart) / (1000 * 60 * 60);
-        const viewsPerHour = hoursInMonth > 0 ? totalViews / hoursInMonth : 0;
-        
-        // Helper function to format change indicator
-        const formatChange = (start, end, usePercentage) => {
-          const change = end - start;
-          if (change === 0) return '<span class="change-indicator">(±0)</span>';
-          
-          const isPositive = change > 0;
-          const className = isPositive ? 'positive' : 'negative';
-          const sign = isPositive ? '+' : '';
-          
-          if (usePercentage && start > 0) {
-            const percentage = ((change / start) * 100).toFixed(1);
-            return `<span class="change-indicator ${className}">(${sign}${percentage}%)</span>`;
-          } else {
-            return `<span class="change-indicator ${className}">(${sign}${this.formatNumber(change)})</span>`;
-          }
-        };
-        
-        // Initialize percentage mode state if not exists
-        if (this.monthlyStatsPercentageMode === undefined) {
-          this.monthlyStatsPercentageMode = false;
-        }
-        
-        // Display summary statistics with controls
-        let statsHTML = `
-          <div class="stat-controls">
-            <span>Change Display:</span>
-            <span class="toggle-badge ${this.monthlyStatsPercentageMode ? '' : 'inactive'}" id="monthlyStatsToggle" onclick="app.toggleMonthlyStatsMode()">
-              ${this.monthlyStatsPercentageMode ? 'PERCENTAGE' : 'RAW NUMBERS'}
-            </span>
-            <button class="export-stats-btn" onclick="app.exportMonthlyStats('Total Moon Media')">Export Stats</button>
+        // Display summary statistics
+        statsContainer.innerHTML = `
+          <div class="stat-card">
+            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
+            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
           </div>
-        `;
-        
-        // Total Followers - Full Width
-        statsHTML += `
-          <div class="stat-card full-width">
-            <h4>TOTAL FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)} ${formatChange(totalFollowersStart, totalFollowersEnd, this.monthlyStatsPercentageMode)}</div>
-          </div>
-        `;
-        
-        // Platform follower boxes - smaller, in a row
-        statsHTML += `
           <div class="stat-card">
             <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.instagram.end)} ${formatChange(platformFollowers.instagram.start, platformFollowers.instagram.end, this.monthlyStatsPercentageMode)}</div>
+            <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
           </div>
           <div class="stat-card">
             <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.tiktok.end)} ${formatChange(platformFollowers.tiktok.start, platformFollowers.tiktok.end, this.monthlyStatsPercentageMode)}</div>
+            <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
           </div>
-        `;
-        
-        // Only show YouTube if there's data
-        if (platformFollowers.youtube.end > 0 || platformFollowers.youtube.start > 0) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>YOUTUBE SUBSCRIBERS</h4>
-              <div class="value">${this.formatNumber(platformFollowers.youtube.end)} ${formatChange(platformFollowers.youtube.start, platformFollowers.youtube.end, this.monthlyStatsPercentageMode)}</div>
-            </div>
-          `;
-        }
-        
-        // Engagement metrics - raw numbers only
-        statsHTML += `
+          <div class="stat-card">
+            <h4>YOUTUBE SUBSCRIBERS</h4>
+            <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
+          </div>
           <div class="stat-card">
             <h4>TOTAL LIKES</h4>
             <div class="value">${this.formatNumber(totalLikes)}</div>
@@ -1509,21 +1255,10 @@
             <div class="value">${this.formatNumber(totalComments)}</div>
           </div>
           <div class="stat-card">
-            <h4>VIEWS/HOUR</h4>
-            <div class="value">${this.formatNumber(Math.round(viewsPerHour))}</div>
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
           </div>
         `;
-        
-        if (totalShares > 0) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
-            </div>
-          `;
-        }
-        
-        statsContainer.innerHTML = statsHTML;
         
         // Create normalized follower growth chart
         this.createNormalizedFollowerGrowthChart(
@@ -1550,13 +1285,12 @@
         }
         
         // Aggregate metrics for this client
-        let totalFollowersStart = 0;
         let totalFollowersEnd = 0;
         let totalLikes = 0;
         let totalViews = 0;
         let totalComments = 0;
         let totalShares = 0;
-        let platformFollowers = { instagram: { start: 0, end: 0 }, tiktok: { start: 0, end: 0 }, youtube: { start: 0, end: 0 } };
+        let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
@@ -1565,12 +1299,9 @@
         
         ['instagram', 'tiktok', 'youtube'].forEach(platform => {
           if (clientStats[platform]) {
-            const followersStart = clientStats[platform].followersStart || 0;
-            const followersEnd = clientStats[platform].followersEnd || 0;
-            totalFollowersStart += followersStart;
-            totalFollowersEnd += followersEnd;
-            platformFollowers[platform].start = followersStart;
-            platformFollowers[platform].end = followersEnd;
+            const followers = clientStats[platform].followersEnd || 0;
+            totalFollowersEnd += followers;
+            platformFollowers[platform] = followers;
             
             // Aggregate engagement metrics from month videos
             if (clientStats[platform].monthVideos) {
@@ -1599,94 +1330,59 @@
           }
         });
         
-        // Calculate hours in the month for Views/Hour
-        const monthStart = new Date(this.currentMonthlyStartDate);
-        const monthEnd = new Date(this.currentMonthlyEndDate);
-        const hoursInMonth = (monthEnd - monthStart) / (1000 * 60 * 60);
-        const viewsPerHour = hoursInMonth > 0 ? totalViews / hoursInMonth : 0;
-        
-        // Helper function to format change indicator
-        const formatChange = (start, end, usePercentage) => {
-          const change = end - start;
-          if (change === 0) return '<span class="change-indicator">(±0)</span>';
-          
-          const isPositive = change > 0;
-          const className = isPositive ? 'positive' : 'negative';
-          const sign = isPositive ? '+' : '';
-          
-          if (usePercentage && start > 0) {
-            const percentage = ((change / start) * 100).toFixed(1);
-            return `<span class="change-indicator ${className}">(${sign}${percentage}%)</span>`;
-          } else {
-            return `<span class="change-indicator ${className}">(${sign}${this.formatNumber(change)})</span>`;
-          }
-        };
-        
-        // Initialize percentage mode state if not exists
-        if (this.monthlyStatsPercentageMode === undefined) {
-          this.monthlyStatsPercentageMode = false;
-        }
-        
-        // Display summary statistics with controls
+        // Display summary statistics
         let statsHTML = `
-          <div class="stat-controls">
-            <span>Change Display:</span>
-            <span class="toggle-badge ${this.monthlyStatsPercentageMode ? '' : 'inactive'}" id="monthlyStatsToggle" onclick="app.toggleMonthlyStatsMode()">
-              ${this.monthlyStatsPercentageMode ? 'PERCENTAGE' : 'RAW NUMBERS'}
-            </span>
-            <button class="export-stats-btn" onclick="app.exportMonthlyStats('${clientName}')">Export Stats</button>
+          <div class="stat-card">
+            <h4>INSTAGRAM FOLLOWERS</h4>
+            <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK FOLLOWERS</h4>
+            <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE SUBSCRIBERS</h4>
+            <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
           </div>
         `;
         
-        // Total Followers - Full Width
-        statsHTML += `
-          <div class="stat-card full-width">
-            <h4>TOTAL FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)} ${formatChange(totalFollowersStart, totalFollowersEnd, this.monthlyStatsPercentageMode)}</div>
-          </div>
-        `;
-        
-        // Platform follower boxes - smaller, in a row
-        if (clientStats.instagram) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>INSTAGRAM FOLLOWERS</h4>
-              <div class="value">${this.formatNumber(platformFollowers.instagram.end)} ${formatChange(platformFollowers.instagram.start, platformFollowers.instagram.end, this.monthlyStatsPercentageMode)}</div>
-            </div>
-          `;
-        }
-        
-        if (clientStats.tiktok) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>TIKTOK FOLLOWERS</h4>
-              <div class="value">${this.formatNumber(platformFollowers.tiktok.end)} ${formatChange(platformFollowers.tiktok.start, platformFollowers.tiktok.end, this.monthlyStatsPercentageMode)}</div>
-            </div>
-          `;
-        }
-        
-        if (clientStats.youtube) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>YOUTUBE SUBSCRIBERS</h4>
-              <div class="value">${this.formatNumber(platformFollowers.youtube.end)} ${formatChange(platformFollowers.youtube.start, platformFollowers.youtube.end, this.monthlyStatsPercentageMode)}</div>
-            </div>
-          `;
-        }
-        
-        // Engagement metrics - raw numbers only (simplified to 4-6 key metrics)
+        // Add engagement metric cards
         statsHTML += `
           <div class="stat-card">
-            <h4>TOTAL LIKES</h4>
-            <div class="value">${this.formatNumber(totalLikes)}</div>
+            <h4>INSTAGRAM LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
           </div>
           <div class="stat-card">
-            <h4>TOTAL VIEWS</h4>
-            <div class="value">${this.formatNumber(totalViews)}</div>
+            <h4>TIKTOK LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
           </div>
           <div class="stat-card">
-            <h4>TOTAL COMMENTS</h4>
-            <div class="value">${this.formatNumber(totalComments)}</div>
+            <h4>YOUTUBE LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
           </div>
         `;
         
@@ -1701,13 +1397,14 @@
         
         statsContainer.innerHTML = statsHTML;
         
-        // Create a simple pie chart showing follower distribution by platform
-        this.createFollowerDistributionPieChart(
+        // Create normalized follower growth chart
+        this.createNormalizedFollowerGrowthChart(
           chartsContainer,
-          `${clientName} Follower Distribution`,
-          platformFollowers,
-          totalFollowersEnd,
-          `${clientName}-follower-pie`
+          `${clientName} Follower Growth`,
+          combinedFollowerData,
+          this.currentMonthlyStartDate,
+          this.currentMonthlyEndDate,
+          `${clientName}-follower-growth`
         );
       },
       
@@ -1718,17 +1415,14 @@
         const platformData = { instagram: {}, tiktok: {}, youtube: {} };
         
         // Collect all unique dates and organize data by platform
-        // For the Total Moon Media view, we need to SUM follower counts across all clients
         ['instagram', 'tiktok', 'youtube'].forEach(platform => {
           if (followerData[platform] && followerData[platform].length > 0) {
             followerData[platform].forEach(point => {
               const dateKey = point.date.toISOString().split('T')[0];
               allDates.add(dateKey);
-              // Sum up followers across all clients for this date
-              if (!platformData[platform][dateKey]) {
-                platformData[platform][dateKey] = 0;
+              if (!platformData[platform][dateKey] || point.followers > platformData[platform][dateKey]) {
+                platformData[platform][dateKey] = point.followers;
               }
-              platformData[platform][dateKey] += point.followers;
             });
           }
         });
@@ -1753,9 +1447,6 @@
           tiktok: { border: '#00f2ea', bg: 'rgba(0, 242, 234, 0.2)' },
           youtube: { border: '#FF0000', bg: 'rgba(255, 0, 0, 0.2)' }
         };
-        
-        // Track platform data for combined calculation
-        const platformChartData = {};
         
         ['instagram', 'tiktok', 'youtube'].forEach(platform => {
           const data = platformData[platform];
@@ -1782,9 +1473,6 @@
             chartData.push({ x: date, y: normalizedValue });
           });
           
-          // Store for combined calculation
-          platformChartData[platform] = chartData;
-          
           const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
           datasets.push({
             label: platformName,
@@ -1798,34 +1486,6 @@
             fill: false
           });
         });
-        
-        // Add combined growth line (sum of all platforms)
-        if (Object.keys(platformChartData).length > 0) {
-          const combinedData = [];
-          
-          monthDates.forEach((date, idx) => {
-            let combinedValue = 0;
-            Object.keys(platformChartData).forEach(platform => {
-              if (platformChartData[platform][idx]) {
-                combinedValue += platformChartData[platform][idx].y;
-              }
-            });
-            combinedData.push({ x: date, y: combinedValue });
-          });
-          
-          datasets.push({
-            label: 'Total Combined',
-            data: combinedData,
-            borderColor: '#0f0',
-            backgroundColor: 'rgba(0, 255, 0, 0.1)',
-            borderWidth: 4,
-            borderDash: [10, 5],
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            tension: 0.4,
-            fill: false
-          });
-        }
         
         // Create the chart
         const chartDiv = document.createElement('div');
@@ -1865,22 +1525,7 @@
                 display: true,
                 labels: {
                   color: '#0f0',
-                  font: { family: 'monospace', size: 12 },
-                  usePointStyle: false,
-                  boxWidth: 40,
-                  // Custom label generation to show line dash pattern
-                  generateLabels: (chart) => {
-                    const datasets = chart.data.datasets;
-                    return datasets.map((dataset, i) => ({
-                      text: dataset.label,
-                      fillStyle: dataset.backgroundColor,
-                      strokeStyle: dataset.borderColor,
-                      lineWidth: dataset.borderWidth,
-                      lineDash: dataset.borderDash || [],
-                      hidden: !chart.isDatasetVisible(i),
-                      datasetIndex: i
-                    }));
-                  }
+                  font: { family: 'monospace', size: 12 }
                 }
               },
               tooltip: {
@@ -1920,130 +1565,6 @@
               }
             }
           }
-        });
-      },
-      
-      // Create a simple pie chart showing follower distribution by platform
-      createFollowerDistributionPieChart(container, title, platformFollowers, totalFollowers, chartId) {
-        // Skip if no data
-        if (totalFollowers === 0) {
-          return;
-        }
-        
-        // Prepare data for the pie chart
-        const labels = [];
-        const data = [];
-        const colors = [];
-        const platformColors = {
-          instagram: '#E1306C',
-          tiktok: '#00f2ea',
-          youtube: '#FF0000'
-        };
-        
-        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-          if (platformFollowers[platform].end > 0) {
-            const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
-            labels.push(platformName);
-            data.push(platformFollowers[platform].end);
-            colors.push(platformColors[platform]);
-          }
-        });
-        
-        // Create the chart container
-        const chartDiv = document.createElement('div');
-        chartDiv.className = 'chart-container';
-        
-        const canvas = document.createElement('canvas');
-        canvas.id = chartId;
-        
-        const header = document.createElement('h3');
-        header.textContent = title;
-        
-        const exportBtn = document.createElement('button');
-        exportBtn.className = 'export-btn';
-        exportBtn.textContent = 'Export';
-        exportBtn.onclick = () => this.exportChart(chartId, title);
-        
-        chartDiv.appendChild(header);
-        chartDiv.appendChild(exportBtn);
-        chartDiv.appendChild(canvas);
-        container.appendChild(chartDiv);
-        
-        const ctx = canvas.getContext('2d');
-        
-        this.chartInstances[chartId] = new Chart(ctx, {
-          type: 'doughnut',
-          data: {
-            labels: labels,
-            datasets: [{
-              data: data,
-              backgroundColor: colors,
-              borderColor: '#000',
-              borderWidth: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            aspectRatio: 2,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'bottom',
-                labels: {
-                  color: '#0f0',
-                  font: { family: 'monospace', size: 14 },
-                  padding: 15
-                }
-              },
-              tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                titleColor: '#0f0',
-                bodyColor: '#0f0',
-                borderColor: '#0f0',
-                borderWidth: 1,
-                callbacks: {
-                  label: (context) => {
-                    const label = context.label || '';
-                    const value = this.formatNumber(context.parsed);
-                    const percentage = ((context.parsed / totalFollowers) * 100).toFixed(1);
-                    return `${label}: ${value} (${percentage}%)`;
-                  }
-                }
-              }
-            },
-            // Display total in center using a plugin
-            elements: {
-              center: {
-                text: this.formatNumber(totalFollowers),
-                color: '#0f0',
-                fontStyle: 'monospace',
-                sidePadding: 20
-              }
-            }
-          },
-          plugins: [{
-            // Custom plugin to draw text in the center of the doughnut
-            id: 'centerText',
-            beforeDraw: (chart) => {
-              const width = chart.width;
-              const height = chart.height;
-              const ctx = chart.ctx;
-              ctx.restore();
-              
-              const fontSize = (height / 114).toFixed(2);
-              ctx.font = fontSize + 'em monospace';
-              ctx.textBaseline = 'middle';
-              ctx.fillStyle = '#0f0';
-              
-              const text = this.formatNumber(totalFollowers);
-              const textX = Math.round((width - ctx.measureText(text).width) / 2);
-              const textY = height / 2;
-              
-              ctx.fillText(text, textX, textY);
-              ctx.save();
-            }
-          }]
         });
       },
       
@@ -5964,365 +5485,6 @@
         link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${accountText.replace('@', '')}_${platformSuffix}.png`;
         link.href = tempCanvas.toDataURL('image/png');
         link.click();
-      },
-      
-      // Toggle monthly stats display mode (percentage vs raw numbers)
-      toggleMonthlyStatsMode() {
-        this.monthlyStatsPercentageMode = !this.monthlyStatsPercentageMode;
-        
-        // Re-render the current view
-        const activeTab = document.querySelector('.monthly-tab-button.active');
-        if (activeTab) {
-          const tabName = activeTab.getAttribute('data-tab');
-          if (tabName === 'total') {
-            this.renderTotalMoonMediaMonthlyView();
-          } else {
-            this.renderClientMonthlyView(tabName);
-          }
-        }
-      },
-      
-      // View Configuration State
-      viewConfig: {
-        displayStyle: 1,
-        chartType: 1,
-        showPlatforms: true,
-        showEngagement: true,
-        showPercentages: false,
-        showLikes: true,
-        showViews: true,
-        showComments: false,
-        showShares: false
-      },
-      
-      // Update view preview based on current configuration
-      updateViewPreview() {
-        // Get current selections
-        const displayStyle = document.querySelector('input[name="displayStyle"]:checked')?.value || '1';
-        const chartType = document.querySelector('input[name="chartType"]:checked')?.value || '1';
-        const showPlatforms = document.querySelector('input[name="showPlatforms"]')?.checked || false;
-        const showEngagement = document.querySelector('input[name="showEngagement"]')?.checked || false;
-        const showPercentages = document.querySelector('input[name="showPercentages"]')?.checked || false;
-        const showLikes = document.querySelector('input[name="showLikes"]')?.checked || false;
-        const showViews = document.querySelector('input[name="showViews"]')?.checked || false;
-        const showComments = document.querySelector('input[name="showComments"]')?.checked || false;
-        const showShares = document.querySelector('input[name="showShares"]')?.checked || false;
-        
-        // Update configuration state
-        this.viewConfig = {
-          displayStyle: parseInt(displayStyle),
-          chartType: parseInt(chartType),
-          showPlatforms,
-          showEngagement,
-          showPercentages,
-          showLikes,
-          showViews,
-          showComments,
-          showShares
-        };
-        
-        // Generate choice string
-        const choiceString = [
-          displayStyle,
-          chartType,
-          showPlatforms ? '1' : '0',
-          showEngagement ? '1' : '0',
-          showPercentages ? '1' : '0',
-          showLikes ? '1' : '0',
-          showViews ? '1' : '0',
-          showComments ? '1' : '0',
-          showShares ? '1' : '0'
-        ].join(',');
-        
-        document.getElementById('configChoiceString').value = choiceString;
-        
-        // Render preview
-        this.renderViewPreview();
-      },
-      
-      // Render preview of the configured view
-      renderViewPreview() {
-        const previewContent = document.getElementById('previewContent');
-        if (!previewContent) return;
-        
-        const config = this.viewConfig;
-        
-        // Sample data for preview
-        const sampleData = {
-          totalFollowers: 125400,
-          instagram: 45200,
-          tiktok: 68100,
-          youtube: 12100,
-          likes: 342500,
-          views: 8920000,
-          comments: 12340,
-          shares: 5670
-        };
-        
-        let html = '';
-        
-        // Style based on display style
-        const styleMap = {
-          1: { gridCols: 'auto auto auto', fontSize: '1em', padding: '1em' }, // Standard
-          2: { gridCols: 'auto auto auto auto', fontSize: '0.85em', padding: '0.6em' }, // Compact
-          3: { gridCols: '1fr', fontSize: '1em', padding: '0.8em' } // Vertical
-        };
-        
-        const style = styleMap[config.displayStyle] || styleMap[1];
-        
-        // Section for Total Moon Media
-        html += `<div style="margin-bottom: 2em;">`;
-        html += `<h5 style="color: #0f0; margin-bottom: 1em; text-align: center;">Total Moon Media Preview</h5>`;
-        html += `<div style="display: grid; grid-template-columns: ${style.gridCols}; gap: 0.8em; font-size: ${style.fontSize};">`;
-        
-        // Total Followers (always shown)
-        html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-          <div style="font-size: 0.8em; opacity: 0.8;">TOTAL FOLLOWERS</div>
-          <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.totalFollowers)}</div>
-        </div>`;
-        
-        // Platform breakdown if enabled
-        if (config.showPlatforms) {
-          html += `<div style="border: 1px solid #E1306C; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-            <div style="font-size: 0.8em; opacity: 0.8;">INSTAGRAM</div>
-            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.instagram)}</div>
-            ${config.showPercentages ? `<div style="font-size: 0.75em; opacity: 0.7;">${((sampleData.instagram/sampleData.totalFollowers)*100).toFixed(1)}%</div>` : ''}
-          </div>`;
-          
-          html += `<div style="border: 1px solid #00f2ea; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-            <div style="font-size: 0.8em; opacity: 0.8;">TIKTOK</div>
-            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.tiktok)}</div>
-            ${config.showPercentages ? `<div style="font-size: 0.75em; opacity: 0.7;">${((sampleData.tiktok/sampleData.totalFollowers)*100).toFixed(1)}%</div>` : ''}
-          </div>`;
-          
-          html += `<div style="border: 1px solid #FF0000; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-            <div style="font-size: 0.8em; opacity: 0.8;">YOUTUBE</div>
-            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.youtube)}</div>
-            ${config.showPercentages ? `<div style="font-size: 0.75em; opacity: 0.7;">${((sampleData.youtube/sampleData.totalFollowers)*100).toFixed(1)}%</div>` : ''}
-          </div>`;
-        }
-        
-        // Engagement metrics if enabled
-        if (config.showEngagement) {
-          if (config.showLikes) {
-            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL LIKES</div>
-              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.likes)}</div>
-            </div>`;
-          }
-          
-          if (config.showViews) {
-            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL VIEWS</div>
-              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.views)}</div>
-            </div>`;
-          }
-          
-          if (config.showComments) {
-            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL COMMENTS</div>
-              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.comments)}</div>
-            </div>`;
-          }
-          
-          if (config.showShares) {
-            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL SHARES</div>
-              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.shares)}</div>
-            </div>`;
-          }
-        }
-        
-        html += `</div>`; // End grid
-        
-        // Chart preview
-        if (config.chartType !== 4) {
-          const chartTypeNames = {
-            1: 'Pie Chart',
-            2: 'Doughnut Chart (with center total)',
-            3: 'Horizontal Bar Chart'
-          };
-          html += `<div style="margin-top: 1.5em; text-align: center; padding: 2em; border: 1px dashed #0f0; border-radius: 3px; opacity: 0.6;">
-            <div style="font-size: 1em;">📊 ${chartTypeNames[config.chartType]}</div>
-            <div style="font-size: 0.8em; margin-top: 0.5em;">Chart showing platform distribution</div>
-          </div>`;
-        }
-        
-        html += `</div>`; // End Total Moon Media section
-        
-        // Individual Account Preview
-        html += `<div style="margin-top: 2em; padding-top: 1.5em; border-top: 1px solid #0f0;">`;
-        html += `<h5 style="color: #0f0; margin-bottom: 1em; text-align: center;">Individual Account Preview (e.g., popdartsgame)</h5>`;
-        html += `<div style="display: grid; grid-template-columns: ${style.gridCols}; gap: 0.8em; font-size: ${style.fontSize};">`;
-        
-        // Sample individual account data
-        const accountData = {
-          totalFollowers: 45200,
-          instagram: 15200,
-          tiktok: 25000,
-          youtube: 5000,
-          likes: 98500,
-          views: 2450000,
-          comments: 3200,
-          shares: 1250
-        };
-        
-        html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-          <div style="font-size: 0.8em; opacity: 0.8;">TOTAL FOLLOWERS</div>
-          <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.totalFollowers)}</div>
-        </div>`;
-        
-        if (config.showPlatforms) {
-          html += `<div style="border: 1px solid #E1306C; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-            <div style="font-size: 0.8em; opacity: 0.8;">INSTAGRAM</div>
-            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.instagram)}</div>
-          </div>`;
-          
-          html += `<div style="border: 1px solid #00f2ea; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-            <div style="font-size: 0.8em; opacity: 0.8;">TIKTOK</div>
-            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.tiktok)}</div>
-          </div>`;
-          
-          html += `<div style="border: 1px solid #FF0000; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-            <div style="font-size: 0.8em; opacity: 0.8;">YOUTUBE</div>
-            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.youtube)}</div>
-          </div>`;
-        }
-        
-        if (config.showEngagement) {
-          if (config.showLikes) {
-            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-              <div style="font-size: 0.8em; opacity: 0.8;">LIKES</div>
-              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.likes)}</div>
-            </div>`;
-          }
-          
-          if (config.showViews) {
-            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-              <div style="font-size: 0.8em; opacity: 0.8;">VIEWS</div>
-              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.views)}</div>
-            </div>`;
-          }
-          
-          if (config.showComments) {
-            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
-              <div style="font-size: 0.8em; opacity: 0.8;">COMMENTS</div>
-              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.comments)}</div>
-            </div>`;
-          }
-        }
-        
-        html += `</div></div>`; // End grid and individual section
-        
-        previewContent.innerHTML = html;
-      },
-      
-      // Apply the view configuration
-      applyViewConfiguration() {
-        // Store the configuration
-        localStorage.setItem('monthlyViewConfig', JSON.stringify(this.viewConfig));
-        
-        // Show confirmation
-        alert('✓ Configuration applied! Your settings will be used when viewing analytics.');
-        
-        // Re-render current view if one is active
-        const activeTab = document.querySelector('.monthly-tab.active');
-        if (activeTab) {
-          const tabName = activeTab.getAttribute('data-tab');
-          if (tabName === 'total') {
-            this.renderTotalMoonMediaMonthlyView();
-          } else {
-            this.renderClientMonthlyView(tabName);
-          }
-        }
-      },
-      
-      // Reset view configuration to defaults
-      resetViewConfiguration() {
-        // Reset form inputs
-        document.querySelector('input[name="displayStyle"][value="1"]').checked = true;
-        document.querySelector('input[name="chartType"][value="1"]').checked = true;
-        document.querySelector('input[name="showPlatforms"]').checked = true;
-        document.querySelector('input[name="showEngagement"]').checked = true;
-        document.querySelector('input[name="showPercentages"]').checked = false;
-        document.querySelector('input[name="showLikes"]').checked = true;
-        document.querySelector('input[name="showViews"]').checked = true;
-        document.querySelector('input[name="showComments"]').checked = false;
-        document.querySelector('input[name="showShares"]').checked = false;
-        
-        // Update preview
-        this.updateViewPreview();
-        
-        // Clear stored config
-        localStorage.removeItem('monthlyViewConfig');
-      },
-      
-      // Copy choice string to clipboard
-      copyChoiceString() {
-        const choiceString = document.getElementById('configChoiceString').value;
-        
-        // Create temporary textarea to copy from
-        const textarea = document.createElement('textarea');
-        textarea.value = choiceString;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        
-        // Show confirmation
-        const btn = event.target;
-        const originalText = btn.textContent;
-        btn.textContent = '✓ Copied!';
-        btn.style.background = '#0f0';
-        btn.style.color = '#000';
-        
-        setTimeout(() => {
-          btn.textContent = originalText;
-          btn.style.background = '';
-          btn.style.color = '';
-        }, 2000);
-      },
-      
-      // Export monthly stats to clipboard as formatted text
-      exportMonthlyStats(clientName) {
-        const statsContainer = document.getElementById('monthlyStatsSummary');
-        if (!statsContainer) return;
-        
-        // Extract stats from the current view
-        const statCards = statsContainer.querySelectorAll('.stat-card:not(.stat-controls)');
-        let statsText = `Monthly Statistics: ${clientName}\n`;
-        statsText += `Month: ${this.currentMonthlyStartDate.toLocaleDateString()} - ${this.currentMonthlyEndDate.toLocaleDateString()}\n`;
-        statsText += `\n`;
-        
-        statCards.forEach(card => {
-          const title = card.querySelector('h4')?.textContent || '';
-          const value = card.querySelector('.value')?.textContent || '';
-          if (title && value) {
-            statsText += `${title}: ${value}\n`;
-          }
-        });
-        
-        // Copy to clipboard
-        navigator.clipboard.writeText(statsText).then(() => {
-          alert('Statistics copied to clipboard!');
-        }).catch(err => {
-          // Fallback: create a textarea and copy
-          const textarea = document.createElement('textarea');
-          textarea.value = statsText;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          try {
-            document.execCommand('copy');
-            alert('Statistics copied to clipboard!');
-          } catch (e) {
-            alert('Failed to copy statistics. Please try again.');
-          }
-          document.body.removeChild(textarea);
-        });
       },
       // Chart creation functions continued
       createLineChart(container, title, historyData, datasets, useLog, chartId) {
