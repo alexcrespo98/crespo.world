@@ -439,6 +439,7 @@
       <select id="analyticsTypeSelect">
         <option value="" disabled selected>-- select analytics type --</option>
         <option value="easy">Weekly Analytics (this week's progress)</option>
+        <option value="monthly">Monthly Analytics (monthly reports)</option>
         <option value="custom">Custom Analytics</option>
       </select>
     </div>
@@ -466,6 +467,28 @@
             </select>
             <button onclick="app.exportIndividualClientReport()" style="margin-left: 1em; background: #000; color: #0f0; border: 1px solid #0f0; padding: 0.5em 1em; cursor: pointer;">
               Export Client PDF
+            </button>
+          </div>
+        </div>
+        <br>
+        <button onclick="location.reload()">start over</button>
+      </div>
+    </div>
+
+    <!-- Monthly Analytics Section -->
+    <div id="monthlyGraphsSection" class="step hidden">
+      <div class="question">select month for analytics:</div>
+      <select id="monthlyMonthSelect">
+        <option value="" disabled selected>-- select month --</option>
+      </select>
+      <div id="monthlyGraphsContainer" class="hidden">
+        <div class="question" id="monthlyGraphsTitle"></div>
+        <div class="stats-summary" id="monthlyStatsSummary"></div>
+        <div id="monthlyChartsList"></div>
+        <div class="export-section" style="text-align: center; margin-top: 2em;">
+          <div style="margin-bottom: 1em;">
+            <button id="monthlyExportBtn" class="looks-good-btn" onclick="app.exportMonthlyReport()">
+              ✓ Export Monthly Report PDF
             </button>
           </div>
         </div>
@@ -890,6 +913,13 @@
             this.selectMonthForEasyGraphs(e.target.value);
           }
         });
+        
+        // Month selection (for monthly analytics)
+        document.getElementById('monthlyMonthSelect').addEventListener('change', (e) => {
+          if (e.target.value) {
+            this.selectMonthForMonthlyAnalytics(e.target.value);
+          }
+        });
       },
       
       // Analytics type selection
@@ -898,6 +928,8 @@
         
         if (type === 'easy') {
           this.initializeEasyGraphsMode();
+        } else if (type === 'monthly') {
+          this.initializeMonthlyGraphsMode();
         } else if (type === 'custom') {
           document.getElementById('step0Custom').classList.remove('hidden');
         }
@@ -955,6 +987,93 @@
         } catch (error) {
           console.error('Error loading YouTube data:', error);
         }
+      },
+      
+      // Initialize Monthly Graphs mode
+      async initializeMonthlyGraphsMode() {
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('loading').textContent = 'loading data...';
+        
+        // Reuse the same data loading function as easy graphs
+        await this.loadAllPlatformsDataForEasyGraphs();
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('monthlyGraphsSection').classList.remove('hidden');
+        
+        // Populate month dropdown with monthly options
+        this.populateMonthlyDropdown();
+      },
+      
+      // Populate month dropdown with December 2025 as default
+      // At the start of each month, the previous month becomes available
+      populateMonthlyDropdown() {
+        const monthlySelect = document.getElementById('monthlyMonthSelect');
+        monthlySelect.innerHTML = '<option value="" disabled selected>-- select month --</option>';
+        
+        const now = new Date();
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                            'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        // Calculate the last completed month (previous month from current date)
+        const lastCompletedMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        
+        // Add completed months starting from the most recent
+        // For now (January 2026), this will show December 2025
+        // In February 2026, it will show January 2026 and December 2025, etc.
+        let monthsToShow = 1; // Start with just showing the last completed month
+        
+        // If we're past January, show more historical months (up to 12 months back)
+        if (now.getMonth() > 0 || now.getFullYear() > 2026) {
+          // Calculate how many months since December 2025
+          const monthsSinceDecember2025 = (now.getFullYear() - 2025) * 12 + (now.getMonth() - 11);
+          monthsToShow = Math.min(monthsSinceDecember2025, 12); // Cap at 12 months
+        }
+        
+        for (let i = 0; i < monthsToShow; i++) {
+          const monthDate = new Date(lastCompletedMonth);
+          monthDate.setMonth(lastCompletedMonth.getMonth() - i);
+          
+          const year = monthDate.getFullYear();
+          const month = monthDate.getMonth();
+          const value = `${year}-${String(month + 1).padStart(2, '0')}-01`; // YYYY-MM-01 format
+          
+          const label = `${monthNames[month]} ${year}`;
+          
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = label;
+          monthlySelect.appendChild(option);
+        }
+      },
+      
+      // Select month for monthly analytics
+      async selectMonthForMonthlyAnalytics(monthStartValue) {
+        // Parse the month start date (YYYY-MM-01)
+        const monthStart = new Date(monthStartValue + 'T00:00:00');
+        
+        // Calculate month end (last day of the month)
+        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+        monthEnd.setHours(23, 59, 59, 999);
+        
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                            'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthLabel = `${monthNames[monthStart.getMonth()]} ${monthStart.getFullYear()}`;
+        
+        // Show loading
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('loading').textContent = 'generating monthly analytics...';
+        
+        // Render the monthly graphs
+        await this.renderMonthlyGraphs(monthStart, monthEnd, monthLabel);
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
+        
+        // Store current month for export
+        this.currentMonthlyMonth = monthLabel;
+        this.currentMonthlyYear = monthStart.getFullYear();
+        this.currentMonthlyStartDate = monthStart;
+        this.currentMonthlyEndDate = monthEnd;
       },
       
       // Populate week dropdown with current and past 12 weeks
@@ -1726,6 +1845,551 @@
             }
           }
         });
+      },
+      
+      // Render monthly graphs for a selected month
+      async renderMonthlyGraphs(startDate, endDate, monthLabel) {
+        const container = document.getElementById('monthlyChartsList');
+        container.innerHTML = '';
+        
+        // Reset chart instances
+        this.chartInstances = {};
+        
+        document.getElementById('monthlyGraphsTitle').textContent = 
+          `Monthly Analytics: ${monthLabel}`;
+        
+        // Match accounts across platforms
+        const matchedAccounts = this.matchAccountsAcrossPlatforms();
+        
+        // Calculate monthly stats for each account
+        const accountStats = [];
+        let totalFollowersStart = 0;
+        let totalFollowersEnd = 0;
+        let totalPosts = 0;
+        let platformTotals = {
+          instagram: { start: 0, end: 0, posts: 0, accountCount: 0 },
+          tiktok: { start: 0, end: 0, posts: 0, accountCount: 0 },
+          youtube: { start: 0, end: 0, posts: 0, accountCount: 0 }
+        };
+        
+        matchedAccounts.forEach(account => {
+          const stats = {
+            name: account.name,
+            instagram: account.instagram ? this.getAccountMonthlyStats('instagram', account.instagram, startDate, endDate) : null,
+            tiktok: account.tiktok ? this.getAccountMonthlyStats('tiktok', account.tiktok, startDate, endDate) : null,
+            youtube: account.youtube ? this.getAccountMonthlyStats('youtube', account.youtube, startDate, endDate) : null
+          };
+          
+          // Aggregate totals
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            if (stats[platform]) {
+              totalFollowersStart += stats[platform].followersStart || 0;
+              totalFollowersEnd += stats[platform].followersEnd || 0;
+              totalPosts += stats[platform].posts || 0;
+              
+              platformTotals[platform].start += stats[platform].followersStart || 0;
+              platformTotals[platform].end += stats[platform].followersEnd || 0;
+              platformTotals[platform].posts += stats[platform].posts || 0;
+              platformTotals[platform].accountCount++;
+            }
+          });
+          
+          accountStats.push(stats);
+        });
+        
+        const totalFollowerGrowth = totalFollowersEnd - totalFollowersStart;
+        
+        // Render summary statistics
+        const statsContainer = document.getElementById('monthlyStatsSummary');
+        statsContainer.innerHTML = `
+          <div class="stat-card">
+            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
+            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>FOLLOWER GROWTH THIS MONTH</h4>
+            <div class="value">${totalFollowerGrowth >= 0 ? '+' : ''}${this.formatNumber(totalFollowerGrowth)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL POSTS PUBLISHED</h4>
+            <div class="value">${totalPosts}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM GROWTH</h4>
+            <div class="value">${platformTotals.instagram.end - platformTotals.instagram.start >= 0 ? '+' : ''}${this.formatNumber(platformTotals.instagram.end - platformTotals.instagram.start)} (${platformTotals.instagram.accountCount} accounts)</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK GROWTH</h4>
+            <div class="value">${platformTotals.tiktok.end - platformTotals.tiktok.start >= 0 ? '+' : ''}${this.formatNumber(platformTotals.tiktok.end - platformTotals.tiktok.start)} (${platformTotals.tiktok.accountCount} accounts)</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE GROWTH</h4>
+            <div class="value">${platformTotals.youtube.end - platformTotals.youtube.start >= 0 ? '+' : ''}${this.formatNumber(platformTotals.youtube.end - platformTotals.youtube.start)} (${platformTotals.youtube.accountCount} accounts)</div>
+          </div>
+        `;
+        
+        // Store monthly data for export
+        this.monthlyAccountStats = accountStats;
+        this.monthlyMatchedAccounts = matchedAccounts;
+        this.monthlyPlatformTotals = platformTotals;
+        
+        // Create per-account follower growth charts (daily progression throughout the month)
+        this.createMonthlyFollowerGrowthCharts(container, accountStats, startDate, endDate);
+        
+        // Create platform breakdown chart
+        this.createMonthlyPlatformBreakdownChart(container, platformTotals);
+        
+        // Create content performance charts
+        this.createMonthlyContentPerformanceCharts(container, accountStats, startDate, endDate);
+      },
+      
+      // Get account monthly stats (followers at start/end of month, posts published)
+      getAccountMonthlyStats(platform, accountName, startDate, endDate) {
+        const workbook = this.easyGraphsData[`${platform}Workbook`];
+        if (!workbook) {
+          return null;
+        }
+        
+        // Parse account data with full history
+        const accountData = this.parseAccountDataFromWorkbook(workbook, accountName, platform, 'all');
+        if (!accountData) {
+          return null;
+        }
+        
+        // Get follower history for this month
+        const validFollowersHistory = (accountData.followersHistory || []).filter(h => 
+          h && h.value != null && typeof h.value === 'number' && h.value > 0
+        );
+        
+        let followersStart = 0;
+        let followersEnd = 0;
+        const dailyFollowerData = [];
+        
+        if (validFollowersHistory.length > 0) {
+          // Find followers at start of month (or closest before)
+          const beforeStart = validFollowersHistory.filter(h => h.date <= startDate).sort((a, b) => b.date - a.date);
+          if (beforeStart.length > 0) {
+            followersStart = beforeStart[0].value;
+          }
+          
+          // Find followers at end of month (or closest before end)
+          const beforeEnd = validFollowersHistory.filter(h => h.date <= endDate).sort((a, b) => b.date - a.date);
+          if (beforeEnd.length > 0) {
+            followersEnd = beforeEnd[0].value;
+          }
+          
+          // Get daily follower progression throughout the month
+          const monthData = validFollowersHistory.filter(h => h.date >= startDate && h.date <= endDate);
+          dailyFollowerData.push(...monthData.map(h => ({ date: h.date, followers: h.value })));
+        }
+        
+        // Filter posts published this month
+        const allVideos = accountData.videos || [];
+        const monthVideos = allVideos.filter(v => 
+          v.date >= startDate && v.date <= endDate
+        );
+        
+        return {
+          followersStart,
+          followersEnd,
+          posts: monthVideos.length,
+          dailyFollowerData,
+          monthVideos
+        };
+      },
+      
+      // Create per-account follower growth charts showing daily progression
+      createMonthlyFollowerGrowthCharts(container, accountStats, startDate, endDate) {
+        accountStats.forEach(account => {
+          // Combine daily follower data from all platforms for this account
+          const allDailyData = [];
+          
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            if (account[platform] && account[platform].dailyFollowerData) {
+              account[platform].dailyFollowerData.forEach(d => {
+                allDailyData.push({
+                  date: d.date,
+                  platform,
+                  followers: d.followers
+                });
+              });
+            }
+          });
+          
+          if (allDailyData.length === 0) return;
+          
+          const chartDiv = document.createElement('div');
+          chartDiv.className = 'chart-container';
+          
+          const canvas = document.createElement('canvas');
+          canvas.id = `monthly-follower-growth-${account.name}`;
+          
+          const header = document.createElement('h3');
+          header.textContent = `@${account.name} - Follower Growth`;
+          
+          chartDiv.appendChild(header);
+          chartDiv.appendChild(canvas);
+          container.appendChild(chartDiv);
+          
+          const ctx = canvas.getContext('2d');
+          
+          // Create datasets for each platform
+          const datasets = [];
+          const platformColors = {
+            instagram: { border: '#E1306C', bg: 'rgba(225, 48, 108, 0.1)' },
+            tiktok: { border: '#00f2ea', bg: 'rgba(0, 242, 234, 0.1)' },
+            youtube: { border: '#FF0000', bg: 'rgba(255, 0, 0, 0.1)' }
+          };
+          
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            if (account[platform] && account[platform].dailyFollowerData && account[platform].dailyFollowerData.length > 0) {
+              datasets.push({
+                label: platform.charAt(0).toUpperCase() + platform.slice(1),
+                data: account[platform].dailyFollowerData.map(d => ({ x: d.date, y: d.followers })),
+                borderColor: platformColors[platform].border,
+                backgroundColor: platformColors[platform].bg,
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 2,
+                pointHoverRadius: 4
+              });
+            }
+          });
+          
+          const chartId = `monthly-follower-growth-${account.name}`;
+          this.chartInstances[chartId] = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              aspectRatio: 2.5,
+              interaction: {
+                mode: 'index',
+                intersect: false,
+              },
+              plugins: {
+                legend: {
+                  display: true,
+                  labels: { color: '#0f0', font: { family: 'monospace', size: 12 } }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  titleColor: '#0f0',
+                  bodyColor: '#0f0',
+                  borderColor: '#0f0',
+                  borderWidth: 1,
+                  callbacks: {
+                    label: (context) => {
+                      return context.dataset.label + ': ' + this.formatNumber(context.parsed.y) + ' followers';
+                    }
+                  }
+                }
+              },
+              scales: {
+                x: {
+                  type: 'time',
+                  time: {
+                    unit: 'day',
+                    displayFormats: { day: 'MMM d' }
+                  },
+                  min: startDate.getTime(),
+                  max: endDate.getTime(),
+                  ticks: { color: '#0f0', font: { family: 'monospace' } },
+                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                },
+                y: {
+                  type: 'linear',
+                  ticks: {
+                    color: '#0f0',
+                    font: { family: 'monospace' },
+                    callback: (value) => this.formatNumber(value)
+                  },
+                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                }
+              }
+            }
+          });
+        });
+      },
+      
+      // Create platform breakdown chart for monthly analytics
+      createMonthlyPlatformBreakdownChart(container, platformTotals) {
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'monthly-platform-breakdown';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Follower Growth by Platform';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        const platforms = ['instagram', 'tiktok', 'youtube'];
+        const platformNames = ['Instagram', 'TikTok', 'YouTube'];
+        const platformGrowth = platforms.map(p => platformTotals[p].end - platformTotals[p].start);
+        const colors = ['#E1306C', '#00f2ea', '#FF0000'];
+        
+        this.chartInstances['monthly-platform-breakdown'] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: platformNames,
+            datasets: [{
+              label: 'Follower Growth',
+              data: platformGrowth,
+              backgroundColor: colors,
+              borderColor: colors,
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    const platform = platforms[context.dataIndex];
+                    const start = platformTotals[platform].start;
+                    const end = platformTotals[platform].end;
+                    const growth = context.parsed.y;
+                    return [
+                      `Start: ${this.formatNumber(start)}`,
+                      `End: ${this.formatNumber(end)}`,
+                      `Growth: ${growth >= 0 ? '+' : ''}${this.formatNumber(growth)}`
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { color: '#0f0', font: { family: 'monospace' } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => (value >= 0 ? '+' : '') + this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+      },
+      
+      // Create content performance charts for monthly analytics
+      createMonthlyContentPerformanceCharts(container, accountStats, startDate, endDate) {
+        // Collect all posts from all accounts for this month
+        const allMonthlyPosts = [];
+        
+        accountStats.forEach(account => {
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            if (account[platform] && account[platform].monthVideos) {
+              account[platform].monthVideos.forEach(video => {
+                allMonthlyPosts.push({
+                  ...video,
+                  account: account.name,
+                  platform
+                });
+              });
+            }
+          });
+        });
+        
+        if (allMonthlyPosts.length === 0) return;
+        
+        // Top performing posts by views
+        const topPosts = [...allMonthlyPosts]
+          .sort((a, b) => (b.views || 0) - (a.views || 0))
+          .slice(0, 10);
+        
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'monthly-top-posts';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Top 10 Posts This Month (by Views)';
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        const platformColors = {
+          instagram: '#E1306C',
+          tiktok: '#00f2ea',
+          youtube: '#FF0000'
+        };
+        
+        this.chartInstances['monthly-top-posts'] = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: topPosts.map((p, i) => `#${i+1} @${p.account}`),
+            datasets: [{
+              label: 'Views',
+              data: topPosts.map(p => p.views || 0),
+              backgroundColor: topPosts.map(p => platformColors[p.platform]),
+              borderColor: topPosts.map(p => platformColors[p.platform]),
+              borderWidth: 2
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 1.5,
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    const post = topPosts[context.dataIndex];
+                    return [
+                      `Platform: ${post.platform}`,
+                      `Views: ${this.formatNumber(post.views || 0)}`,
+                      `Likes: ${this.formatNumber(post.likes || 0)}`,
+                      `Engagement: ${(post.engagement || 0).toFixed(2)}%`
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => this.formatNumber(value)
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                ticks: { color: '#0f0', font: { family: 'monospace', size: 10 } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
+        
+        // Posts per platform breakdown
+        const platformPostCounts = {
+          instagram: 0,
+          tiktok: 0,
+          youtube: 0
+        };
+        
+        allMonthlyPosts.forEach(post => {
+          platformPostCounts[post.platform]++;
+        });
+        
+        const pieChartDiv = document.createElement('div');
+        pieChartDiv.className = 'chart-container';
+        pieChartDiv.style.maxWidth = '500px';
+        pieChartDiv.style.margin = '2em auto';
+        
+        const pieCanvas = document.createElement('canvas');
+        pieCanvas.id = 'monthly-posts-platform-breakdown';
+        
+        const pieHeader = document.createElement('h3');
+        pieHeader.textContent = 'Posts Distribution by Platform';
+        
+        pieChartDiv.appendChild(pieHeader);
+        pieChartDiv.appendChild(pieCanvas);
+        container.appendChild(pieChartDiv);
+        
+        const pieCtx = pieCanvas.getContext('2d');
+        
+        this.chartInstances['monthly-posts-platform-breakdown'] = new Chart(pieCtx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Instagram', 'TikTok', 'YouTube'],
+            datasets: [{
+              data: [platformPostCounts.instagram, platformPostCounts.tiktok, platformPostCounts.youtube],
+              backgroundColor: ['#E1306C', '#00f2ea', '#FF0000'],
+              borderColor: '#000',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    const total = allMonthlyPosts.length;
+                    const percentage = ((context.parsed / total) * 100).toFixed(1);
+                    return `${context.label}: ${context.parsed} posts (${percentage}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      },
+      
+      // Export monthly report PDF
+      exportMonthlyReport() {
+        // For now, show a helpful message
+        // TODO: Implement full PDF export similar to exportClientReport()
+        const message = document.createElement('div');
+        message.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000; color: #0f0; border: 3px solid #0f0; padding: 2em; border-radius: 10px; z-index: 10000; text-align: center; font-family: monospace; max-width: 500px;';
+        message.innerHTML = `
+          <h3 style="margin-top: 0; color: #ffff00;">Export Feature Coming Soon!</h3>
+          <p>For now, please use screenshot tools to capture the charts.</p>
+          <p style="margin-bottom: 0;">Press any key or click to close.</p>
+        `;
+        document.body.appendChild(message);
+        
+        const closeMessage = () => {
+          document.body.removeChild(message);
+          document.removeEventListener('click', closeMessage);
+          document.removeEventListener('keydown', closeMessage);
+        };
+        
+        document.addEventListener('click', closeMessage);
+        document.addEventListener('keydown', closeMessage);
       },
       
       // Render easy graphs for client report
