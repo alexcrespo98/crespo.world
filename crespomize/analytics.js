@@ -114,6 +114,81 @@ function exportChart(chartId, title) {
   link.click();
 }
 
+function exportSummaryMetrics() {
+  // Calculate summary metrics
+  const totalLikes = accountData.videos.reduce((sum, v) => sum + v.likes, 0);
+  const totalComments = accountData.videos.reduce((sum, v) => sum + v.comments, 0);
+  const totalShares = accountData.videos.reduce((sum, v) => sum + v.shares, 0);
+  
+  // Calculate follower growth percentage
+  let followerGrowth = 0;
+  if (accountData.followersHistory && accountData.followersHistory.length >= 2) {
+    const firstFollowers = accountData.followersHistory[0].value;
+    const lastFollowers = accountData.followersHistory[accountData.followersHistory.length - 1].value;
+    if (firstFollowers > 0) {
+      followerGrowth = ((lastFollowers - firstFollowers) / firstFollowers) * 100;
+    }
+  }
+  
+  // Calculate views per second
+  let viewsPerSecond = 0;
+  if (accountData.videos.length >= 2) {
+    const oldestPost = accountData.videos[0];
+    const newestPost = accountData.videos[accountData.videos.length - 1];
+    const totalViews = accountData.videos.reduce((sum, v) => sum + v.views, 0);
+    const timeSpanSeconds = (newestPost.date - oldestPost.date) / 1000;
+    if (timeSpanSeconds > 0) {
+      viewsPerSecond = totalViews / timeSpanSeconds;
+    }
+  }
+
+  const accountText = isMoonMediaTotal ? 'All MoonMedia' : '@' + selectedAccount;
+  let rangeText = '';
+  if (selectedTimeRange === 'all') rangeText = 'All Time';
+  else if (selectedTimeRange === 365) rangeText = 'Last 1 Year';
+  else if (selectedTimeRange === 180) rangeText = 'Last 6 Months';
+  else if (selectedTimeRange === 30) rangeText = 'Last 1 Month';
+  
+  const platformEmoji = selectedPlatform === 'instagram' ? '📷 Instagram' : '🎵 TikTok';
+  
+  // Create export data
+  const exportData = [
+    ['Summary Metrics Export'],
+    ['Platform', platformEmoji],
+    ['Account', accountText],
+    ['Time Range', rangeText],
+    ['Export Date', new Date().toISOString()],
+    [],
+    ['Metric', 'Value'],
+    ['Total Likes', totalLikes],
+    ['Total Comments', totalComments],
+    ['Total Shares', totalShares],
+    ['Total Followers', accountData.followers],
+    ['Follower Growth', followerGrowth.toFixed(2) + '%'],
+    ['Views per Second', viewsPerSecond.toFixed(2)],
+    [],
+    ['Graph Data'],
+    ['Date', 'Views', 'Likes', 'Comments', 'Shares', 'Engagement %'],
+    ...accountData.videos.map(v => [
+      v.date.toISOString().split('T')[0],
+      v.views,
+      v.likes,
+      v.comments,
+      v.shares,
+      v.engagement.toFixed(2)
+    ])
+  ];
+
+  // Create workbook and export
+  const ws = XLSX.utils.aoa_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Analytics Summary');
+  
+  const filename = `analytics_summary_${accountText.replace('@', '')}_${selectedPlatform}_${Date.now()}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+
 async function loadSheetData() {
   try {
     document.getElementById('accountSelect').innerHTML = '<option value="">loading accounts...</option>';
@@ -1085,43 +1160,63 @@ function renderDashboard() {
 
   const statsContainer = document.getElementById('statsSummary');
   
-  const contentType = selectedPlatform === 'instagram' ? 'REELS' : 'POSTS';
+  // Calculate summary metrics
+  const totalLikes = accountData.videos.reduce((sum, v) => sum + v.likes, 0);
+  const totalComments = accountData.videos.reduce((sum, v) => sum + v.comments, 0);
+  const totalShares = accountData.videos.reduce((sum, v) => sum + v.shares, 0);
   
+  // Calculate follower growth percentage
+  let followerGrowth = 0;
+  if (accountData.followersHistory && accountData.followersHistory.length >= 2) {
+    const firstFollowers = accountData.followersHistory[0].value;
+    const lastFollowers = accountData.followersHistory[accountData.followersHistory.length - 1].value;
+    if (firstFollowers > 0) {
+      followerGrowth = ((lastFollowers - firstFollowers) / firstFollowers) * 100;
+    }
+  }
+  
+  // Calculate views per second
+  let viewsPerSecond = 0;
+  if (accountData.videos.length >= 2) {
+    const oldestPost = accountData.videos[0];
+    const newestPost = accountData.videos[accountData.videos.length - 1];
+    const totalViews = accountData.videos.reduce((sum, v) => sum + v.views, 0);
+    const timeSpanSeconds = (newestPost.date - oldestPost.date) / 1000;
+    if (timeSpanSeconds > 0) {
+      viewsPerSecond = totalViews / timeSpanSeconds;
+    }
+  }
+  
+  // Top row: 4 compact boxes
   let statsHTML = `
-    <div class="stat-card">
-      <h4>👥 FOLLOWERS</h4>
-      <div class="value">${formatNumber(accountData.followers)}</div>
+    <div class="stats-top-row">
+      <div class="stat-card compact">
+        <h4>❤️ TOTAL LIKES</h4>
+        <div class="value">${formatNumber(totalLikes)}</div>
+      </div>
+      <div class="stat-card compact">
+        <h4>💬 TOTAL COMMENTS</h4>
+        <div class="value">${formatNumber(totalComments)}</div>
+      </div>
+      <div class="stat-card compact">
+        <h4>🔄 TOTAL SHARES</h4>
+        <div class="value">${formatNumber(totalShares)}</div>
+      </div>
+      <div class="stat-card compact">
+        <h4>👥 TOTAL FOLLOWERS</h4>
+        <div class="value">${formatNumber(accountData.followers)}</div>
+        <div class="growth ${followerGrowth >= 0 ? 'positive' : 'negative'}">
+          ${followerGrowth >= 0 ? '+' : ''}${followerGrowth.toFixed(2)}%
+        </div>
+      </div>
     </div>
-    <div class="stat-card">
-      <h4>❤️ TOTAL LIKES</h4>
-      <div class="value">${formatNumber(accountData.totalLikes)}</div>
-    </div>
-    <div class="stat-card">
-      <h4>🎬 ${contentType} TRACKED</h4>
-      <div class="value">${accountData.postsScraped}</div>
-    </div>
-    <div class="stat-card">
-      <h4>📈 AVG ENGAGEMENT</h4>
-      <div class="value">${accountData.videos.length > 0 ? (accountData.videos.reduce((sum, v) => sum + v.engagement, 0) / accountData.videos.length).toFixed(2) : 0}%</div>
+    <div class="stats-bottom-row">
+      <div class="stat-card wide">
+        <h4>⚡ VIEWS PER SECOND</h4>
+        <div class="value">${viewsPerSecond.toFixed(2)}</div>
+      </div>
     </div>
   `;
-
-  if (isMoonMediaTotal) {
-    statsHTML += `
-      <div class="stat-card">
-        <h4>👁️ TOTAL VIEWS</h4>
-        <div class="value">${formatNumber(accountData.totalViews)}</div>
-      </div>
-      <div class="stat-card">
-        <h4>⚡ VIEWS PER SECOND</h4>
-        <div class="value">${accountData.viewsPerSecond.toFixed(2)}</div>
-      </div>
-      <div class="stat-card">
-        <h4>🏢 TOTAL ACCOUNTS</h4>
-        <div class="value">${accountData.accountCount}</div>
-      </div>
-    `;
-  }
 
   statsContainer.innerHTML = statsHTML;
 
@@ -1217,6 +1312,73 @@ function renderDashboard() {
       false,
       'engagement-time',
       true
+    );
+
+    // Combined Engagement Metrics Chart (Likes + Comments + Shares + Sum)
+    const combinedLikesData = accountData.videos.map(v => ({ x: v.date, y: v.likes }));
+    const combinedCommentsData = accountData.videos.map(v => ({ x: v.date, y: v.comments }));
+    const combinedSharesData = accountData.videos.map(v => ({ x: v.date, y: v.shares }));
+    const sumTotalData = accountData.videos.map(v => ({ 
+      x: v.date, 
+      y: v.likes + v.comments + v.shares 
+    }));
+    
+    const allCombinedValues = [
+      ...combinedLikesData.map(d => d.y),
+      ...combinedCommentsData.map(d => d.y),
+      ...combinedSharesData.map(d => d.y),
+      ...sumTotalData.map(d => d.y)
+    ];
+    const useLogCombined = shouldUseLogScale(allCombinedValues);
+    
+    createTimeBasedChart(chartsContainer, '📊 Combined Engagement Metrics',
+      accountData.videos,
+      [
+        {
+          label: 'Likes',
+          data: combinedLikesData,
+          borderColor: '#ff6b6b',
+          backgroundColor: 'rgba(255, 107, 107, 0.3)',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          order: 3
+        },
+        {
+          label: 'Comments',
+          data: combinedCommentsData,
+          borderColor: '#1abc9c',
+          backgroundColor: 'rgba(26, 188, 156, 0.3)',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          order: 2
+        },
+        {
+          label: 'Shares',
+          data: combinedSharesData,
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231, 76, 60, 0.3)',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          order: 1
+        },
+        {
+          label: 'Sum Total',
+          data: sumTotalData,
+          borderColor: '#ffd700',
+          backgroundColor: 'transparent',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          borderWidth: 3,
+          borderDash: [5, 5],
+          order: 0
+        }
+      ],
+      useLogCombined,
+      'combined-engagement',
+      false
     );
 
     const commentsData = accountData.videos.map(v => v.comments);
