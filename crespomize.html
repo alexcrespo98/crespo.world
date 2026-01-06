@@ -421,6 +421,40 @@
       color: #ffff00;
       margin-bottom: 1em;
     }
+    .monthly-tabs-container {
+      margin: 2em 0 1em 0;
+      border-bottom: 2px solid #0f0;
+    }
+    .monthly-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      margin-bottom: -2px;
+    }
+    .monthly-tab {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      border-bottom: none;
+      padding: 0.8em 1.5em;
+      margin: 0;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.9em;
+      transition: all 0.3s;
+      border-radius: 5px 5px 0 0;
+    }
+    .monthly-tab:hover {
+      background: #0a3a0a;
+    }
+    .monthly-tab.active {
+      background: #0f0;
+      color: #000;
+      font-weight: bold;
+    }
+    #monthlyTabContent {
+      padding-top: 1em;
+    }
   </style>
 </head>
 <body>
@@ -483,12 +517,31 @@
       </select>
       <div id="monthlyGraphsContainer" class="hidden">
         <div class="question" id="monthlyGraphsTitle"></div>
-        <div class="stats-summary" id="monthlyStatsSummary"></div>
-        <div id="monthlyChartsList"></div>
+        
+        <!-- Tab Navigation -->
+        <div class="monthly-tabs-container">
+          <div class="monthly-tabs">
+            <button class="monthly-tab" data-tab="total" onclick="app.switchMonthlyTab('total')">Total Moon Media</button>
+            <button class="monthly-tab" data-tab="popdartsgame" onclick="app.switchMonthlyTab('popdartsgame')">popdartsgame</button>
+            <button class="monthly-tab" data-tab="bucketgolfgame" onclick="app.switchMonthlyTab('bucketgolfgame')">bucketgolfgame</button>
+            <button class="monthly-tab" data-tab="playbattlegolf" onclick="app.switchMonthlyTab('playbattlegolf')">playbattlegolf</button>
+            <button class="monthly-tab" data-tab="flinggolf" onclick="app.switchMonthlyTab('flinggolf')">flinggolf</button>
+            <button class="monthly-tab" data-tab="golfponggames" onclick="app.switchMonthlyTab('golfponggames')">golfponggames</button>
+            <button class="monthly-tab" data-tab="discgogames" onclick="app.switchMonthlyTab('discgogames')">discgogames</button>
+            <button class="monthly-tab" data-tab="lowtidegolf" onclick="app.switchMonthlyTab('lowtidegolf')">lowtidegolf</button>
+          </div>
+        </div>
+        
+        <!-- Tab Content -->
+        <div id="monthlyTabContent">
+          <div class="stats-summary" id="monthlyStatsSummary"></div>
+          <div id="monthlyChartsList"></div>
+        </div>
+        
         <div class="export-section" style="text-align: center; margin-top: 2em;">
           <div style="margin-bottom: 1em;">
             <button id="monthlyExportBtn" class="looks-good-btn" onclick="app.exportMonthlyReport()">
-              ✓ Export Monthly Report PDF
+              Export Monthly Report PDF
             </button>
           </div>
         </div>
@@ -648,6 +701,13 @@
       easyGraphsData: {},
       currentEasyGraphsMonth: null,
       currentEasyGraphsYear: null,
+      
+      // Monthly analytics state
+      currentMonthlyMonth: null,
+      currentMonthlyYear: null,
+      currentMonthlyStartDate: null,
+      currentMonthlyEndDate: null,
+      currentMonthlyAccountStats: [],
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -1063,17 +1123,449 @@
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('loading').textContent = 'generating monthly analytics...';
         
-        // Render the monthly graphs
-        await this.renderMonthlyGraphs(monthStart, monthEnd, monthLabel);
-        
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
-        
-        // Store current month for export
+        // Store current month for all tabs
         this.currentMonthlyMonth = monthLabel;
         this.currentMonthlyYear = monthStart.getFullYear();
         this.currentMonthlyStartDate = monthStart;
         this.currentMonthlyEndDate = monthEnd;
+        
+        // Calculate stats for all clients once
+        const matchedAccounts = this.matchAccountsAcrossPlatforms();
+        this.currentMonthlyAccountStats = [];
+        
+        matchedAccounts.forEach(account => {
+          const stats = {
+            name: account.name,
+            instagram: account.instagram ? this.getAccountMonthlyStats('instagram', account.instagram, monthStart, monthEnd) : null,
+            tiktok: account.tiktok ? this.getAccountMonthlyStats('tiktok', account.tiktok, monthStart, monthEnd) : null,
+            youtube: account.youtube ? this.getAccountMonthlyStats('youtube', account.youtube, monthStart, monthEnd) : null
+          };
+          this.currentMonthlyAccountStats.push(stats);
+        });
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
+        document.getElementById('monthlyGraphsTitle').textContent = `Monthly Analytics: ${monthLabel}`;
+        
+        // Switch to default tab (Total Moon Media)
+        this.switchMonthlyTab('total');
+      },
+      
+      // Switch between monthly analytics tabs
+      switchMonthlyTab(tabName) {
+        // Update tab button states
+        const tabs = document.querySelectorAll('.monthly-tab');
+        tabs.forEach(tab => {
+          if (tab.getAttribute('data-tab') === tabName) {
+            tab.classList.add('active');
+          } else {
+            tab.classList.remove('active');
+          }
+        });
+        
+        // Clear existing content
+        const statsContainer = document.getElementById('monthlyStatsSummary');
+        const chartsContainer = document.getElementById('monthlyChartsList');
+        statsContainer.innerHTML = '';
+        chartsContainer.innerHTML = '';
+        
+        // Reset chart instances
+        this.chartInstances = {};
+        
+        // Render content based on tab
+        if (tabName === 'total') {
+          this.renderTotalMoonMediaMonthlyView();
+        } else {
+          this.renderClientMonthlyView(tabName);
+        }
+      },
+      
+      // Render Total Moon Media monthly view (aggregate all clients)
+      renderTotalMoonMediaMonthlyView() {
+        const statsContainer = document.getElementById('monthlyStatsSummary');
+        const chartsContainer = document.getElementById('monthlyChartsList');
+        
+        // Filter to only the 7 clients from ACCOUNT_MAPPING
+        const clientNames = Object.keys(this.ACCOUNT_MAPPING);
+        const clientStats = this.currentMonthlyAccountStats.filter(stat => 
+          clientNames.includes(stat.name)
+        );
+        
+        // Aggregate metrics across all clients and platforms
+        let totalFollowersEnd = 0;
+        let totalLikes = 0;
+        let totalViews = 0;
+        let totalComments = 0;
+        let totalShares = 0;
+        let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
+        
+        clientStats.forEach(client => {
+          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+            if (client[platform]) {
+              totalFollowersEnd += client[platform].followersEnd || 0;
+              platformFollowers[platform] += client[platform].followersEnd || 0;
+              
+              // Aggregate engagement metrics from month videos
+              if (client[platform].monthVideos) {
+                client[platform].monthVideos.forEach(video => {
+                  totalLikes += video.likes || 0;
+                  totalViews += video.views || 0;
+                  totalComments += video.comments || 0;
+                  totalShares += video.shares || 0;
+                });
+              }
+              
+              // Collect follower history data for combined chart
+              if (client[platform].dailyFollowerData && client[platform].dailyFollowerData.length > 0) {
+                combinedFollowerData[platform].push(...client[platform].dailyFollowerData);
+              }
+            }
+          });
+        });
+        
+        // Display summary statistics
+        statsContainer.innerHTML = `
+          <div class="stat-card">
+            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
+            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM FOLLOWERS</h4>
+            <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK FOLLOWERS</h4>
+            <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE SUBSCRIBERS</h4>
+            <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL LIKES</h4>
+            <div class="value">${this.formatNumber(totalLikes)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL VIEWS</h4>
+            <div class="value">${this.formatNumber(totalViews)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
+          </div>
+        `;
+        
+        // Create normalized follower growth chart
+        this.createNormalizedFollowerGrowthChart(
+          chartsContainer,
+          'Total Moon Media Follower Growth',
+          combinedFollowerData,
+          this.currentMonthlyStartDate,
+          this.currentMonthlyEndDate,
+          'total-follower-growth'
+        );
+      },
+      
+      // Render individual client monthly view
+      renderClientMonthlyView(clientName) {
+        const statsContainer = document.getElementById('monthlyStatsSummary');
+        const chartsContainer = document.getElementById('monthlyChartsList');
+        
+        // Find the client stats
+        const clientStats = this.currentMonthlyAccountStats.find(stat => stat.name === clientName);
+        
+        if (!clientStats) {
+          statsContainer.innerHTML = '<div class="no-data-message">No data available for this client</div>';
+          return;
+        }
+        
+        // Aggregate metrics for this client
+        let totalFollowersEnd = 0;
+        let totalLikes = 0;
+        let totalViews = 0;
+        let totalComments = 0;
+        let totalShares = 0;
+        let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformShares = { instagram: 0, tiktok: 0, youtube: 0 };
+        let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
+        
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          if (clientStats[platform]) {
+            const followers = clientStats[platform].followersEnd || 0;
+            totalFollowersEnd += followers;
+            platformFollowers[platform] = followers;
+            
+            // Aggregate engagement metrics from month videos
+            if (clientStats[platform].monthVideos) {
+              clientStats[platform].monthVideos.forEach(video => {
+                const likes = video.likes || 0;
+                const views = video.views || 0;
+                const comments = video.comments || 0;
+                const shares = video.shares || 0;
+                
+                totalLikes += likes;
+                totalViews += views;
+                totalComments += comments;
+                totalShares += shares;
+                
+                platformLikes[platform] += likes;
+                platformViews[platform] += views;
+                platformComments[platform] += comments;
+                platformShares[platform] += shares;
+              });
+            }
+            
+            // Collect follower history data
+            if (clientStats[platform].dailyFollowerData && clientStats[platform].dailyFollowerData.length > 0) {
+              combinedFollowerData[platform] = clientStats[platform].dailyFollowerData;
+            }
+          }
+        });
+        
+        // Display summary statistics
+        let statsHTML = `
+          <div class="stat-card">
+            <h4>INSTAGRAM FOLLOWERS</h4>
+            <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK FOLLOWERS</h4>
+            <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE SUBSCRIBERS</h4>
+            <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
+          </div>
+        `;
+        
+        // Add engagement metric cards
+        statsHTML += `
+          <div class="stat-card">
+            <h4>INSTAGRAM LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
+          </div>
+        `;
+        
+        if (totalShares > 0) {
+          statsHTML += `
+            <div class="stat-card">
+              <h4>TOTAL SHARES</h4>
+              <div class="value">${this.formatNumber(totalShares)}</div>
+            </div>
+          `;
+        }
+        
+        statsContainer.innerHTML = statsHTML;
+        
+        // Create normalized follower growth chart
+        this.createNormalizedFollowerGrowthChart(
+          chartsContainer,
+          `${clientName} Follower Growth`,
+          combinedFollowerData,
+          this.currentMonthlyStartDate,
+          this.currentMonthlyEndDate,
+          `${clientName}-follower-growth`
+        );
+      },
+      
+      // Create normalized follower growth chart (starts at 0)
+      createNormalizedFollowerGrowthChart(container, title, followerData, startDate, endDate, chartId) {
+        // Merge and normalize data from all platforms
+        const allDates = new Set();
+        const platformData = { instagram: {}, tiktok: {}, youtube: {} };
+        
+        // Collect all unique dates and organize data by platform
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          if (followerData[platform] && followerData[platform].length > 0) {
+            followerData[platform].forEach(point => {
+              const dateKey = point.date.toISOString().split('T')[0];
+              allDates.add(dateKey);
+              if (!platformData[platform][dateKey] || point.followers > platformData[platform][dateKey]) {
+                platformData[platform][dateKey] = point.followers;
+              }
+            });
+          }
+        });
+        
+        // If no data, skip chart
+        if (allDates.size === 0) {
+          return;
+        }
+        
+        // Create a sorted array of all dates in the month
+        const monthDates = [];
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          monthDates.push(new Date(currentDate));
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        // Build datasets for each platform with interpolation
+        const datasets = [];
+        const platformColors = {
+          instagram: { border: '#E1306C', bg: 'rgba(225, 48, 108, 0.2)' },
+          tiktok: { border: '#00f2ea', bg: 'rgba(0, 242, 234, 0.2)' },
+          youtube: { border: '#FF0000', bg: 'rgba(255, 0, 0, 0.2)' }
+        };
+        
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          const data = platformData[platform];
+          const dateKeys = Object.keys(data).sort();
+          
+          if (dateKeys.length === 0) return;
+          
+          // Get initial value (baseline for normalization)
+          const initialValue = data[dateKeys[0]];
+          
+          // Create normalized data points for all days in month
+          const chartData = [];
+          let lastKnownValue = initialValue;
+          
+          monthDates.forEach(date => {
+            const dateKey = date.toISOString().split('T')[0];
+            
+            if (data[dateKey] !== undefined) {
+              lastKnownValue = data[dateKey];
+            }
+            
+            // Normalize: subtract initial value so chart starts at 0
+            const normalizedValue = lastKnownValue - initialValue;
+            chartData.push({ x: date, y: normalizedValue });
+          });
+          
+          const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
+          datasets.push({
+            label: platformName,
+            data: chartData,
+            borderColor: platformColors[platform].border,
+            backgroundColor: platformColors[platform].bg,
+            borderWidth: 3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            tension: 0.4,
+            fill: false
+          });
+        });
+        
+        // Create the chart
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = chartId;
+        
+        const header = document.createElement('h3');
+        header.textContent = title;
+        
+        const exportBtn = document.createElement('button');
+        exportBtn.className = 'export-btn';
+        exportBtn.textContent = 'Export';
+        exportBtn.onclick = () => this.exportChart(chartId, title);
+        
+        chartDiv.appendChild(header);
+        chartDiv.appendChild(exportBtn);
+        chartDiv.appendChild(canvas);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        this.chartInstances[chartId] = new Chart(ctx, {
+          type: 'line',
+          data: { datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    return context.dataset.label + ': +' + this.formatNumber(context.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'day',
+                  displayFormats: { day: 'MMM d' }
+                },
+                ticks: { color: '#0f0', font: { family: 'monospace' } },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              },
+              y: {
+                type: 'linear',
+                beginAtZero: true,
+                ticks: {
+                  color: '#0f0',
+                  font: { family: 'monospace' },
+                  callback: (value) => {
+                    return '+' + this.formatNumber(value);
+                  }
+                },
+                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+              }
+            }
+          }
+        });
       },
       
       // Populate week dropdown with current and past 12 weeks
