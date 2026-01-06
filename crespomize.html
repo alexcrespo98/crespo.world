@@ -576,6 +576,130 @@
       <div id="monthlyGraphsContainer" class="hidden">
         <div class="question" id="monthlyGraphsTitle"></div>
         
+        <!-- Test Different Views Section -->
+        <div id="testViewsSection" style="margin: 2em 0; padding: 1.5em; border: 2px solid #0f0; border-radius: 5px; background: #0a0a0a;">
+          <h3 style="color: #0f0; margin-bottom: 1em;">🧪 Test Different Views</h3>
+          <p style="font-size: 0.9em; margin-bottom: 1.5em; opacity: 0.8;">Configure how you want to visualize your data. Changes apply globally to all accounts.</p>
+          
+          <!-- View Configuration Options -->
+          <div id="viewConfigOptions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5em; margin-bottom: 1.5em;">
+            
+            <!-- Display Style Options -->
+            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
+              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">📊 Display Style</h4>
+              <div style="display: flex; flex-direction: column; gap: 0.5em;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="radio" name="displayStyle" value="1" checked onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Standard Grid (default)</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="radio" name="displayStyle" value="2" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Compact Boxes (smaller fonts)</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="radio" name="displayStyle" value="3" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Vertical List</span>
+                </label>
+              </div>
+            </div>
+            
+            <!-- Chart Type Options -->
+            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
+              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">📈 Chart Type</h4>
+              <div style="display: flex; flex-direction: column; gap: 0.5em;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="radio" name="chartType" value="1" checked onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Pie Chart (distribution)</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="radio" name="chartType" value="2" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Doughnut Chart (with center total)</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="radio" name="chartType" value="3" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Bar Chart (horizontal)</span>
+                </label>
+                <label style="display: flex; align-items; cursor: pointer;">
+                  <input type="radio" name="chartType" value="4" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">No Chart (stats only)</span>
+                </label>
+              </div>
+            </div>
+            
+            <!-- Platform Display Options -->
+            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
+              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">🎯 Platform Details</h4>
+              <div style="display: flex; flex-direction: column; gap: 0.5em;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showPlatforms" value="1" checked onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Show Individual Platforms</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showEngagement" value="1" checked onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Show Engagement Metrics</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showPercentages" value="1" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Show Percentages</span>
+                </label>
+              </div>
+            </div>
+            
+            <!-- Metrics to Display -->
+            <div class="config-group" style="border: 1px solid #0f0; padding: 1em; border-radius: 5px;">
+              <h4 style="color: #0f0; margin-bottom: 0.8em; font-size: 1.1em;">📋 Metrics to Show</h4>
+              <div style="display: flex; flex-direction: column; gap: 0.5em;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showFollowers" value="1" checked disabled> 
+                  <span style="margin-left: 0.5em;">Total Followers (always on)</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showLikes" value="1" checked onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Total Likes</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showViews" value="1" checked onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Total Views</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showComments" value="1" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Total Comments</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" name="showShares" value="1" onchange="app.updateViewPreview()"> 
+                  <span style="margin-left: 0.5em;">Total Shares</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Preview Demo Interface -->
+          <div id="viewPreviewDemo" style="margin: 1.5em 0; padding: 1.5em; border: 2px dashed #0f0; border-radius: 5px; background: #050505;">
+            <h4 style="color: #0f0; margin-bottom: 1em; text-align: center;">👁️ Preview</h4>
+            <div id="previewContent"></div>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5em;">
+            <div>
+              <button onclick="app.applyViewConfiguration()" style="background: #0f0; color: #000; font-weight: bold; padding: 0.8em 1.5em;">
+                ✓ Apply Configuration
+              </button>
+              <button onclick="app.resetViewConfiguration()" style="margin-left: 0.5em;">
+                Reset to Default
+              </button>
+            </div>
+            <div style="display: flex; gap: 0.5em; align-items: center;">
+              <input type="text" id="configChoiceString" readonly 
+                style="background: #000; color: #0f0; border: 1px solid #0f0; padding: 0.5em; font-family: monospace; width: 200px; text-align: center;"
+                placeholder="Configuration code">
+              <button onclick="app.copyChoiceString()" title="Copy configuration code">
+                📋 Copy Code
+              </button>
+            </div>
+          </div>
+        </div>
+        
         <!-- Tab Navigation -->
         <div class="monthly-tabs-container">
           <div class="monthly-tabs">
@@ -1204,6 +1328,9 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
         document.getElementById('monthlyGraphsTitle').textContent = `Monthly Analytics: ${monthLabel}`;
+        
+        // Initialize the view preview
+        this.updateViewPreview();
         
         // Switch to default tab (Total Moon Media)
         this.switchMonthlyTab('total');
@@ -5853,6 +5980,309 @@
             this.renderClientMonthlyView(tabName);
           }
         }
+      },
+      
+      // View Configuration State
+      viewConfig: {
+        displayStyle: 1,
+        chartType: 1,
+        showPlatforms: true,
+        showEngagement: true,
+        showPercentages: false,
+        showLikes: true,
+        showViews: true,
+        showComments: false,
+        showShares: false
+      },
+      
+      // Update view preview based on current configuration
+      updateViewPreview() {
+        // Get current selections
+        const displayStyle = document.querySelector('input[name="displayStyle"]:checked')?.value || '1';
+        const chartType = document.querySelector('input[name="chartType"]:checked')?.value || '1';
+        const showPlatforms = document.querySelector('input[name="showPlatforms"]')?.checked || false;
+        const showEngagement = document.querySelector('input[name="showEngagement"]')?.checked || false;
+        const showPercentages = document.querySelector('input[name="showPercentages"]')?.checked || false;
+        const showLikes = document.querySelector('input[name="showLikes"]')?.checked || false;
+        const showViews = document.querySelector('input[name="showViews"]')?.checked || false;
+        const showComments = document.querySelector('input[name="showComments"]')?.checked || false;
+        const showShares = document.querySelector('input[name="showShares"]')?.checked || false;
+        
+        // Update configuration state
+        this.viewConfig = {
+          displayStyle: parseInt(displayStyle),
+          chartType: parseInt(chartType),
+          showPlatforms,
+          showEngagement,
+          showPercentages,
+          showLikes,
+          showViews,
+          showComments,
+          showShares
+        };
+        
+        // Generate choice string
+        const choiceString = [
+          displayStyle,
+          chartType,
+          showPlatforms ? '1' : '0',
+          showEngagement ? '1' : '0',
+          showPercentages ? '1' : '0',
+          showLikes ? '1' : '0',
+          showViews ? '1' : '0',
+          showComments ? '1' : '0',
+          showShares ? '1' : '0'
+        ].join(',');
+        
+        document.getElementById('configChoiceString').value = choiceString;
+        
+        // Render preview
+        this.renderViewPreview();
+      },
+      
+      // Render preview of the configured view
+      renderViewPreview() {
+        const previewContent = document.getElementById('previewContent');
+        if (!previewContent) return;
+        
+        const config = this.viewConfig;
+        
+        // Sample data for preview
+        const sampleData = {
+          totalFollowers: 125400,
+          instagram: 45200,
+          tiktok: 68100,
+          youtube: 12100,
+          likes: 342500,
+          views: 8920000,
+          comments: 12340,
+          shares: 5670
+        };
+        
+        let html = '';
+        
+        // Style based on display style
+        const styleMap = {
+          1: { gridCols: 'auto auto auto', fontSize: '1em', padding: '1em' }, // Standard
+          2: { gridCols: 'auto auto auto auto', fontSize: '0.85em', padding: '0.6em' }, // Compact
+          3: { gridCols: '1fr', fontSize: '1em', padding: '0.8em' } // Vertical
+        };
+        
+        const style = styleMap[config.displayStyle] || styleMap[1];
+        
+        // Section for Total Moon Media
+        html += `<div style="margin-bottom: 2em;">`;
+        html += `<h5 style="color: #0f0; margin-bottom: 1em; text-align: center;">Total Moon Media Preview</h5>`;
+        html += `<div style="display: grid; grid-template-columns: ${style.gridCols}; gap: 0.8em; font-size: ${style.fontSize};">`;
+        
+        // Total Followers (always shown)
+        html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+          <div style="font-size: 0.8em; opacity: 0.8;">TOTAL FOLLOWERS</div>
+          <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.totalFollowers)}</div>
+        </div>`;
+        
+        // Platform breakdown if enabled
+        if (config.showPlatforms) {
+          html += `<div style="border: 1px solid #E1306C; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+            <div style="font-size: 0.8em; opacity: 0.8;">INSTAGRAM</div>
+            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.instagram)}</div>
+            ${config.showPercentages ? `<div style="font-size: 0.75em; opacity: 0.7;">${((sampleData.instagram/sampleData.totalFollowers)*100).toFixed(1)}%</div>` : ''}
+          </div>`;
+          
+          html += `<div style="border: 1px solid #00f2ea; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+            <div style="font-size: 0.8em; opacity: 0.8;">TIKTOK</div>
+            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.tiktok)}</div>
+            ${config.showPercentages ? `<div style="font-size: 0.75em; opacity: 0.7;">${((sampleData.tiktok/sampleData.totalFollowers)*100).toFixed(1)}%</div>` : ''}
+          </div>`;
+          
+          html += `<div style="border: 1px solid #FF0000; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+            <div style="font-size: 0.8em; opacity: 0.8;">YOUTUBE</div>
+            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.youtube)}</div>
+            ${config.showPercentages ? `<div style="font-size: 0.75em; opacity: 0.7;">${((sampleData.youtube/sampleData.totalFollowers)*100).toFixed(1)}%</div>` : ''}
+          </div>`;
+        }
+        
+        // Engagement metrics if enabled
+        if (config.showEngagement) {
+          if (config.showLikes) {
+            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL LIKES</div>
+              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.likes)}</div>
+            </div>`;
+          }
+          
+          if (config.showViews) {
+            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL VIEWS</div>
+              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.views)}</div>
+            </div>`;
+          }
+          
+          if (config.showComments) {
+            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL COMMENTS</div>
+              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.comments)}</div>
+            </div>`;
+          }
+          
+          if (config.showShares) {
+            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+              <div style="font-size: 0.8em; opacity: 0.8;">TOTAL SHARES</div>
+              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(sampleData.shares)}</div>
+            </div>`;
+          }
+        }
+        
+        html += `</div>`; // End grid
+        
+        // Chart preview
+        if (config.chartType !== 4) {
+          const chartTypeNames = {
+            1: 'Pie Chart',
+            2: 'Doughnut Chart (with center total)',
+            3: 'Horizontal Bar Chart'
+          };
+          html += `<div style="margin-top: 1.5em; text-align: center; padding: 2em; border: 1px dashed #0f0; border-radius: 3px; opacity: 0.6;">
+            <div style="font-size: 1em;">📊 ${chartTypeNames[config.chartType]}</div>
+            <div style="font-size: 0.8em; margin-top: 0.5em;">Chart showing platform distribution</div>
+          </div>`;
+        }
+        
+        html += `</div>`; // End Total Moon Media section
+        
+        // Individual Account Preview
+        html += `<div style="margin-top: 2em; padding-top: 1.5em; border-top: 1px solid #0f0;">`;
+        html += `<h5 style="color: #0f0; margin-bottom: 1em; text-align: center;">Individual Account Preview (e.g., popdartsgame)</h5>`;
+        html += `<div style="display: grid; grid-template-columns: ${style.gridCols}; gap: 0.8em; font-size: ${style.fontSize};">`;
+        
+        // Sample individual account data
+        const accountData = {
+          totalFollowers: 45200,
+          instagram: 15200,
+          tiktok: 25000,
+          youtube: 5000,
+          likes: 98500,
+          views: 2450000,
+          comments: 3200,
+          shares: 1250
+        };
+        
+        html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+          <div style="font-size: 0.8em; opacity: 0.8;">TOTAL FOLLOWERS</div>
+          <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.totalFollowers)}</div>
+        </div>`;
+        
+        if (config.showPlatforms) {
+          html += `<div style="border: 1px solid #E1306C; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+            <div style="font-size: 0.8em; opacity: 0.8;">INSTAGRAM</div>
+            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.instagram)}</div>
+          </div>`;
+          
+          html += `<div style="border: 1px solid #00f2ea; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+            <div style="font-size: 0.8em; opacity: 0.8;">TIKTOK</div>
+            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.tiktok)}</div>
+          </div>`;
+          
+          html += `<div style="border: 1px solid #FF0000; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+            <div style="font-size: 0.8em; opacity: 0.8;">YOUTUBE</div>
+            <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.youtube)}</div>
+          </div>`;
+        }
+        
+        if (config.showEngagement) {
+          if (config.showLikes) {
+            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+              <div style="font-size: 0.8em; opacity: 0.8;">LIKES</div>
+              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.likes)}</div>
+            </div>`;
+          }
+          
+          if (config.showViews) {
+            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+              <div style="font-size: 0.8em; opacity: 0.8;">VIEWS</div>
+              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.views)}</div>
+            </div>`;
+          }
+          
+          if (config.showComments) {
+            html += `<div style="border: 1px solid #0f0; padding: ${style.padding}; border-radius: 3px; text-align: center;">
+              <div style="font-size: 0.8em; opacity: 0.8;">COMMENTS</div>
+              <div style="font-size: 1.2em; font-weight: bold; margin-top: 0.3em;">${this.formatNumber(accountData.comments)}</div>
+            </div>`;
+          }
+        }
+        
+        html += `</div></div>`; // End grid and individual section
+        
+        previewContent.innerHTML = html;
+      },
+      
+      // Apply the view configuration
+      applyViewConfiguration() {
+        // Store the configuration
+        localStorage.setItem('monthlyViewConfig', JSON.stringify(this.viewConfig));
+        
+        // Show confirmation
+        alert('✓ Configuration applied! Your settings will be used when viewing analytics.');
+        
+        // Re-render current view if one is active
+        const activeTab = document.querySelector('.monthly-tab.active');
+        if (activeTab) {
+          const tabName = activeTab.getAttribute('data-tab');
+          if (tabName === 'total') {
+            this.renderTotalMoonMediaMonthlyView();
+          } else {
+            this.renderClientMonthlyView(tabName);
+          }
+        }
+      },
+      
+      // Reset view configuration to defaults
+      resetViewConfiguration() {
+        // Reset form inputs
+        document.querySelector('input[name="displayStyle"][value="1"]').checked = true;
+        document.querySelector('input[name="chartType"][value="1"]').checked = true;
+        document.querySelector('input[name="showPlatforms"]').checked = true;
+        document.querySelector('input[name="showEngagement"]').checked = true;
+        document.querySelector('input[name="showPercentages"]').checked = false;
+        document.querySelector('input[name="showLikes"]').checked = true;
+        document.querySelector('input[name="showViews"]').checked = true;
+        document.querySelector('input[name="showComments"]').checked = false;
+        document.querySelector('input[name="showShares"]').checked = false;
+        
+        // Update preview
+        this.updateViewPreview();
+        
+        // Clear stored config
+        localStorage.removeItem('monthlyViewConfig');
+      },
+      
+      // Copy choice string to clipboard
+      copyChoiceString() {
+        const choiceString = document.getElementById('configChoiceString').value;
+        
+        // Create temporary textarea to copy from
+        const textarea = document.createElement('textarea');
+        textarea.value = choiceString;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        // Show confirmation
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.style.background = '#0f0';
+        btn.style.color = '#000';
+        
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.background = '';
+          btn.style.color = '';
+        }, 2000);
       },
       
       // Export monthly stats to clipboard as formatted text
