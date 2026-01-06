@@ -1004,7 +1004,8 @@
         this.populateMonthlyDropdown();
       },
       
-      // Populate month dropdown with December 2024 as default, going back 6-12 months
+      // Populate month dropdown with December 2025 as default
+      // At the start of each month, the previous month becomes available
       populateMonthlyDropdown() {
         const monthlySelect = document.getElementById('monthlyMonthSelect');
         monthlySelect.innerHTML = '<option value="" disabled selected>-- select month --</option>';
@@ -1013,13 +1014,24 @@
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                             'July', 'August', 'September', 'October', 'November', 'December'];
         
-        // Start from December 2024 as the first option, then go back 12 months
-        const startMonth = new Date(2024, 11, 1); // December 2024
+        // Calculate the last completed month (previous month from current date)
+        const lastCompletedMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         
-        // Add December 2024 and previous 11 months (total 12 months)
-        for (let i = 0; i < 12; i++) {
-          const monthDate = new Date(startMonth);
-          monthDate.setMonth(startMonth.getMonth() - i);
+        // Add completed months starting from the most recent
+        // For now (January 2026), this will show December 2025
+        // In February 2026, it will show January 2026 and December 2025, etc.
+        let monthsToShow = 1; // Start with just showing the last completed month
+        
+        // If we're past January, show more historical months (up to 12 months back)
+        if (now.getMonth() > 0 || now.getFullYear() > 2026) {
+          // Calculate how many months since December 2025
+          const monthsSinceDecember2025 = (now.getFullYear() - 2025) * 12 + (now.getMonth() - 11);
+          monthsToShow = Math.min(monthsSinceDecember2025, 12); // Cap at 12 months
+        }
+        
+        for (let i = 0; i < monthsToShow; i++) {
+          const monthDate = new Date(lastCompletedMonth);
+          monthDate.setMonth(lastCompletedMonth.getMonth() - i);
           
           const year = monthDate.getFullYear();
           const month = monthDate.getMonth();
