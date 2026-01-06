@@ -1224,33 +1224,50 @@
           });
         });
         
-        // Display simplified summary statistics
+        // Display summary statistics
         statsContainer.innerHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
+            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
             <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
           </div>
           <div class="stat-card">
-            <h4>INSTAGRAM</h4>
+            <h4>INSTAGRAM FOLLOWERS</h4>
             <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
           </div>
           <div class="stat-card">
-            <h4>TIKTOK</h4>
+            <h4>TIKTOK FOLLOWERS</h4>
             <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
           </div>
           <div class="stat-card">
-            <h4>YOUTUBE</h4>
+            <h4>YOUTUBE SUBSCRIBERS</h4>
             <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL LIKES</h4>
+            <div class="value">${this.formatNumber(totalLikes)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL VIEWS</h4>
+            <div class="value">${this.formatNumber(totalViews)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
           </div>
         `;
         
-        // Create simplified follower growth chart with platform lines + total
-        this.createSimplifiedFollowerGrowthChartForTotal(
+        // Create normalized follower growth chart
+        this.createNormalizedFollowerGrowthChart(
           chartsContainer,
           'Total Moon Media Follower Growth',
           combinedFollowerData,
           this.currentMonthlyStartDate,
-          this.currentMonthlyEndDate
+          this.currentMonthlyEndDate,
+          'total-follower-growth'
         );
       },
       
@@ -1313,35 +1330,81 @@
           }
         });
         
-        // Display simplified summary statistics  
+        // Display summary statistics
         let statsHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM</h4>
+            <h4>INSTAGRAM FOLLOWERS</h4>
             <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
           </div>
           <div class="stat-card">
-            <h4>TIKTOK</h4>
+            <h4>TIKTOK FOLLOWERS</h4>
             <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
           </div>
           <div class="stat-card">
-            <h4>YOUTUBE</h4>
+            <h4>YOUTUBE SUBSCRIBERS</h4>
             <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
           </div>
         `;
         
+        // Add engagement metric cards
+        statsHTML += `
+          <div class="stat-card">
+            <h4>INSTAGRAM LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE LIKES</h4>
+            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE VIEWS</h4>
+            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE COMMENTS</h4>
+            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
+          </div>
+        `;
+        
+        if (totalShares > 0) {
+          statsHTML += `
+            <div class="stat-card">
+              <h4>TOTAL SHARES</h4>
+              <div class="value">${this.formatNumber(totalShares)}</div>
+            </div>
+          `;
+        }
+        
         statsContainer.innerHTML = statsHTML;
         
-        // Create simplified follower growth chart with platform lines + total
-        this.createSimplifiedFollowerGrowthChartForTotal(
+        // Create normalized follower growth chart
+        this.createNormalizedFollowerGrowthChart(
           chartsContainer,
           `${clientName} Follower Growth`,
           combinedFollowerData,
           this.currentMonthlyStartDate,
-          this.currentMonthlyEndDate
+          this.currentMonthlyEndDate,
+          `${clientName}-follower-growth`
         );
       },
       
@@ -1497,207 +1560,6 @@
                   callback: (value) => {
                     return '+' + this.formatNumber(value);
                   }
-                },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
-              }
-            }
-          }
-        });
-      },
-      
-      // Create simplified follower growth chart for total/client views with sum line
-      createSimplifiedFollowerGrowthChartForTotal(container, title, followerData, startDate, endDate) {
-        const chartId = title.toLowerCase().replace(/\s+/g, '-');
-        
-        // Merge data from all platforms and handle date alignment
-        const platformDataMaps = {
-          instagram: new Map(),
-          tiktok: new Map(),
-          youtube: new Map()
-        };
-        
-        const allDates = new Set();
-        
-        // Collect all data points
-        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-          if (followerData[platform] && followerData[platform].length > 0) {
-            followerData[platform].forEach(point => {
-              const dateKey = point.date.toISOString().split('T')[0];
-              allDates.add(dateKey);
-              // Keep the maximum value if there are duplicates
-              if (!platformDataMaps[platform].has(dateKey) || point.followers > platformDataMaps[platform].get(dateKey)) {
-                platformDataMaps[platform].set(dateKey, point.followers);
-              }
-            });
-          }
-        });
-        
-        if (allDates.size === 0) {
-          return; // No data to display
-        }
-        
-        // Create sorted array of all dates
-        const sortedDateKeys = Array.from(allDates).sort();
-        
-        // Build datasets with forward-fill for missing dates
-        const datasets = [];
-        const platformColors = {
-          instagram: '#E1306C',
-          tiktok: '#00f2ea',
-          youtube: '#FF0000'
-        };
-        
-        const platformChartData = {};
-        
-        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-          const dataMap = platformDataMaps[platform];
-          if (dataMap.size === 0) return;
-          
-          const chartData = [];
-          let lastValue = null;
-          
-          sortedDateKeys.forEach(dateKey => {
-            if (dataMap.has(dateKey)) {
-              lastValue = dataMap.get(dateKey);
-            }
-            if (lastValue !== null) {
-              chartData.push({ 
-                x: new Date(dateKey + 'T00:00:00'),
-                y: lastValue 
-              });
-            }
-          });
-          
-          if (chartData.length > 0) {
-            platformChartData[platform] = chartData;
-            datasets.push({
-              label: platform.charAt(0).toUpperCase() + platform.slice(1),
-              data: chartData,
-              borderColor: platformColors[platform],
-              backgroundColor: 'transparent',
-              borderWidth: 2,
-              pointRadius: 2,
-              pointHoverRadius: 4,
-              tension: 0.4
-            });
-          }
-        });
-        
-        // Create sum total dataset
-        const totalData = [];
-        sortedDateKeys.forEach(dateKey => {
-          let total = 0;
-          let hasValue = false;
-          
-          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-            if (platformChartData[platform]) {
-              const point = platformChartData[platform].find(p => 
-                p.x.toISOString().split('T')[0] === dateKey
-              );
-              if (point) {
-                total += point.y;
-                hasValue = true;
-              }
-            }
-          });
-          
-          if (hasValue) {
-            totalData.push({ 
-              x: new Date(dateKey + 'T00:00:00'),
-              y: total 
-            });
-          }
-        });
-        
-        if (totalData.length > 0) {
-          datasets.push({
-            label: 'Total',
-            data: totalData,
-            borderColor: '#0f0',
-            backgroundColor: 'transparent',
-            borderWidth: 3,
-            borderDash: [5, 5],
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            tension: 0.4
-          });
-        }
-        
-        // Create chart div
-        const chartDiv = document.createElement('div');
-        chartDiv.className = 'chart-container';
-        
-        const canvas = document.createElement('canvas');
-        canvas.id = chartId;
-        
-        const header = document.createElement('h3');
-        header.textContent = title;
-        
-        // Add log scale toggle
-        const scaleBadge = document.createElement('span');
-        scaleBadge.className = 'scale-badge inactive';
-        scaleBadge.textContent = 'LINEAR';
-        scaleBadge.setAttribute('data-chart-id', chartId);
-        scaleBadge.onclick = () => this.toggleLogScale(chartId);
-        scaleBadge.style.cssText = 'display: inline-block; background: #333; color: #666; padding: 0.3em 0.6em; border-radius: 3px; font-size: 0.8em; margin-left: 0.5em; font-weight: bold; cursor: pointer; user-select: none;';
-        
-        header.appendChild(scaleBadge);
-        
-        chartDiv.appendChild(header);
-        chartDiv.appendChild(canvas);
-        container.appendChild(chartDiv);
-        
-        const ctx = canvas.getContext('2d');
-        
-        // Create chart
-        this.chartInstances[chartId] = new Chart(ctx, {
-          type: 'line',
-          data: { datasets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            aspectRatio: 2.5,
-            interaction: {
-              mode: 'index',
-              intersect: false,
-            },
-            plugins: {
-              legend: {
-                display: true,
-                labels: {
-                  color: '#0f0',
-                  font: { family: 'monospace', size: 12 }
-                }
-              },
-              tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                titleColor: '#0f0',
-                bodyColor: '#0f0',
-                borderColor: '#0f0',
-                borderWidth: 1,
-                callbacks: {
-                  label: (context) => {
-                    return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
-                  }
-                }
-              }
-            },
-            scales: {
-              x: {
-                type: 'time',
-                time: {
-                  unit: 'day',
-                  displayFormats: { day: 'MMM d' }
-                },
-                ticks: { color: '#0f0', font: { family: 'monospace' } },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
-              },
-              y: {
-                type: 'linear',
-                ticks: {
-                  color: '#0f0',
-                  font: { family: 'monospace' },
-                  callback: (value) => this.formatNumber(value)
                 },
                 grid: { color: 'rgba(0, 255, 0, 0.1)' }
               }
@@ -2529,20 +2391,32 @@
         
         const totalFollowerGrowth = totalFollowersEnd - totalFollowersStart;
         
-        // Render simplified summary statistics
+        // Render summary statistics
         const statsContainer = document.getElementById('monthlyStatsSummary');
         statsContainer.innerHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
+            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
             <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
           </div>
           <div class="stat-card">
-            <h4>FOLLOWER GROWTH</h4>
+            <h4>FOLLOWER GROWTH THIS MONTH</h4>
             <div class="value">${totalFollowerGrowth >= 0 ? '+' : ''}${this.formatNumber(totalFollowerGrowth)}</div>
           </div>
           <div class="stat-card">
-            <h4>POSTS PUBLISHED</h4>
+            <h4>TOTAL POSTS PUBLISHED</h4>
             <div class="value">${totalPosts}</div>
+          </div>
+          <div class="stat-card">
+            <h4>INSTAGRAM GROWTH</h4>
+            <div class="value">${platformTotals.instagram.end - platformTotals.instagram.start >= 0 ? '+' : ''}${this.formatNumber(platformTotals.instagram.end - platformTotals.instagram.start)} (${platformTotals.instagram.accountCount} accounts)</div>
+          </div>
+          <div class="stat-card">
+            <h4>TIKTOK GROWTH</h4>
+            <div class="value">${platformTotals.tiktok.end - platformTotals.tiktok.start >= 0 ? '+' : ''}${this.formatNumber(platformTotals.tiktok.end - platformTotals.tiktok.start)} (${platformTotals.tiktok.accountCount} accounts)</div>
+          </div>
+          <div class="stat-card">
+            <h4>YOUTUBE GROWTH</h4>
+            <div class="value">${platformTotals.youtube.end - platformTotals.youtube.start >= 0 ? '+' : ''}${this.formatNumber(platformTotals.youtube.end - platformTotals.youtube.start)} (${platformTotals.youtube.accountCount} accounts)</div>
           </div>
         `;
         
@@ -2551,8 +2425,14 @@
         this.monthlyMatchedAccounts = matchedAccounts;
         this.monthlyPlatformTotals = platformTotals;
         
-        // Create only the follower growth chart (simplified)
-        this.createMonthlyFollowerGrowthChart(container, accountStats, startDate, endDate);
+        // Create per-account follower growth charts (daily progression throughout the month)
+        this.createMonthlyFollowerGrowthCharts(container, accountStats, startDate, endDate);
+        
+        // Create platform breakdown chart
+        this.createMonthlyPlatformBreakdownChart(container, platformTotals);
+        
+        // Create content performance charts
+        this.createMonthlyContentPerformanceCharts(container, accountStats, startDate, endDate);
       },
       
       // Get account monthly stats (followers at start/end of month, posts published)
@@ -2610,206 +2490,7 @@
         };
       },
       
-      // Create simplified monthly follower growth chart with sum total line
-      createMonthlyFollowerGrowthChart(container, accountStats, startDate, endDate) {
-        // For each account, create a chart showing follower growth with all platforms + total
-        accountStats.forEach(account => {
-          // Collect daily follower data from all platforms
-          const platformData = {
-            instagram: [],
-            tiktok: [],
-            youtube: []
-          };
-          
-          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-            if (account[platform] && account[platform].dailyFollowerData) {
-              platformData[platform] = account[platform].dailyFollowerData;
-            }
-          });
-          
-          // Check if there's any data
-          const hasData = Object.values(platformData).some(data => data.length > 0);
-          if (!hasData) return;
-          
-          // Create chart div
-          const chartDiv = document.createElement('div');
-          chartDiv.className = 'chart-container';
-          
-          const canvas = document.createElement('canvas');
-          const chartId = `monthly-follower-${account.name}`;
-          canvas.id = chartId;
-          
-          const header = document.createElement('h3');
-          header.textContent = `@${account.name} - Follower Growth`;
-          
-          // Add log scale toggle
-          const scaleBadge = document.createElement('span');
-          scaleBadge.className = 'scale-badge inactive';
-          scaleBadge.textContent = 'LINEAR';
-          scaleBadge.setAttribute('data-chart-id', chartId);
-          scaleBadge.onclick = () => this.toggleLogScale(chartId);
-          scaleBadge.style.cssText = 'display: inline-block; background: #333; color: #666; padding: 0.3em 0.6em; border-radius: 3px; font-size: 0.8em; margin-left: 0.5em; font-weight: bold; cursor: pointer; user-select: none;';
-          
-          header.appendChild(scaleBadge);
-          
-          chartDiv.appendChild(header);
-          chartDiv.appendChild(canvas);
-          container.appendChild(chartDiv);
-          
-          const ctx = canvas.getContext('2d');
-          
-          // Create datasets
-          const datasets = [];
-          const platformColors = {
-            instagram: '#E1306C',
-            tiktok: '#00f2ea',
-            youtube: '#FF0000'
-          };
-          
-          // Normalize all data to start from the same date
-          const allDates = new Set();
-          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-            platformData[platform].forEach(d => {
-              allDates.add(d.date.getTime());
-            });
-          });
-          
-          const sortedDates = Array.from(allDates).sort((a, b) => a - b).map(t => new Date(t));
-          
-          // Create datasets for each platform
-          const platformDatasets = {};
-          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-            if (platformData[platform].length > 0) {
-              // Create a map of date to followers
-              const dataMap = new Map();
-              platformData[platform].forEach(d => {
-                const dateKey = d.date.toISOString().split('T')[0];
-                dataMap.set(dateKey, d.followers);
-              });
-              
-              // Fill in missing dates with last known value
-              const chartData = [];
-              let lastValue = null;
-              sortedDates.forEach(date => {
-                const dateKey = date.toISOString().split('T')[0];
-                if (dataMap.has(dateKey)) {
-                  lastValue = dataMap.get(dateKey);
-                }
-                if (lastValue !== null) {
-                  chartData.push({ x: date, y: lastValue });
-                }
-              });
-              
-              if (chartData.length > 0) {
-                platformDatasets[platform] = chartData;
-                datasets.push({
-                  label: platform.charAt(0).toUpperCase() + platform.slice(1),
-                  data: chartData,
-                  borderColor: platformColors[platform],
-                  backgroundColor: 'transparent',
-                  borderWidth: 2,
-                  pointRadius: 2,
-                  pointHoverRadius: 4,
-                  tension: 0.4
-                });
-              }
-            }
-          });
-          
-          // Create sum total dataset
-          if (sortedDates.length > 0) {
-            const totalData = [];
-            sortedDates.forEach(date => {
-              let total = 0;
-              let hasValue = false;
-              ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-                if (platformDatasets[platform]) {
-                  const point = platformDatasets[platform].find(p => p.x.getTime() === date.getTime());
-                  if (point) {
-                    total += point.y;
-                    hasValue = true;
-                  }
-                }
-              });
-              if (hasValue) {
-                totalData.push({ x: date, y: total });
-              }
-            });
-            
-            if (totalData.length > 0) {
-              datasets.push({
-                label: 'Total',
-                data: totalData,
-                borderColor: '#0f0',
-                backgroundColor: 'transparent',
-                borderWidth: 3,
-                borderDash: [5, 5],
-                pointRadius: 3,
-                pointHoverRadius: 5,
-                tension: 0.4
-              });
-            }
-          }
-          
-          // Create chart
-          this.chartInstances[chartId] = new Chart(ctx, {
-            type: 'line',
-            data: { datasets },
-            options: {
-              responsive: true,
-              maintainAspectRatio: true,
-              aspectRatio: 2.5,
-              interaction: {
-                mode: 'index',
-                intersect: false,
-              },
-              plugins: {
-                legend: {
-                  display: true,
-                  labels: {
-                    color: '#0f0',
-                    font: { family: 'monospace', size: 12 }
-                  }
-                },
-                tooltip: {
-                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                  titleColor: '#0f0',
-                  bodyColor: '#0f0',
-                  borderColor: '#0f0',
-                  borderWidth: 1,
-                  callbacks: {
-                    label: (context) => {
-                      return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
-                    }
-                  }
-                }
-              },
-              scales: {
-                x: {
-                  type: 'time',
-                  time: {
-                    unit: 'day',
-                    displayFormats: { day: 'MMM d' }
-                  },
-                  ticks: { color: '#0f0', font: { family: 'monospace' } },
-                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
-                },
-                y: {
-                  type: 'linear',
-                  ticks: {
-                    color: '#0f0',
-                    font: { family: 'monospace' },
-                    callback: (value) => this.formatNumber(value)
-                  },
-                  grid: { color: 'rgba(0, 255, 0, 0.1)' }
-                }
-              }
-            }
-          });
-        });
-      },
-      
-      // Old function kept for reference (not used)
+      // Create per-account follower growth charts showing daily progression
       createMonthlyFollowerGrowthCharts(container, accountStats, startDate, endDate) {
         accountStats.forEach(account => {
           // Combine daily follower data from all platforms for this account
