@@ -44,14 +44,16 @@ ACCOUNTS_TO_TRACK = [
 ]
 
 INSTAGRAM_COOKIES = [
-    {'name': 'datr',       'value': 'FI9FaThKc4gAvqKXjFdg_hY_', 'domain': '.instagram.com'},
+    {'name': 'ps_n', 'value': '1', 'domain': '.instagram.com'},
+    {'name': 'datr', 'value': 'FI9FaThKc4gAvqKXjFdg_hY_', 'domain': '.instagram.com'},
     {'name': 'ds_user_id', 'value': '8438482535', 'domain': '.instagram.com'},
-    {'name': 'csrftoken',  'value': 'P_rsl9ZgVj-izzrcPMLqzX', 'domain': '.instagram.com'},
-    {'name': 'ig_did',     'value': '10205D5F-E3A4-4DA9-A0D3-A3E7B4AFB1B7', 'domain': '.instagram.com'},
-    {'name': 'wd',         'value': '834x683', 'domain': '.instagram.com'},
-    {'name': 'mid',        'value': 'aUWPFAAEAAFwngF_FtmARPDnx5sI', 'domain': '.instagram.com'},
-    {'name': 'sessionid',  'value': '8438482535%3AnDuZdWBoonkF8h%3A18%3AAYivLFo5iOWpnhVFyu5BiiFk7Ps6Sh-1JXWqic44jQ', 'domain': '.instagram.com'},
-    {'name': 'rur',        'value': '"NHA\0548438482535\0541797702323:01fe2d648012ec3d0fdc62c16270498e533bf8a37cb1e62b7b9018ca03100e8405304216"', 'domain': '.instagram.com'},
+    {'name': 'csrftoken', 'value': 'P_rsl9ZgVj-izzrcPMLqzX', 'domain': '.instagram.com'},
+    {'name': 'ig_did', 'value': '10205D5F-E3A4-4DA9-A0D3-A3E7B4AFB1B7', 'domain': '.instagram.com'},
+    {'name': 'ps_l', 'value': '1', 'domain': '.instagram.com'},
+    {'name': 'wd', 'value': '1213x735', 'domain': '.instagram.com'},
+    {'name': 'mid', 'value': 'aUWPFAAEAAFwngF_FtmARPDnx5sI', 'domain': '.instagram.com'},
+    {'name': 'sessionid', 'value': '8438482535%3AnDuZdWBoonkF8h%3A18%3AAYivLFo5iOWpnhVFyu5BiiFk7Ps6Sh-1JXWqic44jQ', 'domain': '.instagram.com'},
+    {'name': 'rur', 'value': '"NHA\0548438482535\0541799428229:01fea87379c6697235bb3da53934c61a0f38f341449dc5a4d77edfe1d3a40d016cf34659"', 'domain': '.instagram.com'},
 ]
 
 # Login credentials for Instagram
@@ -216,31 +218,24 @@ class InstagramScraper:
     def parse_firefox_cookies(self, cookie_text):
         """
         Parse Firefox/Netscape cookie format into Selenium cookie format.
-        
-        Firefox format (tab-separated):
-        # domain  hostOnly  path  secure  expiry  name  value
-        .instagram.com	TRUE	/	TRUE	1798685826	csrftoken	OXAlPc0rRh5bMebjElbOOZxKODDOTYJ3
+        Improved to handle #HttpOnly_ prefix and comments.
         """
         cookies = []
         lines = cookie_text.strip().split('\n')
         
         for line in lines:
-            # Skip comments and empty lines
+            # Skip pure comment lines and empty lines
             line = line.strip()
-            if not line or line.startswith('#'):
-                # But still check if it's a comment with actual cookie data (HttpOnly cookies)
-                if line.startswith('#HttpOnly_'):
-                    line = line.replace('#HttpOnly_', '')
-                else:
-                    continue
+            if not line or (line.startswith('#') and not line.startswith('#HttpOnly_')):
+                continue
+            
+            # Handle HttpOnly cookies
+            if line.startswith('#HttpOnly_'):
+                line = line.replace('#HttpOnly_', '')
             
             parts = line.split('\t')
             if len(parts) >= 7:
                 domain = parts[0]
-                # hostOnly = parts[1]  # Not used in Selenium
-                # path = parts[2]
-                # secure = parts[3]
-                # expiry = parts[4]
                 name = parts[5]
                 value = parts[6]
                 
@@ -249,7 +244,7 @@ class InstagramScraper:
                     cookie = {
                         'name': name,
                         'value': value,
-                        'domain': '.instagram.com'  # Normalize domain
+                        'domain': '.instagram.com'
                     }
                     cookies.append(cookie)
         
@@ -4001,6 +3996,18 @@ class InstagramScraper:
                 print(f"📱 [{idx}/{len(accounts)}] Processing @{username}")
                 print("="*70)
                 
+                # Validate driver session before each account
+                try:
+                    # Test if session is still valid
+                    self.driver.current_url
+                except Exception as session_error:
+                    print(f"  ⚠️  Driver session invalid, recreating driver...")
+                    try:
+                        self.driver.quit()
+                    except:
+                        pass
+                    self.driver = self.setup_driver(browser=browser_choice)
+                
                 try:
                     reels_data, followers, pinned_count = self.scrape_instagram_account(
                         self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=False
@@ -4039,14 +4046,66 @@ class InstagramScraper:
                         print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'}")
                 
                 except Exception as e:
-                    print(f"\n  ❌ Error with @{username}: {e}")
-                    traceback.print_exc()
-                    scrape_results[username] = {
-                        'reels_count': 0,
-                        'followers': None,
-                        'pinned_count': 0,
-                        'deep_scrape': deep_scrape
-                    }
+                    error_msg = str(e)
+                    if "invalid session id" in error_msg.lower():
+                        print(f"\n  ❌ Browser session crashed for @{username}")
+                        print(f"  🔄 Attempting to recover...")
+                        
+                        # Try to recreate driver
+                        try:
+                            self.driver.quit()
+                        except:
+                            pass
+                        
+                        self.driver = self.setup_driver(browser=browser_choice)
+                        
+                        # Offer to retry this account
+                        retry = input(f"\n  Retry @{username}? (y/n): ").strip().lower()
+                        if retry == 'y':
+                            try:
+                                reels_data, followers, pinned_count = self.scrape_instagram_account(
+                                    self.driver, username, max_reels=max_reels or 100, deep_scrape=deep_scrape, deep_deep=deep_deep, test_mode=False
+                                )
+                                
+                                scrape_results[username] = {
+                                    'reels_count': len(reels_data),
+                                    'followers': followers,
+                                    'pinned_count': pinned_count,
+                                    'deep_scrape': deep_scrape
+                                }
+                                
+                                existing_df = existing_data.get(username, pd.DataFrame())
+                                df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
+                                all_account_data[username] = df
+                                self.current_data = all_account_data
+                                
+                                print(f"\n  ✅ @{username} complete!")
+                                print(f"  👥 Followers: {followers:,}" if followers else "  👥 Followers: N/A")
+                                if deep_scrape:
+                                    if reels_data:
+                                        oldest_date = None
+                                        for reel in reversed(reels_data):
+                                            if reel.get('date_timestamp'):
+                                                oldest_date = reel['date_timestamp']
+                                                break
+                                        if oldest_date:
+                                            days_back = (datetime.now() - oldest_date).days
+                                            print(f"  🎬 Reels: {len(reels_data)} (spanning ~{days_back} days)")
+                                        else:
+                                            print(f"  🎬 Reels: {len(reels_data)}")
+                                    else:
+                                        print(f"  🎬 Reels: 0")
+                                else:
+                                    print(f"  🎬 Reels: {len(reels_data)}/{expected_reels if expected_reels else 'N/A'}")
+                            except Exception as retry_error:
+                                print(f"\n  ❌ Retry failed: {retry_error}")
+                                scrape_results[username] = {'reels_count': 0, 'followers': None, 'pinned_count': 0, 'deep_scrape': deep_scrape}
+                        else:
+                            scrape_results[username] = {'reels_count': 0, 'followers': None, 'pinned_count': 0, 'deep_scrape': deep_scrape}
+                    else:
+                        print(f"\n  ❌ Error with @{username}: {e}")
+                        traceback.print_exc()
+                        scrape_results[username] = {'reels_count': 0, 'followers': None, 'pinned_count': 0, 'deep_scrape': deep_scrape}
                     continue
             
             # Check if we got NO data at all (possible cookie expiration)
@@ -4066,7 +4125,7 @@ class InstagramScraper:
                     print("="*70)
                     
                     # Prompt for new cookies
-                    success, self.driver = self.handle_cookie_update(self.driver)
+                    success, self.driver = self.restart_with_new_cookies(self.driver)
                     
                     if success:
                         print("\n✅ Cookies updated! Retrying scrape...")
