@@ -70,7 +70,8 @@ class MasterScraper:
                     'instagram_posts': 100,
                     'tiktok_posts': 100,
                     'youtube_posts': None,  # None means all videos
-                    'test_mode': False
+                    'test_mode': False,
+                    'test_account': None
                 }
                     
             elif choice == '2':
@@ -99,7 +100,8 @@ class MasterScraper:
                     'instagram_posts': instagram_posts,
                     'tiktok_posts': tiktok_posts,
                     'youtube_posts': youtube_posts,
-                    'test_mode': False
+                    'test_mode': False,
+                    'test_account': None
                 }
                         
             elif choice == '3':
@@ -108,7 +110,8 @@ class MasterScraper:
                     'instagram_posts': 30,
                     'tiktok_posts': 30,
                     'youtube_posts': 30,
-                    'test_mode': True
+                    'test_mode': True,
+                    'test_account': 'popdartsgame'  # Only test this account
                 }
                 
             else:
@@ -166,13 +169,23 @@ class MasterScraper:
             max_posts = config['instagram_posts']
             
             if config['test_mode']:
-                print(f"\n🧪 TEST MODE: Will scrape {max_posts} posts per account")
-                print("   Note: In test mode, you can interrupt after seeing initial results")
+                print(f"\n🧪 TEST MODE: Scraping {max_posts} posts from @{config['test_account']}")
+                # Temporarily replace ACCOUNTS_TO_TRACK with just the test account
+                import instagram_scraper
+                original_accounts = instagram_scraper.ACCOUNTS_TO_TRACK[:]
+                instagram_scraper.ACCOUNTS_TO_TRACK = [config['test_account']]
+                try:
+                    scraper.run(max_posts=max_posts, auto_mode=True, auto_retry=auto_retry)
+                finally:
+                    # Restore original accounts
+                    instagram_scraper.ACCOUNTS_TO_TRACK = original_accounts
             else:
-                print(f"\n📊 Scraping {max_posts} posts per account")
-            
-            # Pass parameters to scraper - it will handle everything
-            scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
+                if max_posts:
+                    print(f"\n📊 Scraping {max_posts} posts per account")
+                else:
+                    print(f"\n📊 Scraping all available posts per account")
+                # Pass parameters to scraper - it will handle everything
+                scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -193,15 +206,23 @@ class MasterScraper:
             max_posts = config['youtube_posts']
             
             if config['test_mode']:
-                print(f"\n🧪 TEST MODE: Will scrape {max_posts} videos per channel")
-                print("   Note: In test mode, you can interrupt after seeing initial results")
-            elif max_posts is None:
-                print("\n📊 Scraping ALL videos from each channel")
+                print(f"\n🧪 TEST MODE: Scraping {max_posts} videos from @{config['test_account']}")
+                # Temporarily replace ACCOUNTS_TO_TRACK with just the test account
+                import youtube_scraper
+                original_accounts = youtube_scraper.ACCOUNTS_TO_TRACK[:]
+                youtube_scraper.ACCOUNTS_TO_TRACK = [config['test_account']]
+                try:
+                    scraper.run(max_posts=max_posts, auto_mode=True, auto_retry=auto_retry)
+                finally:
+                    # Restore original accounts
+                    youtube_scraper.ACCOUNTS_TO_TRACK = original_accounts
             else:
-                print(f"\n📊 Scraping {max_posts} videos per channel")
-            
-            # Pass parameters to scraper - it will handle everything
-            scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
+                if max_posts is None:
+                    print("\n📊 Scraping ALL videos from each channel")
+                else:
+                    print(f"\n📊 Scraping {max_posts} videos per channel")
+                # Pass parameters to scraper - it will handle everything
+                scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -222,13 +243,15 @@ class MasterScraper:
             max_posts = config['tiktok_posts']
             
             if config['test_mode']:
-                print(f"\n🧪 TEST MODE: Will scrape {max_posts} posts per account")
-                print("   Note: In test mode, you can interrupt after seeing initial results")
+                print(f"\n🧪 TEST MODE: Scraping {max_posts} posts from @{config['test_account']}")
+                # For TikTok, the scraper auto-detects accounts from Excel
+                # In test mode, it already has built-in test mode that scrapes popdartsgame
+                # We can pass max_posts directly
+                scraper.run(max_posts=max_posts, auto_mode=True, auto_retry=auto_retry)
             else:
                 print(f"\n📊 Scraping {max_posts} posts per account")
-            
-            # Pass parameters to scraper - it will handle everything
-            scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
+                # Pass parameters to scraper - it will handle everything
+                scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -372,7 +395,8 @@ def main():
                     'instagram_posts': 100,
                     'tiktok_posts': 100,
                     'youtube_posts': None,  # All videos
-                    'test_mode': False
+                    'test_mode': False,
+                    'test_account': None
                 }
             elif args.mode == 'test':
                 config = {
@@ -380,7 +404,8 @@ def main():
                     'instagram_posts': 30,
                     'tiktok_posts': 30,
                     'youtube_posts': 30,
-                    'test_mode': True
+                    'test_mode': True,
+                    'test_account': 'popdartsgame'  # Only test this account
                 }
             elif args.mode == 'custom' or args.non_interactive:
                 # Parse youtube_posts argument
@@ -401,23 +426,34 @@ def main():
                     'instagram_posts': args.instagram_posts,
                     'tiktok_posts': args.tiktok_posts,
                     'youtube_posts': youtube_posts,
-                    'test_mode': False
+                    'test_mode': False,
+                    'test_account': None
                 }
             
-            platforms = {
-                'instagram': args.platform in ['all', 'instagram'],
-                'youtube': args.platform in ['all', 'youtube'],
-                'tiktok': args.platform in ['all', 'tiktok']
-            }
+            # For test mode, always test all platforms
+            if config['mode'] == 'test':
+                platforms = {
+                    'instagram': True,
+                    'youtube': True,
+                    'tiktok': True
+                }
+            else:
+                platforms = {
+                    'instagram': args.platform in ['all', 'instagram'],
+                    'youtube': args.platform in ['all', 'youtube'],
+                    'tiktok': args.platform in ['all', 'tiktok']
+                }
             
             print("\n" + "="*70)
             print("🚀 MASTER SOCIAL MEDIA SCRAPER v2.0")
             print("="*70)
             print(f"\nMode: {config['mode']}")
-            print(f"Platform: {args.platform}")
             if config['mode'] == 'test':
-                print(f"Posts: 30 per account (test mode)")
+                print(f"Testing account: @{config['test_account']}")
+                print(f"Posts per platform: 30")
+                print(f"Platforms: All (Instagram, YouTube, TikTok)")
             else:
+                print(f"Platform: {args.platform}")
                 print(f"Instagram: {config['instagram_posts']} posts")
                 print(f"TikTok: {config['tiktok_posts']} posts")
                 print(f"YouTube: {config['youtube_posts'] if config['youtube_posts'] else 'ALL'} videos")

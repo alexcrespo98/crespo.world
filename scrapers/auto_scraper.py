@@ -62,7 +62,7 @@ class AutoScraper:
     def run_scrape_job(self):
         """Execute the scraping job"""
         logging.info("="*70)
-        logging.info("Starting automated scrape job")
+        logging.info("🚀 Starting automated scrape job")
         logging.info("="*70)
         
         try:
@@ -81,20 +81,15 @@ class AutoScraper:
             ]
             
             logging.info(f"Running command: {' '.join(cmd)}")
+            logging.info("-" * 70)
             
+            # Run without capturing output so we can see progress in real-time
             result = subprocess.run(
                 cmd,
-                capture_output=True,
-                text=True,
                 cwd=str(script_dir)
             )
             
-            # Log output
-            if result.stdout:
-                logging.info(f"STDOUT:\n{result.stdout}")
-            if result.stderr:
-                logging.warning(f"STDERR:\n{result.stderr}")
-            
+            logging.info("-" * 70)
             if result.returncode == 0:
                 logging.info("✅ Scrape job completed successfully")
             else:
