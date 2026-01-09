@@ -317,17 +317,17 @@ class MasterScraper:
         
         # Run each selected platform's scraper
         if platforms.get('instagram'):
-            results['instagram'] = self.run_instagram_scraper(config)
+            results['instagram'] = self.run_instagram_scraper(config, auto_mode=False, auto_retry=False)
             if self.interrupted:
                 return
         
         if platforms.get('youtube'):
-            results['youtube'] = self.run_youtube_scraper(config)
+            results['youtube'] = self.run_youtube_scraper(config, auto_mode=False, auto_retry=False)
             if self.interrupted:
                 return
         
         if platforms.get('tiktok'):
-            results['tiktok'] = self.run_tiktok_scraper(config)
+            results['tiktok'] = self.run_tiktok_scraper(config, auto_mode=False, auto_retry=False)
             if self.interrupted:
                 return
         
@@ -386,8 +386,10 @@ def main():
     scraper = MasterScraper()
     
     try:
-        # If command line args provided or non-interactive mode, use them; otherwise use interactive mode
-        if args.mode or args.non_interactive:
+        # Use command-line mode if any CLI args provided
+        use_cli_mode = (args.mode is not None) or args.non_interactive
+        
+        if use_cli_mode:
             # Build config from command line args
             if args.mode == 'default':
                 config = {
