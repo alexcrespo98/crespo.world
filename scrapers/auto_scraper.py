@@ -22,12 +22,9 @@ PID_FILE = "auto_scraper.pid"
 
 # Configuration
 SCRAPE_CONFIG = {
-    'instagram_posts': 100,
-    'tiktok_posts': 100,
-    'youtube_deep': True,  # Get all videos
-    'auto_retry': True,
-    'schedule_hour': 6,  # 6 AM
-    'schedule_minute': 0
+    'schedule_hour': 8,  # 8 AM
+    'schedule_minute': 0,
+    'auto_retry': True
 }
 
 class AutoScraper:
@@ -65,7 +62,7 @@ class AutoScraper:
     def run_scrape_job(self):
         """Execute the scraping job"""
         logging.info("="*70)
-        logging.info("Starting automated scrape job")
+        logging.info("🚀 Starting automated scrape job")
         logging.info("="*70)
         
         try:
@@ -73,30 +70,26 @@ class AutoScraper:
             script_dir = Path(__file__).parent
             master_script = script_dir / "master_scraper.py"
             
-            # Run master scraper with non-interactive mode
+            # Run master scraper with default mode
             cmd = [
                 sys.executable,
                 str(master_script),
-                "--non-interactive",
+                "--mode", "default",
                 "--platform", "all",
-                "--auto-retry-followers"
+                "--non-interactive",
+                "--auto-retry-once"
             ]
             
             logging.info(f"Running command: {' '.join(cmd)}")
+            logging.info("-" * 70)
             
+            # Run without capturing output so we can see progress in real-time
             result = subprocess.run(
                 cmd,
-                capture_output=True,
-                text=True,
                 cwd=str(script_dir)
             )
             
-            # Log output
-            if result.stdout:
-                logging.info(f"STDOUT:\n{result.stdout}")
-            if result.stderr:
-                logging.warning(f"STDERR:\n{result.stderr}")
-            
+            logging.info("-" * 70)
             if result.returncode == 0:
                 logging.info("✅ Scrape job completed successfully")
             else:
