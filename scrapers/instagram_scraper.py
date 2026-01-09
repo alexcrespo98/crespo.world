@@ -38,10 +38,20 @@ ACCOUNTS_TO_TRACK = [
     "bucketgolfgame",
     "playbattlegolf",
     "flinggolf",
-    "golfpong.games",
+    "golfponggames",  # Changed from "golfpong.games" - scrapes this account
     "discgogames",
     "low_tide_golf"
 ]
+
+# Mapping of actual Instagram handles to Excel sheet names
+# This allows us to scrape from one handle but save to a different sheet name
+ACCOUNT_SHEET_NAME_MAPPING = {
+    "golfponggames": "golfpong.games",  # Scrape from golfponggames, save to golfpong.games sheet
+}
+
+def get_sheet_name_for_account(username):
+    """Get the Excel sheet name for an account, applying any mappings"""
+    return ACCOUNT_SHEET_NAME_MAPPING.get(username, username)
 
 INSTAGRAM_COOKIES = [
     {'name': 'datr',       'value': 'FI9FaThKc4gAvqKXjFdg_hY_', 'domain': '.instagram.com'},
@@ -124,7 +134,7 @@ class InstagramScraper:
             with pd.ExcelWriter(backup_name, engine='openpyxl') as writer:
                 # Save completed account data
                 for username, df in self.current_data.items():
-                    sheet_name = username[:31]
+                    sheet_name = get_sheet_name_for_account(username)[:31]
                     df.to_excel(writer, sheet_name=sheet_name)
                     has_data = True
                 
@@ -132,7 +142,8 @@ class InstagramScraper:
                 if self.partial_scrape_data and self.current_username:
                     partial_df = pd.DataFrame(self.partial_scrape_data.get('hover_data', []))
                     if not partial_df.empty:
-                        sheet_name = f"{self.current_username[:25]}_PARTIAL"
+                        # Use sheet name mapping for partial data too
+                        sheet_name = f"{get_sheet_name_for_account(self.current_username)[:25]}_PARTIAL"
                         partial_df.to_excel(writer, sheet_name=sheet_name)
                         has_data = True
                         print(f"  📊 Saved {len(partial_df)} partial reels for @{self.current_username}")
@@ -2376,7 +2387,8 @@ class InstagramScraper:
         import pandas as pd
         with pd.ExcelWriter(OUTPUT_EXCEL, engine='openpyxl') as writer:
             for username, df in all_account_data.items():
-                sheet_name = username[:31]
+                # Use mapping to get the correct sheet name
+                sheet_name = get_sheet_name_for_account(username)[:31]
                 df.to_excel(writer, sheet_name=sheet_name)
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
 
@@ -2403,10 +2415,12 @@ class InstagramScraper:
         issues = []
         
         for username, new_df in new_data.items():
-            if username not in existing_data:
+            # Use sheet name mapping to check against existing data
+            sheet_name = get_sheet_name_for_account(username)
+            if sheet_name not in existing_data:
                 continue  # New account, safe to upload
             
-            old_df = existing_data[username]
+            old_df = existing_data[sheet_name]
             
             # Get the most recent column from existing data (before current scrape)
             if old_df.empty or len(old_df.columns) == 0:
@@ -3911,7 +3925,7 @@ class InstagramScraper:
         test_excel_path = "test.xlsx"
         try:
             with pd.ExcelWriter(test_excel_path, engine='openpyxl') as writer:
-                sheet_name = username[:31]
+                sheet_name = get_sheet_name_for_account(username)[:31]
                 df.to_excel(writer, sheet_name=sheet_name)
             print(f"   ✅ Saved: {test_excel_path}")
         except Exception as e:
@@ -4136,7 +4150,9 @@ class InstagramScraper:
                     }
                     
                     # Store current data for backup
-                    existing_df = existing_data.get(username, pd.DataFrame())
+                    # Use sheet name mapping to get existing data
+                    sheet_name = get_sheet_name_for_account(username)
+                    existing_df = existing_data.get(sheet_name, pd.DataFrame())
                     df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
                     all_account_data[username] = df
                     self.current_data = all_account_data
@@ -4169,11 +4185,11 @@ class InstagramScraper:
                     print(f"     - Error type: {type(e).__name__}")
                     print(f"     - Error message: {str(e)}")
                     
-                    if username == "golfpong.games":
-                        print(f"     - ⚠️  GOLFPONG.GAMES SPECIFIC DEBUG:")
-                        print(f"     - This account has been failing for a month")
+                    if username == "golfponggames":
+                        print(f"     - ⚠️  GOLFPONGGAMES SPECIFIC DEBUG:")
+                        print(f"     - This account has been failing (was previously tracked as golfpong.games)")
                         print(f"     - Check if account exists and is public")
-                        print(f"     - Try accessing https://www.instagram.com/golfpong.games manually")
+                        print(f"     - Try accessing https://www.instagram.com/golfponggames manually")
                     
                     scrape_results[username] = {
                         'reels_count': 0,
@@ -4237,7 +4253,7 @@ class InstagramScraper:
                                     'deep_scrape': deep_scrape
                                 }
                                 
-                                existing_df = existing_data.get(username, pd.DataFrame())
+                                existing_df = existing_data.get(get_sheet_name_for_account(username), pd.DataFrame())
                                 df = self.create_dataframe_for_account(reels_data, followers, timestamp_col, existing_df)
                                 all_account_data[username] = df
                                 self.current_data = all_account_data
