@@ -126,22 +126,26 @@ class InstagramScraper:
     def cleanup_chrome_data(self):
         """Clean up temporary Chrome user data directory"""
         if hasattr(self, 'user_data_dir') and self.user_data_dir:
-            try:
-                if os.path.exists(self.user_data_dir):
-                    shutil.rmtree(self.user_data_dir, ignore_errors=False)
-                    print(f"  🧹 Cleaned up Chrome data: {self.user_data_dir}")
-            except Exception as e:
-                # Don't fail on cleanup errors
-                pass
+            if os.path.exists(self.user_data_dir):
+                try:
+                    shutil.rmtree(self.user_data_dir, ignore_errors=True)
+                    # Only print if directory was successfully removed
+                    if not os.path.exists(self.user_data_dir):
+                        print(f"  🧹 Cleaned up Chrome data: {self.user_data_dir}")
+                except Exception:
+                    # Don't fail on cleanup errors
+                    pass
         
         if hasattr(self, 'incognito_user_data_dir') and self.incognito_user_data_dir:
-            try:
-                if os.path.exists(self.incognito_user_data_dir):
-                    shutil.rmtree(self.incognito_user_data_dir, ignore_errors=False)
-                    print(f"  🧹 Cleaned up incognito Chrome data: {self.incognito_user_data_dir}")
-            except Exception as e:
-                # Don't fail on cleanup errors
-                pass
+            if os.path.exists(self.incognito_user_data_dir):
+                try:
+                    shutil.rmtree(self.incognito_user_data_dir, ignore_errors=True)
+                    # Only print if directory was successfully removed
+                    if not os.path.exists(self.incognito_user_data_dir):
+                        print(f"  🧹 Cleaned up incognito Chrome data: {self.incognito_user_data_dir}")
+                except Exception:
+                    # Don't fail on cleanup errors
+                    pass
     
     def save_backup(self):
         """Save backup file with current progress including partial scrape data"""
