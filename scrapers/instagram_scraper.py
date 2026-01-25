@@ -128,7 +128,7 @@ class InstagramScraper:
         if hasattr(self, 'user_data_dir') and self.user_data_dir:
             try:
                 if os.path.exists(self.user_data_dir):
-                    shutil.rmtree(self.user_data_dir, ignore_errors=True)
+                    shutil.rmtree(self.user_data_dir, ignore_errors=False)
                     print(f"  🧹 Cleaned up Chrome data: {self.user_data_dir}")
             except Exception as e:
                 # Don't fail on cleanup errors
@@ -137,8 +137,10 @@ class InstagramScraper:
         if hasattr(self, 'incognito_user_data_dir') and self.incognito_user_data_dir:
             try:
                 if os.path.exists(self.incognito_user_data_dir):
-                    shutil.rmtree(self.incognito_user_data_dir, ignore_errors=True)
+                    shutil.rmtree(self.incognito_user_data_dir, ignore_errors=False)
+                    print(f"  🧹 Cleaned up incognito Chrome data: {self.incognito_user_data_dir}")
             except Exception as e:
+                # Don't fail on cleanup errors
                 pass
     
     def save_backup(self):
