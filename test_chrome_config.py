@@ -65,9 +65,10 @@ def test_chrome_options_configuration():
     print("\n✓ Test 7: Checking unique user data directory creation...")
     assert 'timestamp = int(time.time())' in code, "Missing timestamp generation"
     assert 'random_id = random.randint(1000, 9999)' in code, "Missing random ID generation"
-    assert 'user_data_dir = f"/tmp/chrome_user_data_{timestamp}_{random_id}"' in code, "Missing user_data_dir creation"
+    assert 'temp_base = tempfile.gettempdir()' in code, "Missing tempfile.gettempdir() usage"
+    assert 'user_data_dir = os.path.join(temp_base, f"chrome_user_data_{timestamp}_{random_id}")' in code, "Missing user_data_dir creation with tempfile"
     assert '--user-data-dir={user_data_dir}' in code, "Missing user-data-dir argument"
-    print("  ✅ Unique user data directory creation is implemented")
+    print("  ✅ Unique user data directory creation is implemented with tempfile")
     
     # Test 8: Check Chrome arguments for session conflict prevention
     print("\n✓ Test 8: Checking Chrome arguments for session conflict prevention...")
@@ -83,8 +84,8 @@ def test_chrome_options_configuration():
     
     # Test 9: Check incognito driver has same fixes
     print("\n✓ Test 9: Checking incognito driver has same fixes...")
-    assert 'incognito_user_data_dir = f"/tmp/chrome_user_data_incognito_{timestamp}_{random_id}"' in code, "Missing incognito user_data_dir"
-    print("  ✅ Incognito driver has unique user data directory")
+    assert 'incognito_user_data_dir = os.path.join(temp_base, f"chrome_user_data_incognito_{timestamp}_{random_id}")' in code, "Missing incognito user_data_dir with tempfile"
+    print("  ✅ Incognito driver has unique user data directory with tempfile")
     
     # Test 10: Check cleanup is called in handle_interrupt
     print("\n✓ Test 10: Checking cleanup in handle_interrupt...")

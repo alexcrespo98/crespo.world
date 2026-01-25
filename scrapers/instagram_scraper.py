@@ -232,7 +232,8 @@ class InstagramScraper:
         # Create unique user data directory to avoid conflicts
         timestamp = int(time.time())
         random_id = random.randint(1000, 9999)
-        incognito_user_data_dir = f"/tmp/chrome_user_data_incognito_{timestamp}_{random_id}"
+        temp_base = tempfile.gettempdir()
+        incognito_user_data_dir = os.path.join(temp_base, f"chrome_user_data_incognito_{timestamp}_{random_id}")
         chrome_options.add_argument(f"--user-data-dir={incognito_user_data_dir}")
         
         # Prevent session conflicts
@@ -689,7 +690,8 @@ class InstagramScraper:
             # Create unique user data directory to avoid conflicts
             timestamp = int(time.time())
             random_id = random.randint(1000, 9999)
-            user_data_dir = f"/tmp/chrome_user_data_{timestamp}_{random_id}"
+            temp_base = tempfile.gettempdir()
+            user_data_dir = os.path.join(temp_base, f"chrome_user_data_{timestamp}_{random_id}")
             chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
             
             # Prevent session conflicts
