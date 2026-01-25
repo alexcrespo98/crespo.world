@@ -62,8 +62,6 @@ INSTAGRAM_COOKIES = [
 INSTAGRAM_USERNAME = "crespoworld"
 INSTAGRAM_PASSWORD = "deleteme"
 
-import random
-
 class InstagramScraper:
     # Cross-validation outlier threshold (percentage difference to flag as outlier)
     OUTLIER_THRESHOLD_PCT = 20.0
@@ -123,9 +121,16 @@ class InstagramScraper:
         print("\n✅ Backup saved. You can resume from where you left off.")
         sys.exit(0)
     
+    def _create_unique_user_data_dir(self, prefix="chrome_user_data"):
+        """Create a unique temporary directory path for Chrome user data"""
+        timestamp = int(time.time())
+        random_id = random.randint(1000, 9999)
+        temp_base = tempfile.gettempdir()
+        return os.path.join(temp_base, f"{prefix}_{timestamp}_{random_id}")
+    
     def cleanup_chrome_data(self):
         """Clean up temporary Chrome user data directory"""
-        if hasattr(self, 'user_data_dir') and self.user_data_dir:
+        if self.user_data_dir:
             if os.path.exists(self.user_data_dir):
                 try:
                     shutil.rmtree(self.user_data_dir, ignore_errors=True)
@@ -136,7 +141,7 @@ class InstagramScraper:
                     # Don't fail on cleanup errors
                     pass
         
-        if hasattr(self, 'incognito_user_data_dir') and self.incognito_user_data_dir:
+        if self.incognito_user_data_dir:
             if os.path.exists(self.incognito_user_data_dir):
                 try:
                     shutil.rmtree(self.incognito_user_data_dir, ignore_errors=True)
@@ -236,10 +241,7 @@ class InstagramScraper:
         chrome_options.add_argument("--incognito")
         
         # Create unique user data directory to avoid conflicts
-        timestamp = int(time.time())
-        random_id = random.randint(1000, 9999)
-        temp_base = tempfile.gettempdir()
-        incognito_user_data_dir = os.path.join(temp_base, f"chrome_user_data_incognito_{timestamp}_{random_id}")
+        incognito_user_data_dir = self._create_unique_user_data_dir("chrome_user_data_incognito")
         chrome_options.add_argument(f"--user-data-dir={incognito_user_data_dir}")
         
         # Prevent session conflicts
@@ -694,10 +696,7 @@ class InstagramScraper:
                 chrome_options.add_argument("--start-maximized")
             
             # Create unique user data directory to avoid conflicts
-            timestamp = int(time.time())
-            random_id = random.randint(1000, 9999)
-            temp_base = tempfile.gettempdir()
-            user_data_dir = os.path.join(temp_base, f"chrome_user_data_{timestamp}_{random_id}")
+            user_data_dir = self._create_unique_user_data_dir("chrome_user_data")
             chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
             
             # Prevent session conflicts
