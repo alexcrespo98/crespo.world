@@ -22,6 +22,10 @@ import traceback
 import statistics
 import math
 from pathlib import Path
+import tempfile
+import random
+import shutil
+import atexit
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
@@ -87,9 +91,14 @@ class InstagramScraper:
         self.rate_limited = False  # Track if we've hit rate limits
         self.consecutive_failures = 0  # Track consecutive failures for fallback
         self.max_consecutive_failures = 5  # Threshold for switching to incognito
+        self.user_data_dir = None  # Track Chrome user data directory for cleanup
+        self.incognito_user_data_dir = None  # Track incognito Chrome user data directory for cleanup
         
         # Set up signal handler for interrupts
         signal.signal(signal.SIGINT, self.handle_interrupt)
+        
+        # Register cleanup handler
+        atexit.register(self.cleanup_chrome_data)
         
     def handle_interrupt(self, signum, frame):
         """Handle Ctrl+C interrupt gracefully"""
@@ -108,8 +117,29 @@ class InstagramScraper:
             except:
                 pass
         
+        # Clean up Chrome data
+        self.cleanup_chrome_data()
+        
         print("\n✅ Backup saved. You can resume from where you left off.")
         sys.exit(0)
+    
+    def cleanup_chrome_data(self):
+        """Clean up temporary Chrome user data directory"""
+        if hasattr(self, 'user_data_dir') and self.user_data_dir:
+            try:
+                if os.path.exists(self.user_data_dir):
+                    shutil.rmtree(self.user_data_dir, ignore_errors=True)
+                    print(f"  🧹 Cleaned up Chrome data: {self.user_data_dir}")
+            except Exception as e:
+                # Don't fail on cleanup errors
+                pass
+        
+        if hasattr(self, 'incognito_user_data_dir') and self.incognito_user_data_dir:
+            try:
+                if os.path.exists(self.incognito_user_data_dir):
+                    shutil.rmtree(self.incognito_user_data_dir, ignore_errors=True)
+            except Exception as e:
+                pass
     
     def save_backup(self):
         """Save backup file with current progress including partial scrape data"""
@@ -187,14 +217,40 @@ class InstagramScraper:
         print("\n  🔄 Setting up incognito browser for fallback...")
         
         chrome_options = ChromeOptions()
-        chrome_options.add_argument("--start-maximized")
+        
+        # Detect headless mode (SSH/no display)
+        headless_mode = not os.environ.get('DISPLAY') or os.environ.get('SSH_CONNECTION')
+        
+        if headless_mode:
+            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--window-size=1920,1080")
+        else:
+            chrome_options.add_argument("--start-maximized")
+        
         chrome_options.add_argument("--incognito")
+        
+        # Create unique user data directory to avoid conflicts
+        timestamp = int(time.time())
+        random_id = random.randint(1000, 9999)
+        incognito_user_data_dir = f"/tmp/chrome_user_data_incognito_{timestamp}_{random_id}"
+        chrome_options.add_argument(f"--user-data-dir={incognito_user_data_dir}")
+        
+        # Prevent session conflicts
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--no-sandbox")  # May be needed for SSH/containers
+        chrome_options.add_argument("--remote-debugging-port=0")  # Avoid port conflicts
+        chrome_options.add_argument("--disable-gpu")  # Recommended for headless
+        
+        # Anti-detection
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
         chrome_options.add_argument("--log-level=3")
         chrome_options.add_argument("--disable-logging")
+        
+        # Store incognito_user_data_dir for cleanup
+        self.incognito_user_data_dir = incognito_user_data_dir
         
         service = ChromeService(ChromeDriverManager().install())
         service.log_path = os.devnull
@@ -620,13 +676,39 @@ class InstagramScraper:
         if browser == 'chrome':
             print("  🌐 Setting up Chrome driver...")
             chrome_options = ChromeOptions()
-            chrome_options.add_argument("--start-maximized")
+            
+            # Detect headless mode (SSH/no display)
+            headless_mode = not os.environ.get('DISPLAY') or os.environ.get('SSH_CONNECTION')
+            
+            if headless_mode:
+                chrome_options.add_argument("--headless=new")
+                chrome_options.add_argument("--window-size=1920,1080")
+            else:
+                chrome_options.add_argument("--start-maximized")
+            
+            # Create unique user data directory to avoid conflicts
+            timestamp = int(time.time())
+            random_id = random.randint(1000, 9999)
+            user_data_dir = f"/tmp/chrome_user_data_{timestamp}_{random_id}"
+            chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+            
+            # Prevent session conflicts
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--no-sandbox")  # May be needed for SSH/containers
+            chrome_options.add_argument("--remote-debugging-port=0")  # Avoid port conflicts
+            chrome_options.add_argument("--disable-gpu")  # Recommended for headless
+            
+            # Anti-detection
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
             chrome_options.add_argument("--log-level=3")
             chrome_options.add_argument("--disable-logging")
+            
+            # Store user_data_dir for cleanup
+            self.user_data_dir = user_data_dir
+            
             service = ChromeService(ChromeDriverManager().install())
             service.log_path = os.devnull
             driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -3951,6 +4033,8 @@ class InstagramScraper:
                         self.incognito_driver.quit()
                     except:
                         pass
+                # Clean up temporary directories
+                self.cleanup_chrome_data()
             return
         
         # Handle test mode (enhanced diagnostics on @popdartsgame)
@@ -3966,6 +4050,8 @@ class InstagramScraper:
                         self.incognito_driver.quit()
                     except:
                         pass
+                # Clean up temporary directories
+                self.cleanup_chrome_data()
             return
         
         # Regular scrape modes (custom or deep)
@@ -4134,6 +4220,9 @@ class InstagramScraper:
                     self.incognito_driver.quit()
                 except:
                     pass
+            
+            # Clean up temporary directories
+            self.cleanup_chrome_data()
 
     # Methods for master scraper integration
     def scrape_recent_posts(self, account, limit=30):
