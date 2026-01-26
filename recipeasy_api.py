@@ -29,7 +29,7 @@ except ImportError:
 
 app = Flask(__name__)
 # Enable CORS for all routes, allowing requests from crespo.world and any origin
-CORS(app, origins=["*"], supports_credentials=True)
+CORS(app, origins=["*"])
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
