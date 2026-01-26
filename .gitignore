@@ -32,3 +32,5 @@ test.xlsx
 # Auto scraper files
 auto_scraper.log
 auto_scraper.pid
+.env
+.env
