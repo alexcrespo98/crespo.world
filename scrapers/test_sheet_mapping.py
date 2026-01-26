@@ -14,7 +14,7 @@ ACCOUNTS_TO_TRACK = [
     "bucketgolfgame",
     "playbattlegolf",
     "flinggolf",
-    "golfponggames",  # Changed from "golfpong.games"
+    "golfponggames",
     "discgogames",
     "low_tide_golf"
 ]
@@ -44,8 +44,9 @@ def test_save_and_load():
     print("\n🧪 Test 3: Test save and load with mapping")
     
     # Create a temporary Excel file
-    temp_file = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
-    temp_file.close()
+    import tempfile
+    fd, temp_path = tempfile.mkstemp(suffix='.xlsx')
+    os.close(fd)  # Close the file descriptor
     
     try:
         # Create test data
@@ -61,16 +62,16 @@ def test_save_and_load():
         }
         
         # Save to Excel with mapping
-        with pd.ExcelWriter(temp_file.name, engine='openpyxl') as writer:
+        with pd.ExcelWriter(temp_path, engine='openpyxl') as writer:
             for username, df in test_data.items():
                 sheet_name = SHEET_NAME_MAPPING.get(username, username)
                 sheet_name = sheet_name[:31]
                 df.to_excel(writer, sheet_name=sheet_name)
         
-        print(f"  📝 Saved test data to {temp_file.name}")
+        print(f"  📝 Saved test data to {temp_path}")
         
         # Load the Excel file
-        excel_data = pd.read_excel(temp_file.name, sheet_name=None, index_col=0)
+        excel_data = pd.read_excel(temp_path, sheet_name=None, index_col=0)
         print(f"  📖 Loaded sheets: {list(excel_data.keys())}")
         
         # Verify sheet names
@@ -103,9 +104,9 @@ def test_save_and_load():
         
     finally:
         # Clean up
-        if os.path.exists(temp_file.name):
-            os.unlink(temp_file.name)
-            print(f"  🧹 Cleaned up {temp_file.name}")
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+            print(f"  🧹 Cleaned up {temp_path}")
 
 def main():
     print("="*70)
