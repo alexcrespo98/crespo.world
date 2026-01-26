@@ -15,6 +15,7 @@ import os
 import re
 import requests
 import subprocess
+from urllib.parse import unquote
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -33,6 +34,19 @@ CORS(app, origins=["*"])
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# Recipe site patterns for search and validation
+RECIPE_SITE_PATTERNS = [
+    'allrecipes.com',
+    'foodnetwork.com',
+    'bonappetit.com',
+    'epicurious.com',
+    'seriouseats.com',
+    'simplyrecipes.com',
+    'tasteofhome.com'
+]
+
+RECIPE_KEYWORDS = ['recipe', 'food', 'cook', 'kitchen', 'tasty', 'delish']
 
 def get_tailscale_ip():
     """Get the Tailscale IPv4 address of this machine"""
@@ -61,6 +75,12 @@ def is_url(text):
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
     return url_pattern.match(text) is not None
 
+def is_recipe_url(url):
+    """Check if URL is from a known recipe site or contains recipe keywords"""
+    url_lower = url.lower()
+    return (any(site in url_lower for site in RECIPE_SITE_PATTERNS) or
+            any(keyword in url_lower for keyword in RECIPE_KEYWORDS))
+
 def search_recipe(query):
     """Search for a recipe using multiple strategies and return the first valid URL"""
     
@@ -84,20 +104,10 @@ def search_recipe(query):
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
                 # Look for recipe links in search results
-                # AllRecipes pattern
                 for link in soup.find_all('a', href=True):
                     href = link.get('href', '')
-                    if 'allrecipes.com/recipe/' in href and href.startswith('http'):
-                        print(f"Found recipe URL from AllRecipes: {href}")
-                        return href
-                    elif 'foodnetwork.com/recipes/' in href and href.startswith('http'):
-                        print(f"Found recipe URL from Food Network: {href}")
-                        return href
-                    elif 'bonappetit.com/recipe/' in href and href.startswith('http'):
-                        print(f"Found recipe URL from Bon Appetit: {href}")
-                        return href
-                    elif 'seriouseats.com/' in href and '/recipes/' in href and href.startswith('http'):
-                        print(f"Found recipe URL from Serious Eats: {href}")
+                    if href.startswith('http') and is_recipe_url(href):
+                        print(f"Found recipe URL: {href}")
                         return href
         except Exception as e:
             print(f"Error trying recipe site {site_url}: {e}")
@@ -122,10 +132,8 @@ def search_recipe(query):
             if '/url?q=' in href:
                 try:
                     url = href.split('/url?q=')[1].split('&')[0]
-                    # Decode URL encoding
-                    from urllib.parse import unquote
                     url = unquote(url)
-                    if url.startswith('http') and 'google.com' not in url.lower() and any(site in url.lower() for site in ['recipe', 'allrecipes', 'foodnetwork', 'food', 'cook', 'kitchen', 'tasty', 'delish', 'epicurious', 'bonappetit', 'seriouseats']):
+                    if url.startswith('http') and 'google.com' not in url.lower() and is_recipe_url(url):
                         print(f"Found recipe URL from Google: {url}")
                         return url
                 except Exception:
@@ -134,7 +142,7 @@ def search_recipe(query):
         # Method 2: Look for direct recipe site links
         for link in soup.find_all('a', href=True):
             href = link.get('href', '')
-            if href.startswith('http') and any(site in href.lower() for site in ['allrecipes.com', 'foodnetwork.com', 'bonappetit.com', 'epicurious.com', 'seriouseats.com', 'simplyrecipes.com', 'tasteofhome.com']):
+            if href.startswith('http') and any(site in href.lower() for site in RECIPE_SITE_PATTERNS):
                 print(f"Found direct recipe URL: {href}")
                 return href
                 
@@ -153,7 +161,7 @@ def search_recipe(query):
         
         for link in soup.find_all('a', href=True, class_='result__a'):
             href = link.get('href', '')
-            if href.startswith('http') and any(site in href.lower() for site in ['allrecipes.com', 'foodnetwork.com', 'recipe']):
+            if href.startswith('http') and is_recipe_url(href):
                 print(f"Found recipe URL from DuckDuckGo: {href}")
                 return href
     except Exception as e:
