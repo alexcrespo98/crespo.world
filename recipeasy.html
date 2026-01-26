@@ -39,6 +39,70 @@
       border-radius: 10px;
       text-align: left;
     }
+    .password-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .password-box {
+      background: #111;
+      border: 2px solid #0f0;
+      padding: 3em;
+      border-radius: 10px;
+      text-align: center;
+      max-width: 400px;
+    }
+    .password-box h2 {
+      color: #0f0;
+      margin-bottom: 1em;
+    }
+    .password-box input {
+      width: 100%;
+      padding: 0.8em;
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      font-family: monospace;
+      font-size: 1.2em;
+      text-align: center;
+      box-sizing: border-box;
+      margin-bottom: 1em;
+    }
+    .password-box input:focus {
+      outline: none;
+      box-shadow: 0 0 10px #0f0;
+    }
+    .password-box button {
+      width: 100%;
+      padding: 1em;
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      font-family: monospace;
+      font-size: 1.2em;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .password-box button:hover {
+      background: #0f0;
+      color: #000;
+      box-shadow: 0 0 10px #0f0;
+    }
+    .password-error {
+      color: #f00;
+      margin-top: 0.5em;
+      display: none;
+    }
+    .main-content {
+      display: none;
+    }
     .input-group {
       margin: 2em 0;
     }
@@ -81,28 +145,6 @@
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-    }
-    .config-section {
-      margin: 2em 0;
-      padding: 1em;
-      border: 1px solid #0f0;
-      border-radius: 5px;
-      background: #000;
-    }
-    .config-section h3 {
-      margin-top: 0;
-      color: #0f0;
-    }
-    .config-input {
-      margin: 1em 0;
-    }
-    .config-input label {
-      font-size: 1em;
-      margin-bottom: 0.3em;
-    }
-    .config-input input {
-      width: 100%;
-      padding: 0.5em;
     }
     .status {
       margin: 1em 0;
@@ -153,131 +195,91 @@
     .hidden {
       display: none;
     }
-    .example {
-      font-size: 0.9em;
-      color: #0a0;
-      margin-top: 0.3em;
-    }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="index.html">home</a>
-    <a href="officecam.html">officecam</a>
-    <a href="crespomize.html">crespomize</a>
-    <a href="recipeasy.html">recipeasy</a>
-  </nav>
+  <!-- Password Protection Overlay -->
+  <div id="passwordOverlay" class="password-overlay">
+    <div class="password-box">
+      <h2>recipeasy</h2>
+      <p>Enter password to continue</p>
+      <input 
+        type="password" 
+        id="passwordInput" 
+        placeholder="Password"
+        onkeypress="if(event.key === 'Enter') checkPassword()"
+      />
+      <button onclick="checkPassword()">Submit</button>
+      <p class="password-error" id="passwordError">Incorrect password</p>
+    </div>
+  </div>
 
-  <h1>🍳 recipeasy</h1>
-  
-  <div class="container">
-    <p style="text-align: center; margin-bottom: 2em;">
-      NO FLUFF. Just ingredients and instructions. That's it.
-    </p>
+  <!-- Main Content -->
+  <div class="main-content" id="mainContent">
+    <nav>
+      <a href="index.html">home</a>
+      <a href="officecam.html">officecam</a>
+      <a href="crespomize.html">crespomize</a>
+      <a href="recipeasy.html">recipeasy</a>
+    </nav>
 
-    <!-- Configuration Section -->
-    <div class="config-section">
-      <h3>⚙️ API Configuration</h3>
-      <div class="config-input">
-        <label for="apiEndpoint">API Endpoint URL:</label>
+    <h1>recipeasy</h1>
+    
+    <div class="container">
+      <p style="text-align: center; margin-bottom: 2em;">
+        NO FLUFF. Just ingredients and instructions. That's it.
+      </p>
+
+      <!-- Input Section -->
+      <div class="input-group">
+        <label for="recipeInput">Recipe URL or Search Query:</label>
         <input 
           type="text" 
-          id="apiEndpoint" 
-          placeholder="http://your-tailscale-hostname:5000/simplify"
-          value="http://localhost:5000/simplify"
+          id="recipeInput" 
+          placeholder=""
         />
-        <div class="example">Example: http://100.64.1.2:5000/simplify or http://homeserver.tailnet.ts.net:5000/simplify</div>
       </div>
-      <button onclick="saveConfig()">Save Configuration</button>
-      <button onclick="testConnection()">Test Connection</button>
-    </div>
 
-    <!-- Input Section -->
-    <div class="input-group">
-      <label for="recipeInput">Enter Recipe URL or Recipe Name:</label>
-      <input 
-        type="text" 
-        id="recipeInput" 
-        placeholder="https://joyfoodsunshine.com/the-most-amazing-chocolate-chip-cookies/ or 'chocolate chip cookies'"
-      />
-      <div class="example">
-        Try: https://joyfoodsunshine.com/the-most-amazing-chocolate-chip-cookies/
+      <button id="simplifyBtn" onclick="simplifyRecipe()">Simplify Recipe</button>
+      <button onclick="clearAll()">Clear</button>
+
+      <!-- Status Messages -->
+      <div id="status" class="hidden"></div>
+
+      <!-- Result Section -->
+      <div id="result"></div>
+      <div id="resultActions" class="result-actions hidden">
+        <button onclick="copyRecipe()">Copy to Clipboard</button>
+        <button onclick="downloadRecipe()">Download as Text</button>
       </div>
-    </div>
-
-    <button id="simplifyBtn" onclick="simplifyRecipe()">Simplify Recipe</button>
-    <button onclick="clearAll()">Clear</button>
-
-    <!-- Status Messages -->
-    <div id="status" class="hidden"></div>
-
-    <!-- Result Section -->
-    <div id="result"></div>
-    <div id="resultActions" class="result-actions hidden">
-      <button onclick="copyRecipe()">Copy to Clipboard</button>
-      <button onclick="downloadRecipe()">Download as Text</button>
     </div>
   </div>
 
   <script>
-    // Load saved configuration
-    window.addEventListener('DOMContentLoaded', () => {
-      const savedEndpoint = localStorage.getItem('recipeasy_api_endpoint');
-      if (savedEndpoint) {
-        document.getElementById('apiEndpoint').value = savedEndpoint;
-      }
-    });
+    // Password protection
+    const CORRECT_PASSWORD = '0990';
+    const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
 
-    function saveConfig() {
-      const endpoint = document.getElementById('apiEndpoint').value.trim();
-      if (!endpoint) {
-        showStatus('Please enter an API endpoint URL', 'error');
-        return;
-      }
-      localStorage.setItem('recipeasy_api_endpoint', endpoint);
-      showStatus('Configuration saved!', 'success');
-    }
-
-    async function testConnection() {
-      const endpoint = document.getElementById('apiEndpoint').value.trim();
-      if (!endpoint) {
-        showStatus('Please enter an API endpoint URL first', 'error');
-        return;
-      }
-
-      showStatus('Testing connection...', 'loading');
+    function checkPassword() {
+      const passwordInput = document.getElementById('passwordInput');
+      const passwordError = document.getElementById('passwordError');
       
-      try {
-        const baseUrl = endpoint.replace('/simplify', '');
-        const response = await fetch(`${baseUrl}/health`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          showStatus(`✓ Connection successful! API version: ${data.version || 'unknown'}`, 'success');
-        } else {
-          showStatus(`✗ Connection failed: ${response.status} ${response.statusText}`, 'error');
-        }
-      } catch (error) {
-        showStatus(`✗ Connection failed: ${error.message}. Make sure your API server is running.`, 'error');
+      if (passwordInput.value === CORRECT_PASSWORD) {
+        document.getElementById('passwordOverlay').style.display = 'none';
+        document.getElementById('mainContent').style.display = 'block';
+        passwordInput.value = '';
+      } else {
+        passwordError.style.display = 'block';
+        passwordInput.value = '';
+        passwordInput.focus();
       }
     }
 
     async function simplifyRecipe() {
       const input = document.getElementById('recipeInput').value.trim();
-      const endpoint = document.getElementById('apiEndpoint').value.trim();
 
       if (!input) {
-        showStatus('Please enter a recipe URL or name', 'error');
-        return;
-      }
-
-      if (!endpoint) {
-        showStatus('Please configure the API endpoint first', 'error');
+        showStatus('Please enter a recipe URL or search query', 'error');
         return;
       }
 
@@ -289,7 +291,7 @@
       document.getElementById('simplifyBtn').disabled = true;
 
       try {
-        const response = await fetch(endpoint, {
+        const response = await fetch(API_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -309,12 +311,12 @@
         
         if (data.simplified_recipe) {
           displayRecipe(data.simplified_recipe, data.source_url || input);
-          showStatus('✓ Recipe simplified successfully!', 'success');
+          showStatus('Recipe simplified successfully!', 'success');
         } else {
           throw new Error('Invalid response from API');
         }
       } catch (error) {
-        showStatus(`✗ Error: ${error.message}`, 'error');
+        showStatus(`Error: ${error.message}`, 'error');
         console.error('Error:', error);
       } finally {
         document.getElementById('simplifyBtn').disabled = false;
@@ -335,9 +337,9 @@
     function copyRecipe() {
       if (window.currentRecipe) {
         navigator.clipboard.writeText(window.currentRecipe).then(() => {
-          showStatus('✓ Recipe copied to clipboard!', 'success');
+          showStatus('Recipe copied to clipboard!', 'success');
         }).catch(err => {
-          showStatus('✗ Failed to copy to clipboard', 'error');
+          showStatus('Failed to copy to clipboard', 'error');
         });
       }
     }
@@ -353,7 +355,7 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showStatus('✓ Recipe downloaded!', 'success');
+        showStatus('Recipe downloaded!', 'success');
       }
     }
 
