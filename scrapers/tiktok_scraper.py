@@ -510,15 +510,38 @@ class TikTokScraper:
         return df
 
     def save_to_excel(self, all_account_data):
-        """Save all account data to multi-tab Excel file"""
+        """Save all account data to multi-tab Excel file, preserving existing data"""
         import pandas as pd
         
-        with pd.ExcelWriter(OUTPUT_EXCEL, engine='openpyxl') as writer:
-            for username, df in all_account_data.items():
+        # Read existing data first to merge with new data
+        existing_data = self.load_existing_excel()
+        
+        # Merge existing data with new data
+        merged_data = {}
+        for username, new_df in all_account_data.items():
+            if username in existing_data:
+                # Merge: existing data should already be in new_df from create_dataframe_for_account
+                # But just to be safe, ensure all columns are preserved
+                old_df = existing_data[username]
+                # Combine old and new columns
+                for col in old_df.columns:
+                    if col not in new_df.columns:
+                        new_df[col] = old_df[col]
+            merged_data[username] = new_df
+        
+        # Also preserve any accounts that weren't scraped this time
+        for username, df in existing_data.items():
+            if username not in merged_data:
+                merged_data[username] = df
+        
+        # Write the merged data
+        with pd.ExcelWriter(OUTPUT_EXCEL, engine='openpyxl', mode='w') as writer:
+            for username, df in merged_data.items():
                 sheet_name = username[:31]
                 df.to_excel(writer, sheet_name=sheet_name)
         
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
+        print(f"   📊 Preserved data for {len(merged_data)} account(s)")
 
     def validate_data_before_upload(self, new_data):
         """
