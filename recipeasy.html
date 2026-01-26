@@ -602,7 +602,6 @@
     }
     
     function toggleInstruction(stepNumber) {
-      const checkbox = document.querySelector(`input[id^="instruction-"][type="checkbox"]`);
       const item = document.querySelector(`.instruction-item[data-step-number="${stepNumber}"]`);
       const isChecked = item.querySelector('input[type="checkbox"]').checked;
       
