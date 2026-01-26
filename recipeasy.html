@@ -122,7 +122,7 @@
     }
     .recipe-section h3 {
       color: #0f0;
-      margin-bottom: 0.5em;
+      margin-bottom: 0.2em;
       font-size: 1.3em;
     }
     .multiplier-section {
@@ -512,23 +512,14 @@
           displayText = `<span class="ingredient-amount">${parsed_ing.amount}${parsed_ing.unit ? ' ' + parsed_ing.unit : ''}</span> ${parsed_ing.item}`;
         }
         
-        html += `
-          <div class="ingredient-item" data-ingredient-idx="${idx}" data-original="${ingredient}" onclick="toggleIngredient(${idx})">
-            ${displayText}
-          </div>
-        `;
+        html += `<div class="ingredient-item" data-ingredient-idx="${idx}" data-original="${ingredient}" onclick="toggleIngredient(${idx})">${displayText}</div>`;
       });
       
       html += '</div><div class="recipe-section">';
       html += '<h3>INSTRUCTIONS:</h3>';
       
       parsed.instructions.forEach((instruction, idx) => {
-        html += `
-          <div class="instruction-item" data-step-number="${instruction.number}">
-            <input type="checkbox" id="instruction-${idx}" onchange="toggleInstruction(${instruction.number})">
-            <label for="instruction-${idx}">${instruction.number}. ${instruction.text}</label>
-          </div>
-        `;
+        html += `<div class="instruction-item" data-step-number="${instruction.number}"><input type="checkbox" id="instruction-${idx}" onchange="toggleInstruction(${instruction.number})"><label for="instruction-${idx}">${instruction.number}. ${instruction.text}</label></div>`;
       });
       
       html += '</div>';
