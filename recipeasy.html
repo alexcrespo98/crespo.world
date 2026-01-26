@@ -44,70 +44,7 @@
       border-radius: 10px;
       text-align: left;
     }
-    .password-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .password-box {
-      background: #111;
-      border: 2px solid #0f0;
-      padding: 3em;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 400px;
-    }
-    .password-box h2 {
-      color: #0f0;
-      margin-bottom: 1em;
-    }
-    .password-box input {
-      width: 100%;
-      padding: 0.8em;
-      background: #000;
-      color: #0f0;
-      border: 2px solid #0f0;
-      font-family: monospace;
-      font-size: 1.2em;
-      text-align: center;
-      box-sizing: border-box;
-      margin-bottom: 1em;
-    }
-    .password-box input:focus {
-      outline: none;
-      box-shadow: 0 0 10px #0f0;
-    }
-    .password-box button {
-      width: 100%;
-      padding: 1em;
-      background: #000;
-      color: #0f0;
-      border: 2px solid #0f0;
-      font-family: monospace;
-      font-size: 1.2em;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .password-box button:hover {
-      background: #0f0;
-      color: #000;
-      box-shadow: 0 0 10px #0f0;
-    }
-    .password-error {
-      color: #f00;
-      margin-top: 0.5em;
-      display: none;
-    }
-    .main-content {
-      display: none;
-    }
+
     .input-group {
       margin: 2em 0;
     }
@@ -314,24 +251,7 @@
   </style>
 </head>
 <body>
-  <!-- Password Protection Overlay -->
-  <div id="passwordOverlay" class="password-overlay">
-    <div class="password-box">
-      <h2>recipeasy</h2>
-      <p>Enter password to continue</p>
-      <input 
-        type="password" 
-        id="passwordInput" 
-        placeholder="Password"
-        onkeypress="if(event.key === 'Enter') checkPassword()"
-      />
-      <button onclick="checkPassword()">Submit</button>
-      <p class="password-error" id="passwordError">Incorrect password</p>
-    </div>
-  </div>
 
-  <!-- Main Content -->
-  <div class="main-content" id="mainContent">
     <nav>
       <a href="index.html">home</a>
       <a href="officecam.html">officecam</a>
@@ -414,27 +334,9 @@
         <button onclick="downloadRecipe()">Download as Text</button>
       </div>
     </div>
-  </div>
 
   <script>
-    // Password protection
-    const CORRECT_PASSWORD = '0990';
     const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
-
-    function checkPassword() {
-      const passwordInput = document.getElementById('passwordInput');
-      const passwordError = document.getElementById('passwordError');
-      
-      if (passwordInput.value === CORRECT_PASSWORD) {
-        document.getElementById('passwordOverlay').style.display = 'none';
-        document.getElementById('mainContent').style.display = 'block';
-        passwordInput.value = '';
-      } else {
-        passwordError.style.display = 'block';
-        passwordInput.value = '';
-        passwordInput.focus();
-      }
-    }
 
     async function simplifyRecipe() {
       const input = document.getElementById('recipeInput').value.trim();
