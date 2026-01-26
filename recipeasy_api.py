@@ -87,19 +87,28 @@ def is_recipe_url(url):
     return (any(site in url_lower for site in RECIPE_SITE_PATTERNS) or
             any(keyword in url_lower for keyword in RECIPE_KEYWORDS))
 
-def search_recipe(query):
+def search_recipe(query, exclude_ingredients=''):
     """Search for a recipe using multiple strategies and return the first valid URL"""
+    
+    # Enhance query with exclusions if provided
+    search_query = query
+    if exclude_ingredients:
+        # Add "without" to search query for better results
+        excluded_items = [item.strip() for item in exclude_ingredients.split(',')]
+        exclude_terms = ' '.join([f'without {item}' for item in excluded_items[:2]])  # Limit to first 2 for search
+        search_query = f"{query} {exclude_terms}"
+        print(f"Enhanced search query: {search_query}")
     
     # Strategy 1: Try popular recipe sites directly
     recipe_sites = [
-        f"https://www.allrecipes.com/search?q={query.replace(' ', '+')}",
-        f"https://www.foodnetwork.com/search/{query.replace(' ', '-')}-",
-        f"https://www.bonappetit.com/search?q={query.replace(' ', '+')}",
-        f"https://www.epicurious.com/search/{query.replace(' ', '%20')}",
-        f"https://www.seriouseats.com/search?q={query.replace(' ', '+')}",
+        f"https://www.allrecipes.com/search?q={search_query.replace(' ', '+')}",
+        f"https://www.foodnetwork.com/search/{search_query.replace(' ', '-')}-",
+        f"https://www.bonappetit.com/search?q={search_query.replace(' ', '+')}",
+        f"https://www.epicurious.com/search/{search_query.replace(' ', '%20')}",
+        f"https://www.seriouseats.com/search?q={search_query.replace(' ', '+')}",
     ]
     
-    print(f"Trying direct recipe site searches for: {query}")
+    print(f"Trying direct recipe site searches for: {search_query}")
     for site_url in recipe_sites[:2]:  # Try first 2 sites
         try:
             headers = {
@@ -121,8 +130,8 @@ def search_recipe(query):
     
     # Strategy 2: Try Google search with improved parsing
     try:
-        print(f"Trying Google search for: {query}")
-        search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}+recipe"
+        print(f"Trying Google search for: {search_query}")
+        search_url = f"https://www.google.com/search?q={search_query.replace(' ', '+')}+recipe"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -157,8 +166,8 @@ def search_recipe(query):
     
     # Strategy 3: Try DuckDuckGo as a fallback
     try:
-        print(f"Trying DuckDuckGo search for: {query}")
-        search_url = f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}+recipe"
+        print(f"Trying DuckDuckGo search for: {search_query}")
+        search_url = f"https://duckduckgo.com/html/?q={search_query.replace(' ', '+')}+recipe"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
@@ -203,7 +212,7 @@ def fetch_webpage_content(url):
         print(f"Error fetching webpage: {e}")
         raise
 
-def simplify_recipe_with_ai(content, include_optional=True, unit_preference='original'):
+def simplify_recipe_with_ai(content, include_optional=True, unit_preference='original', exclude_ingredients=''):
     """Use OpenAI to extract and simplify the recipe"""
     try:
         # Build unit conversion instructions
@@ -229,6 +238,18 @@ UNIT CONVERSION:
         if not include_optional:
             optional_instructions = "- EXCLUDE all optional ingredients and garnishes"
         
+        exclude_instructions = ""
+        if exclude_ingredients:
+            exclude_instructions = f"""
+INGREDIENT EXCLUSIONS:
+The user does NOT have these ingredients: {exclude_ingredients}
+- If searching for a recipe, find one that AVOIDS these ingredients when possible
+- If given a specific recipe URL that uses these ingredients, provide SUBSTITUTIONS
+- Mark substitutions clearly with [SUBSTITUTION] tag like: "- 1 cup milk [SUBSTITUTION: use almond milk or water]"
+- If no good substitution exists, note "[EXCLUDED - optional]" for optional ingredients
+- Prioritize recipes that naturally don't use the excluded ingredients
+"""
+        
         system_prompt = f"""You are a recipe extraction expert. Your job is to extract recipes from web content and format them in a clean, no-nonsense way.
 
 CRITICAL REQUIREMENTS:
@@ -240,6 +261,7 @@ CRITICAL REQUIREMENTS:
 6. ALWAYS include preheat temperature if there's baking
 7. ALWAYS include prep steps like "line baking sheet" at the start of instructions
 {optional_instructions}
+{exclude_instructions}
 
 MEASUREMENT RULES:
 - NO RANGES: Convert "2-3 teaspoons" to "2.5 teaspoons" or "2.5 tsp"
@@ -313,6 +335,7 @@ def simplify():
         # Get optional parameters
         include_optional = data.get('include_optional', True)
         unit_preference = data.get('unit_preference', 'original')  # 'metric', 'imperial', or 'original'
+        exclude_ingredients = data.get('exclude_ingredients', '')  # comma-separated ingredients to exclude
         
         # Determine if input is URL or search query
         if is_url(user_input):
@@ -320,7 +343,7 @@ def simplify():
             print(f"Processing URL: {recipe_url}")
         else:
             print(f"Searching for recipe: {user_input}")
-            recipe_url = search_recipe(user_input)
+            recipe_url = search_recipe(user_input, exclude_ingredients)
             if not recipe_url:
                 error_msg = (
                     f'Could not find a recipe for "{user_input}". '
@@ -337,7 +360,7 @@ def simplify():
         
         # Simplify with AI
         print("Simplifying recipe with AI...")
-        simplified = simplify_recipe_with_ai(content, include_optional, unit_preference)
+        simplified = simplify_recipe_with_ai(content, include_optional, unit_preference, exclude_ingredients)
         
         return jsonify({
             'simplified_recipe': simplified,

@@ -229,6 +229,14 @@
       text-decoration: line-through;
       opacity: 0.5;
     }
+    .ingredient-substitution {
+      color: #ff0;
+      font-style: italic;
+    }
+    .ingredient-excluded {
+      color: #f80;
+      text-decoration: line-through;
+    }
     .ingredient-amount {
       color: #0f0;
       font-weight: bold;
@@ -349,6 +357,20 @@
             <span>Imperial (cups, oz)</span>
           </label>
         </div>
+        <div style="margin-top: 1em;">
+          <label for="excludeIngredients" style="display: block; margin-bottom: 0.3em; font-size: 0.9em;">
+            Ingredients I don't have (comma-separated):
+          </label>
+          <input 
+            type="text" 
+            id="excludeIngredients" 
+            placeholder="e.g., eggs, milk, butter"
+            style="font-size: 0.9em; padding: 0.5em;"
+          />
+          <div class="help-text">
+            Enter ingredients to exclude. The recipe will suggest substitutions or find alternatives.
+          </div>
+        </div>
       </div>
 
       <div class="input-group">
@@ -419,6 +441,7 @@
       // Get recipe options
       const includeOptional = document.getElementById('includeOptional').checked;
       const unitPreference = document.querySelector('input[name="units"]:checked').value;
+      const excludeIngredients = document.getElementById('excludeIngredients').value.trim();
 
       // Hide previous results
       document.getElementById('result').style.display = 'none';
@@ -438,7 +461,8 @@
           body: JSON.stringify({
             input: input,
             include_optional: includeOptional,
-            unit_preference: unitPreference
+            unit_preference: unitPreference,
+            exclude_ingredients: excludeIngredients
           })
         });
 
@@ -552,10 +576,31 @@
       html += '<h3>INGREDIENTS:</h3>';
       
       parsed.ingredients.forEach((ingredient, idx) => {
-        // Parse ingredient to highlight the amount
+        // Parse ingredient to highlight the amount and substitutions
         const parsed_ing = parseIngredientMeasurement(ingredient);
         let displayText = ingredient;
-        if (parsed_ing.amount) {
+        
+        // Check for substitution markers
+        const substitutionMatch = ingredient.match(/^(.+?)\s*\[SUBSTITUTION:\s*(.+?)\]$/i);
+        const excludedMatch = ingredient.match(/^(.+?)\s*\[EXCLUDED[^\]]*\]$/i);
+        
+        if (substitutionMatch) {
+          // Ingredient with substitution
+          const originalPart = substitutionMatch[1];
+          const substitution = substitutionMatch[2];
+          const parsed_orig = parseIngredientMeasurement(originalPart);
+          
+          if (parsed_orig.amount) {
+            displayText = `<span class="ingredient-amount">${parsed_orig.amount}${parsed_orig.unit ? ' ' + parsed_orig.unit : ''}</span> ${parsed_orig.item} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
+          } else {
+            displayText = `${originalPart} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
+          }
+        } else if (excludedMatch) {
+          // Excluded ingredient
+          const originalPart = excludedMatch[1];
+          displayText = `<span class="ingredient-excluded">${originalPart}</span>`;
+        } else if (parsed_ing.amount) {
+          // Normal ingredient
           displayText = `<span class="ingredient-amount">${parsed_ing.amount}${parsed_ing.unit ? ' ' + parsed_ing.unit : ''}</span> ${parsed_ing.item}`;
         }
         
