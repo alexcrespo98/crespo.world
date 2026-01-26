@@ -486,7 +486,7 @@
         } else if (currentSection === 'instructions') {
           // Match numbered instructions with flexible formats
           // Handles: "1.", "1)", "Step 1:", "1 -", etc.
-          const match = trimmed.match(/^(?:step\s*)?(\d+)[\.\)\:\-\s]+(.+)$/i);
+          const match = trimmed.match(/^(?:step\s*)?(\d+)[\.\)\:\-]\s*(.+)$/i);
           if (match) {
             instructions.push({
               number: parseInt(match[1]),
@@ -495,8 +495,12 @@
           } else if (trimmed.length > 0 && !trimmed.match(/^[-•]/)) {
             // Fallback: if we're in instructions section and line doesn't start with bullet,
             // treat it as an unnumbered instruction
+            // Find the highest existing number and add 1
+            const maxNumber = instructions.length > 0 
+              ? Math.max(...instructions.map(i => i.number))
+              : 0;
             instructions.push({
-              number: instructions.length + 1,
+              number: maxNumber + 1,
               text: trimmed
             });
           }
