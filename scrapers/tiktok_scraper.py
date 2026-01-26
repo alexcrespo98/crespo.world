@@ -510,15 +510,38 @@ class TikTokScraper:
         return df
 
     def save_to_excel(self, all_account_data):
-        """Save all account data to multi-tab Excel file"""
+        """Save all account data to multi-tab Excel file, preserving existing data"""
         import pandas as pd
         
-        with pd.ExcelWriter(OUTPUT_EXCEL, engine='openpyxl') as writer:
-            for username, df in all_account_data.items():
+        # Read existing data first to merge with new data
+        existing_data = self.load_existing_excel()
+        
+        # Merge existing data with new data
+        merged_data = {}
+        for username, new_df in all_account_data.items():
+            if username in existing_data:
+                # Merge: existing data should already be in new_df from create_dataframe_for_account
+                # But just to be safe, ensure all columns are preserved
+                old_df = existing_data[username]
+                # Combine old and new columns
+                for col in old_df.columns:
+                    if col not in new_df.columns:
+                        new_df[col] = old_df[col]
+            merged_data[username] = new_df
+        
+        # Also preserve any accounts that weren't scraped this time
+        for username, df in existing_data.items():
+            if username not in merged_data:
+                merged_data[username] = df
+        
+        # Write the merged data
+        with pd.ExcelWriter(OUTPUT_EXCEL, engine='openpyxl', mode='w') as writer:
+            for username, df in merged_data.items():
                 sheet_name = username[:31]
                 df.to_excel(writer, sheet_name=sheet_name)
         
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
+        print(f"   📊 Preserved data for {len(merged_data)} account(s)")
 
     def validate_data_before_upload(self, new_data):
         """
@@ -596,6 +619,145 @@ class TikTokScraper:
         
         return True, "Data validation passed"
 
+    def validate_scraped_data(self, username, followers, total_likes, existing_df):
+        """
+        Validate scraped data for logical consistency.
+        Checks:
+        1. New values should be reasonably close to previous non-zero values
+        2. Detect if followers and likes values appear to be swapped
+        
+        Returns: (is_valid: bool, reason: str)
+        """
+        import pandas as pd
+        
+        # Check if we have previous data for comparison
+        if not existing_df.empty and len(existing_df.columns) > 0:
+            # Get sorted columns
+            col_str_map = {str(c): c for c in existing_df.columns}
+            sorted_str_cols = sorted(col_str_map.keys())
+            cols = [col_str_map[str_col] for str_col in sorted_str_cols]
+            
+            # Find last non-zero followers and total_likes
+            last_followers = None
+            last_likes = None
+            
+            for col in reversed(cols):
+                if 'followers' in existing_df.index:
+                    val = existing_df.loc['followers', col]
+                    if pd.notna(val) and val > 0 and last_followers is None:
+                        last_followers = val
+                
+                if 'total_likes' in existing_df.index:
+                    val = existing_df.loc['total_likes', col]
+                    if pd.notna(val) and val > 0 and last_likes is None:
+                        last_likes = val
+                
+                if last_followers is not None and last_likes is not None:
+                    break
+            
+            # Check if values are swapped (followers and likes switched)
+            if last_followers and last_likes and followers and total_likes:
+                # If current followers are close to old likes AND current likes close to old followers
+                # This indicates a swap
+                follower_like_ratio = abs(followers - last_likes) / max(last_likes, 1)
+                like_follower_ratio = abs(total_likes - last_followers) / max(last_followers, 1)
+                
+                if follower_like_ratio < 0.1 and like_follower_ratio < 0.1:
+                    return False, f"Possible swap detected: followers={followers:,} (prev likes={last_likes:,}), likes={total_likes:,} (prev followers={last_followers:,})"
+            
+            # Check if values are reasonably close to previous (allow 3x growth or 50% decline)
+            if last_followers and followers:
+                ratio = followers / last_followers
+                if ratio > 3.0 or ratio < 0.5:
+                    return False, f"Followers changed drastically: {last_followers:,} -> {followers:,} (ratio: {ratio:.2f}x)"
+            
+            if last_likes and total_likes:
+                ratio = total_likes / last_likes
+                if ratio > 3.0 or ratio < 0.5:
+                    return False, f"Total likes changed drastically: {last_likes:,} -> {total_likes:,} (ratio: {ratio:.2f}x)"
+        
+        return True, "Data looks valid"
+
+    def interpolate_zero_values(self, all_account_data):
+        """
+        Interpolate zero values in the data to fill gaps from failed scrapes.
+        Uses average of surrounding values (left and right) for better visual representation.
+        
+        Args:
+            all_account_data: Dict of {username: DataFrame}
+            
+        Returns:
+            all_account_data: Same dict with interpolated values
+        """
+        import pandas as pd
+        import numpy as np
+        
+        for username, df in all_account_data.items():
+            if df.empty or len(df.columns) == 0:
+                continue
+            
+            # Convert all columns to strings before sorting to avoid datetime/str comparison
+            # Then find the actual column objects that match the sorted result
+            col_str_map = {str(c): c for c in df.columns}
+            sorted_str_cols = sorted(col_str_map.keys())
+            cols = [col_str_map[str_col] for str_col in sorted_str_cols]
+            
+            # Track interpolations for logging
+            interpolation_count = {}
+            
+            # Interpolate account-level metrics
+            for metric in ['followers', 'total_likes', 'posts_scraped']:
+                if metric not in df.index:
+                    continue
+                
+                row_data = df.loc[metric, cols].copy()
+                original_zeros = (row_data == 0).sum()
+                
+                if original_zeros > 0:
+                    # Interpolate using average of left and right non-zero values
+                    for i, col in enumerate(cols):
+                        if row_data[col] == 0:
+                            left_val = None
+                            right_val = None
+                            
+                            # Find left non-zero value
+                            for j in range(i - 1, -1, -1):
+                                if row_data[cols[j]] != 0:
+                                    left_val = row_data[cols[j]]
+                                    break
+                            
+                            # Find right non-zero value
+                            for j in range(i + 1, len(cols)):
+                                if row_data[cols[j]] != 0:
+                                    right_val = row_data[cols[j]]
+                                    break
+                            
+                            # Interpolate based on available values
+                            if left_val is not None and right_val is not None:
+                                # Use average of both
+                                row_data[col] = (left_val + right_val) / 2
+                            elif left_val is not None:
+                                # Only left available, use it
+                                row_data[col] = left_val
+                            elif right_val is not None:
+                                # Only right available, use it
+                                row_data[col] = right_val
+                    
+                    # Update the dataframe
+                    df.loc[metric, cols] = row_data
+                    
+                    # Count actual interpolations (zeros that were filled)
+                    filled_count = original_zeros - (df.loc[metric, cols] == 0).sum()
+                    if filled_count > 0:
+                        interpolation_count[metric] = filled_count
+            
+            # Log interpolations
+            if interpolation_count:
+                for metric, count in interpolation_count.items():
+                    print(f"✅ @{username}: Interpolated {count} zero value(s) for {metric}")
+        
+        return all_account_data
+
     def upload_to_google_drive(self, all_account_data=None):
         """
         Upload to Google Drive with data validation.
@@ -613,6 +775,9 @@ class TikTokScraper:
             print(f"  📊 Validation: {reason}")
             if not should_upload:
                 return False
+            
+            # Interpolate zero values before upload
+            all_account_data = self.interpolate_zero_values(all_account_data)
         
         try:
             result = subprocess.run(['rclone', 'version'], 
@@ -916,32 +1081,62 @@ class TikTokScraper:
                 print("="*70)
                 
                 try:
-                    # Get TokCount stats
-                    tokcount_followers, tokcount_likes = self.get_tokcount_stats(username)
-                    
-                    # Track failed screenshot scrapes
-                    if tokcount_followers is None:
-                        failed_screenshot_accounts.append(username)
-                    
-                    # Get detailed post metrics
-                    videos_data, ytdlp_followers, ytdlp_likes = self.scrape_tiktok_profile(
-                        username, max_posts
-                    )
-                    
-                    # Use best available data
-                    followers = tokcount_followers if tokcount_followers else ytdlp_followers
-                    total_likes = tokcount_likes if tokcount_likes else ytdlp_likes
-                    
-                    # Create/update DataFrame
+                    # Get existing data for validation
                     existing_df = existing_data.get(username, pd.DataFrame())
-                    df = self.create_dataframe_for_account(
-                        videos_data, followers, total_likes, timestamp_col, existing_df
-                    )
-                    all_account_data[username] = df
-                    self.current_data = all_account_data  # For backup
                     
-                    # Show summary
-                    self.show_account_summary(username, df)
+                    # Try up to 3 times with validation
+                    max_attempts = 3
+                    success = False
+                    
+                    for attempt in range(1, max_attempts + 1):
+                        if attempt > 1:
+                            print(f"\n  🔄 Retry attempt {attempt}/{max_attempts} (waiting 10 seconds...)")
+                            time.sleep(10)  # Wait longer between retries
+                        
+                        # Get TokCount stats
+                        tokcount_followers, tokcount_likes = self.get_tokcount_stats(username)
+                        
+                        # Track failed screenshot scrapes
+                        if tokcount_followers is None and attempt == 1:
+                            failed_screenshot_accounts.append(username)
+                        
+                        # Get detailed post metrics
+                        videos_data, ytdlp_followers, ytdlp_likes = self.scrape_tiktok_profile(
+                            username, max_posts
+                        )
+                        
+                        # Use best available data
+                        followers = tokcount_followers if tokcount_followers else ytdlp_followers
+                        total_likes = tokcount_likes if tokcount_likes else ytdlp_likes
+                        
+                        # Validate the scraped data
+                        is_valid, reason = self.validate_scraped_data(username, followers, total_likes, existing_df)
+                        
+                        if is_valid:
+                            # Create/update DataFrame
+                            df = self.create_dataframe_for_account(
+                                videos_data, followers, total_likes, timestamp_col, existing_df
+                            )
+                            all_account_data[username] = df
+                            self.current_data = all_account_data  # For backup
+                            
+                            # Show summary
+                            self.show_account_summary(username, df)
+                            success = True
+                            break
+                        else:
+                            print(f"  ⚠️  Validation failed: {reason}")
+                            if attempt < max_attempts:
+                                print(f"  🔄 Will retry with longer wait time...")
+                            else:
+                                print(f"  ❌ Max retries reached. Using data anyway but flagging issue.")
+                                # Use the data anyway but log the issue
+                                df = self.create_dataframe_for_account(
+                                    videos_data, followers, total_likes, timestamp_col, existing_df
+                                )
+                                all_account_data[username] = df
+                                self.current_data = all_account_data
+                                self.show_account_summary(username, df)
                     
                 except Exception as e:
                     print(f"\n  ❌ Error with @{username}: {e}")
