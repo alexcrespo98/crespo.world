@@ -90,12 +90,15 @@ def is_recipe_url(url):
 def search_recipe(query, exclude_ingredients=''):
     """Search for a recipe using multiple strategies and return the first valid URL"""
     
+    # Maximum number of excluded ingredients to include in search query
+    MAX_EXCLUSIONS_IN_SEARCH = 2
+    
     # Enhance query with exclusions if provided
     search_query = query
     if exclude_ingredients:
         # Add "without" to search query for better results
         excluded_items = [item.strip() for item in exclude_ingredients.split(',')]
-        exclude_terms = ' '.join([f'without {item}' for item in excluded_items[:2]])  # Limit to first 2 for search
+        exclude_terms = ' '.join([f'without {item}' for item in excluded_items[:MAX_EXCLUSIONS_IN_SEARCH]])
         search_query = f"{query} {exclude_terms}"
         print(f"Enhanced search query: {search_query}")
     
@@ -245,7 +248,7 @@ INGREDIENT EXCLUSIONS:
 The user does NOT have these ingredients: {exclude_ingredients}
 - If searching for a recipe, find one that AVOIDS these ingredients when possible
 - If given a specific recipe URL that uses these ingredients, provide SUBSTITUTIONS
-- Mark substitutions clearly with [SUBSTITUTION] tag like: "- 1 cup milk [SUBSTITUTION: use almond milk or water]"
+- Mark substitutions with format: "- 1 cup milk [SUBSTITUTION: use almond milk or water]"
 - If no good substitution exists, note "[EXCLUDED - optional]" for optional ingredients
 - Prioritize recipes that naturally don't use the excluded ingredients
 """
