@@ -20,6 +20,12 @@ from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
 
 # Try to load .env file if available
 try:
