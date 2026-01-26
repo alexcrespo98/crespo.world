@@ -62,27 +62,105 @@ def is_url(text):
     return url_pattern.match(text) is not None
 
 def search_recipe(query):
-    """Search for a recipe using Google and return the first result URL"""
+    """Search for a recipe using multiple strategies and return the first valid URL"""
+    
+    # Strategy 1: Try popular recipe sites directly
+    recipe_sites = [
+        f"https://www.allrecipes.com/search?q={query.replace(' ', '+')}",
+        f"https://www.foodnetwork.com/search/{query.replace(' ', '-')}-",
+        f"https://www.bonappetit.com/search?q={query.replace(' ', '+')}",
+        f"https://www.epicurious.com/search/{query.replace(' ', '%20')}",
+        f"https://www.seriouseats.com/search?q={query.replace(' ', '+')}",
+    ]
+    
+    print(f"Trying direct recipe site searches for: {query}")
+    for site_url in recipe_sites[:2]:  # Try first 2 sites
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            response = requests.get(site_url, headers=headers, timeout=10, allow_redirects=True)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Look for recipe links in search results
+                # AllRecipes pattern
+                for link in soup.find_all('a', href=True):
+                    href = link.get('href', '')
+                    if 'allrecipes.com/recipe/' in href and href.startswith('http'):
+                        print(f"Found recipe URL from AllRecipes: {href}")
+                        return href
+                    elif 'foodnetwork.com/recipes/' in href and href.startswith('http'):
+                        print(f"Found recipe URL from Food Network: {href}")
+                        return href
+                    elif 'bonappetit.com/recipe/' in href and href.startswith('http'):
+                        print(f"Found recipe URL from Bon Appetit: {href}")
+                        return href
+                    elif 'seriouseats.com/' in href and '/recipes/' in href and href.startswith('http'):
+                        print(f"Found recipe URL from Serious Eats: {href}")
+                        return href
+        except Exception as e:
+            print(f"Error trying recipe site {site_url}: {e}")
+            continue
+    
+    # Strategy 2: Try Google search with improved parsing
     try:
-        search_url = f"https://www.google.com/search?q={query}+recipe"
+        print(f"Trying Google search for: {query}")
+        search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}+recipe"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
         }
         response = requests.get(search_url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Find first real link (skip Google's own URLs)
-        for link in soup.find_all('a'):
+        # Try multiple methods to extract URLs
+        # Method 1: Look for /url?q= pattern
+        for link in soup.find_all('a', href=True):
             href = link.get('href', '')
             if '/url?q=' in href:
-                url = href.split('/url?q=')[1].split('&')[0]
-                if url.startswith('http') and 'google.com' not in url:
-                    return url
+                try:
+                    url = href.split('/url?q=')[1].split('&')[0]
+                    # Decode URL encoding
+                    from urllib.parse import unquote
+                    url = unquote(url)
+                    if url.startswith('http') and 'google.com' not in url.lower() and any(site in url.lower() for site in ['recipe', 'allrecipes', 'foodnetwork', 'food', 'cook', 'kitchen', 'tasty', 'delish', 'epicurious', 'bonappetit', 'seriouseats']):
+                        print(f"Found recipe URL from Google: {url}")
+                        return url
+                except Exception:
+                    continue
         
-        return None
+        # Method 2: Look for direct recipe site links
+        for link in soup.find_all('a', href=True):
+            href = link.get('href', '')
+            if href.startswith('http') and any(site in href.lower() for site in ['allrecipes.com', 'foodnetwork.com', 'bonappetit.com', 'epicurious.com', 'seriouseats.com', 'simplyrecipes.com', 'tasteofhome.com']):
+                print(f"Found direct recipe URL: {href}")
+                return href
+                
     except Exception as e:
-        print(f"Error searching for recipe: {e}")
-        return None
+        print(f"Error with Google search: {e}")
+    
+    # Strategy 3: Try DuckDuckGo as a fallback
+    try:
+        print(f"Trying DuckDuckGo search for: {query}")
+        search_url = f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}+recipe"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        response = requests.get(search_url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        for link in soup.find_all('a', href=True, class_='result__a'):
+            href = link.get('href', '')
+            if href.startswith('http') and any(site in href.lower() for site in ['allrecipes.com', 'foodnetwork.com', 'recipe']):
+                print(f"Found recipe URL from DuckDuckGo: {href}")
+                return href
+    except Exception as e:
+        print(f"Error with DuckDuckGo search: {e}")
+    
+    print(f"Could not find recipe URL for query: {query}")
+    return None
 
 def fetch_webpage_content(url):
     """Fetch and extract text content from a webpage"""
@@ -189,7 +267,13 @@ def simplify():
             print(f"Searching for recipe: {user_input}")
             recipe_url = search_recipe(user_input)
             if not recipe_url:
-                return jsonify({'error': f'Could not find a recipe for "{user_input}"'}), 404
+                error_msg = (
+                    f'Could not find a recipe for "{user_input}". '
+                    'Try: (1) A direct recipe URL, (2) A more specific search like "butter chicken recipe", '
+                    'or (3) A recipe from AllRecipes, Food Network, or similar sites.'
+                )
+                print(f"ERROR: {error_msg}")
+                return jsonify({'error': error_msg}), 404
             print(f"Found recipe URL: {recipe_url}")
         
         # Fetch webpage content
