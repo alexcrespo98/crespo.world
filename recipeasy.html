@@ -180,17 +180,64 @@
     }
     .recipe-section h3 {
       color: #0f0;
-      margin-bottom: 1em;
+      margin-bottom: 0.5em;
       font-size: 1.3em;
     }
-    .ingredient-item,
+    .multiplier-section {
+      margin: 1em 0;
+      padding: 0.8em;
+      border: 2px solid #0f0;
+      border-radius: 5px;
+      background: #000;
+      display: none;
+    }
+    .multiplier-section label {
+      display: inline-block;
+      margin-right: 1em;
+      font-size: 1em;
+    }
+    .multiplier-section select {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 0.5em 1em;
+      font-family: monospace;
+      font-size: 1em;
+      cursor: pointer;
+    }
+    .multiplier-section select:focus {
+      outline: none;
+      box-shadow: 0 0 10px #0f0;
+    }
+    .ingredient-item {
+      margin: 0.2em 0;
+      padding: 0.1em 0;
+      line-height: 1.4;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .ingredient-item:hover {
+      opacity: 0.7;
+    }
+    .ingredient-item.checked {
+      text-decoration: line-through;
+      opacity: 0.5;
+    }
+    .ingredient-amount {
+      color: #0f0;
+      font-weight: bold;
+    }
+    .step-ref {
+      color: #0a0;
+      font-size: 0.85em;
+      margin-left: 0.5em;
+    }
     .instruction-item {
       display: flex;
       align-items: flex-start;
       margin: 0.5em 0;
       padding: 0.3em 0;
     }
-    .ingredient-item input[type="checkbox"],
     .instruction-item input[type="checkbox"] {
       min-width: 24px;
       min-height: 24px;
@@ -199,22 +246,15 @@
       flex-shrink: 0;
       margin-top: 0.1em;
     }
-    .ingredient-item label,
     .instruction-item label {
       flex: 1;
       cursor: pointer;
       line-height: 1.6;
       font-size: 1em;
     }
-    .ingredient-item.checked label,
     .instruction-item.checked label {
       text-decoration: line-through;
       opacity: 0.6;
-    }
-    .step-ref {
-      color: #0a0;
-      font-size: 0.9em;
-      margin-left: 0.5em;
     }
     .config-section {
       margin: 1.5em 0;
@@ -287,24 +327,7 @@
     <h1>recipeasy</h1>
     
     <div class="container">
-      <p style="text-align: center; margin-bottom: 2em;">
-        NO FLUFF. Just ingredients and instructions. That's it.
-      </p>
-
-      <!-- Input Section -->
-      <div class="config-section">
-        <label for="apiEndpoint">API Endpoint:</label>
-        <input 
-          type="text" 
-          id="apiEndpoint" 
-          placeholder="Auto-detected or enter manually"
-        />
-        <div class="help-text">
-          Leave blank for auto-detection. Use http://localhost:5000/simplify for local testing.
-          For Tailscale, use http://[your-tailscale-ip]:5000/simplify
-        </div>
-      </div>
-
+      <!-- Recipe Options -->
       <div class="config-section">
         <label style="display: block; margin-bottom: 0.5em;">Recipe Options:</label>
         <div style="display: flex; gap: 1.5em; flex-wrap: wrap;">
@@ -325,9 +348,6 @@
             <span>Imperial (cups, oz)</span>
           </label>
         </div>
-        <div class="help-text">
-          Unit conversion converts measurements to your preference. No ranges - specific amounts only.
-        </div>
       </div>
 
       <div class="input-group">
@@ -345,6 +365,19 @@
       <!-- Status Messages -->
       <div id="status" class="hidden"></div>
 
+      <!-- Recipe Multiplier -->
+      <div id="multiplierSection" class="multiplier-section">
+        <label for="recipeMultiplier">Recipe Multiplier:</label>
+        <select id="recipeMultiplier" onchange="updateRecipeMultiplier()">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+          <option value="3">3x</option>
+          <option value="4">4x</option>
+        </select>
+      </div>
+
       <!-- Result Section -->
       <div id="result"></div>
       <div id="resultActions" class="result-actions hidden">
@@ -357,41 +390,7 @@
   <script>
     // Password protection
     const CORRECT_PASSWORD = '0990';
-    const DEFAULT_API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
-    
-    // Initialize API endpoint on page load
-    let currentApiEndpoint = DEFAULT_API_ENDPOINT;
-    
-    // Load saved state from localStorage
-    window.addEventListener('DOMContentLoaded', () => {
-      const savedEndpoint = localStorage.getItem('apiEndpoint');
-      if (savedEndpoint) {
-        document.getElementById('apiEndpoint').value = savedEndpoint;
-        currentApiEndpoint = savedEndpoint;
-      } else {
-        document.getElementById('apiEndpoint').placeholder = DEFAULT_API_ENDPOINT;
-      }
-      
-      // Try to detect if we're on localhost
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        document.getElementById('apiEndpoint').placeholder = 'http://localhost:5000/simplify';
-      }
-    });
-    
-    // Save API endpoint when changed
-    document.addEventListener('DOMContentLoaded', () => {
-      const apiInput = document.getElementById('apiEndpoint');
-      apiInput.addEventListener('change', () => {
-        const value = apiInput.value.trim();
-        if (value) {
-          localStorage.setItem('apiEndpoint', value);
-          currentApiEndpoint = value;
-        } else {
-          localStorage.removeItem('apiEndpoint');
-          currentApiEndpoint = DEFAULT_API_ENDPOINT;
-        }
-      });
-    });
+    const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
 
     function checkPassword() {
       const passwordInput = document.getElementById('passwordInput');
@@ -416,10 +415,6 @@
         return;
       }
 
-      // Get API endpoint
-      const apiEndpointInput = document.getElementById('apiEndpoint').value.trim();
-      const apiEndpoint = apiEndpointInput || currentApiEndpoint;
-
       // Get recipe options
       const includeOptional = document.getElementById('includeOptional').checked;
       const unitPreference = document.querySelector('input[name="units"]:checked').value;
@@ -427,12 +422,13 @@
       // Hide previous results
       document.getElementById('result').style.display = 'none';
       document.getElementById('resultActions').classList.add('hidden');
+      document.getElementById('multiplierSection').style.display = 'none';
 
       showStatus('Fetching and simplifying recipe... <span class="spinner"></span>', 'loading');
       document.getElementById('simplifyBtn').disabled = true;
 
       try {
-        const response = await fetch(apiEndpoint, {
+        const response = await fetch(API_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -455,6 +451,7 @@
         if (data.simplified_recipe) {
           displayRecipe(data.simplified_recipe, data.source_url || input);
           showStatus('Recipe simplified successfully!', 'success');
+          document.getElementById('multiplierSection').style.display = 'block';
         } else {
           throw new Error('Invalid response from API');
         }
@@ -525,13 +522,13 @@
       const map = new Map();
       
       ingredients.forEach((ingredient, idx) => {
-        const usedInSteps = [];
+        let lastStep = null;
         instructions.forEach(instruction => {
           if (findIngredientInStep(ingredient, instruction.text)) {
-            usedInSteps.push(instruction.number);
+            lastStep = instruction.number; // Keep updating to get the LAST occurrence
           }
         });
-        map.set(idx, usedInSteps);
+        map.set(idx, lastStep);
       });
       
       return map;
@@ -551,22 +548,29 @@
         return;
       }
       
-      // Build ingredient-to-step mapping
+      // Build ingredient-to-step mapping (LAST step where used)
       const ingredientStepMap = buildIngredientStepMap(parsed.ingredients, parsed.instructions);
       
-      // Build HTML with checkboxes
+      // Build HTML without checkboxes for ingredients
       let html = '<div class="recipe-section">';
       html += '<h3>INGREDIENTS:</h3>';
       
       parsed.ingredients.forEach((ingredient, idx) => {
-        const steps = ingredientStepMap.get(idx);
-        const stepRef = steps && steps.length > 0 
-          ? `<span class="step-ref">(Step${steps.length > 1 ? 's' : ''} ${steps.join(', ')})</span>`
+        const lastStep = ingredientStepMap.get(idx);
+        const stepRef = lastStep 
+          ? `<span class="step-ref">(Step ${lastStep})</span>`
           : '';
+        
+        // Parse ingredient to highlight the amount
+        const parsed_ing = parseIngredientMeasurement(ingredient);
+        let displayText = ingredient;
+        if (parsed_ing.amount) {
+          displayText = `<span class="ingredient-amount">${parsed_ing.amount}${parsed_ing.unit ? ' ' + parsed_ing.unit : ''}</span> ${parsed_ing.item}`;
+        }
+        
         html += `
-          <div class="ingredient-item" data-ingredient-idx="${idx}">
-            <input type="checkbox" id="ingredient-${idx}" onchange="toggleIngredient(${idx})">
-            <label for="ingredient-${idx}">${ingredient} ${stepRef}</label>
+          <div class="ingredient-item" data-ingredient-idx="${idx}" data-original="${ingredient}" onclick="toggleIngredient(${idx})">
+            ${displayText} ${stepRef}
           </div>
         `;
       });
@@ -596,9 +600,128 @@
       window.ingredientStepMap = ingredientStepMap;
       window.checkedInstructions = new Set();
       window.checkedIngredients = new Set();
+      window.baseMultiplier = 1;
       
       // Load saved checkbox state from localStorage
       loadCheckboxState();
+    }
+    
+    function parseIngredientMeasurement(ingredient) {
+      // Match patterns like: "1 cup flour", "2.5 tablespoons sugar", "1/2 teaspoon salt"
+      const pattern = /^([\d\/\.\s]+)\s*(cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|ml|l|°f|°c|degrees?|clove|cloves)?\s*(.+)$/i;
+      const match = ingredient.match(pattern);
+      
+      if (match) {
+        return {
+          amount: match[1].trim(),
+          unit: match[2] || '',
+          item: match[3],
+          original: ingredient
+        };
+      }
+      
+      return {
+        amount: '',
+        unit: '',
+        item: ingredient,
+        original: ingredient
+      };
+    }
+    
+    function multiplyAmount(amountStr, multiplier) {
+      // Handle fractions like 1/2, 1/4, etc.
+      const fractionMatch = amountStr.match(/^(\d+)\/(\d+)$/);
+      if (fractionMatch) {
+        const result = (parseInt(fractionMatch[1]) / parseInt(fractionMatch[2])) * multiplier;
+        return formatAmount(result);
+      }
+      
+      // Handle mixed numbers like "1 1/2"
+      const mixedMatch = amountStr.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+      if (mixedMatch) {
+        const whole = parseInt(mixedMatch[1]);
+        const frac = parseInt(mixedMatch[2]) / parseInt(mixedMatch[3]);
+        const result = (whole + frac) * multiplier;
+        return formatAmount(result);
+      }
+      
+      // Handle decimals and whole numbers
+      const num = parseFloat(amountStr);
+      if (!isNaN(num)) {
+        const result = num * multiplier;
+        return formatAmount(result);
+      }
+      
+      return amountStr; // Return as-is if we can't parse it
+    }
+    
+    function formatAmount(num) {
+      // Convert decimal to fraction if it's close to common fractions
+      const fractions = [
+        [0.125, '1/8'],
+        [0.25, '1/4'],
+        [0.333, '1/3'],
+        [0.5, '1/2'],
+        [0.667, '2/3'],
+        [0.75, '3/4']
+      ];
+      
+      const wholePart = Math.floor(num);
+      const fracPart = num - wholePart;
+      
+      if (fracPart === 0) {
+        return wholePart.toString();
+      }
+      
+      // Check if close to a common fraction
+      for (let [val, frac] of fractions) {
+        if (Math.abs(fracPart - val) < 0.02) {
+          if (wholePart > 0) {
+            return `${wholePart} ${frac}`;
+          }
+          return frac;
+        }
+      }
+      
+      // Otherwise use decimal
+      if (wholePart > 0) {
+        return num.toFixed(2).replace(/\.?0+$/, '');
+      }
+      return num.toFixed(2).replace(/\.?0+$/, '');
+    }
+    
+    function updateRecipeMultiplier() {
+      if (!window.parsedRecipe) return;
+      
+      const multiplier = parseFloat(document.getElementById('recipeMultiplier').value);
+      window.baseMultiplier = multiplier;
+      
+      // Update all ingredient amounts
+      window.parsedRecipe.ingredients.forEach((ingredient, idx) => {
+        const item = document.querySelector(`.ingredient-item[data-ingredient-idx="${idx}"]`);
+        if (!item) return;
+        
+        const originalIngredient = item.getAttribute('data-original');
+        const parsed = parseIngredientMeasurement(originalIngredient);
+        
+        if (parsed.amount) {
+          const newAmount = multiplyAmount(parsed.amount, multiplier);
+          let displayText = `<span class="ingredient-amount">${newAmount}${parsed.unit ? ' ' + parsed.unit : ''}</span> ${parsed.item}`;
+          
+          // Preserve step reference
+          const lastStep = window.ingredientStepMap.get(idx);
+          const stepRef = lastStep 
+            ? `<span class="step-ref">(Step ${lastStep})</span>`
+            : '';
+          
+          item.innerHTML = displayText + ' ' + stepRef;
+          
+          // Preserve checked state
+          if (window.checkedIngredients.has(idx)) {
+            item.classList.add('checked');
+          }
+        }
+      });
     }
     
     function toggleInstruction(stepNumber) {
@@ -620,14 +743,13 @@
     
     function toggleIngredient(ingredientIdx) {
       const item = document.querySelector(`.ingredient-item[data-ingredient-idx="${ingredientIdx}"]`);
-      const isChecked = item.querySelector('input[type="checkbox"]').checked;
       
-      if (isChecked) {
-        item.classList.add('checked');
-        window.checkedIngredients.add(ingredientIdx);
-      } else {
+      if (window.checkedIngredients.has(ingredientIdx)) {
         item.classList.remove('checked');
         window.checkedIngredients.delete(ingredientIdx);
+      } else {
+        item.classList.add('checked');
+        window.checkedIngredients.add(ingredientIdx);
       }
       
       saveCheckboxState();
@@ -636,19 +758,16 @@
     function updateIngredientsBasedOnSteps() {
       if (!window.ingredientStepMap) return;
       
-      window.ingredientStepMap.forEach((steps, ingredientIdx) => {
-        if (steps.length === 0) return;
+      window.ingredientStepMap.forEach((lastStep, ingredientIdx) => {
+        if (!lastStep) return;
         
-        // Check if all steps using this ingredient are checked
-        const allStepsChecked = steps.every(stepNum => window.checkedInstructions.has(stepNum));
-        
-        const item = document.querySelector(`.ingredient-item[data-ingredient-idx="${ingredientIdx}"]`);
-        const checkbox = item.querySelector('input[type="checkbox"]');
-        
-        if (allStepsChecked && !checkbox.checked) {
-          checkbox.checked = true;
-          item.classList.add('checked');
-          window.checkedIngredients.add(ingredientIdx);
+        // Check if the last step using this ingredient is checked
+        if (window.checkedInstructions.has(lastStep)) {
+          const item = document.querySelector(`.ingredient-item[data-ingredient-idx="${ingredientIdx}"]`);
+          if (item && !window.checkedIngredients.has(ingredientIdx)) {
+            item.classList.add('checked');
+            window.checkedIngredients.add(ingredientIdx);
+          }
         }
       });
     }
@@ -685,12 +804,10 @@
           }
         });
         
-        // Restore ingredient checkboxes
+        // Restore ingredient checked state (no checkboxes, just visual)
         state.checkedIngredients.forEach(ingredientIdx => {
           const item = document.querySelector(`.ingredient-item[data-ingredient-idx="${ingredientIdx}"]`);
           if (item) {
-            const checkbox = item.querySelector('input[type="checkbox"]');
-            checkbox.checked = true;
             item.classList.add('checked');
             window.checkedIngredients.add(ingredientIdx);
           }
@@ -730,12 +847,15 @@
       document.getElementById('result').style.display = 'none';
       document.getElementById('resultActions').classList.add('hidden');
       document.getElementById('status').classList.add('hidden');
+      document.getElementById('multiplierSection').style.display = 'none';
+      document.getElementById('recipeMultiplier').value = '1';
       window.currentRecipe = null;
       window.currentSourceUrl = null;
       window.parsedRecipe = null;
       window.ingredientStepMap = null;
       window.checkedInstructions = new Set();
       window.checkedIngredients = new Set();
+      window.baseMultiplier = 1;
     }
 
     function showStatus(message, type) {
