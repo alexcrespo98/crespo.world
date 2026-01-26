@@ -596,6 +596,59 @@ class TikTokScraper:
         
         return True, "Data validation passed"
 
+    def interpolate_zero_values(self, all_account_data):
+        """
+        Interpolate zero values in the data to fill gaps from failed scrapes.
+        Uses forward fill to replace zeros with the most recent non-zero value.
+        
+        Args:
+            all_account_data: Dict of {username: DataFrame}
+            
+        Returns:
+            all_account_data: Same dict with interpolated values
+        """
+        import pandas as pd
+        import numpy as np
+        
+        for username, df in all_account_data.items():
+            if df.empty or len(df.columns) == 0:
+                continue
+            
+            # Convert all columns to strings before sorting to avoid datetime/str comparison
+            # Then find the actual column objects that match the sorted result
+            col_str_map = {str(c): c for c in df.columns}
+            sorted_str_cols = sorted(col_str_map.keys())
+            cols = [col_str_map[str_col] for str_col in sorted_str_cols]
+            
+            # Track interpolations for logging
+            interpolation_count = {}
+            
+            # Interpolate account-level metrics
+            for metric in ['followers', 'total_likes', 'posts_scraped']:
+                if metric not in df.index:
+                    continue
+                
+                row_data = df.loc[metric, cols]
+                # Replace 0 with NaN, then forward fill
+                original_zeros = (row_data == 0).sum()
+                if original_zeros > 0:
+                    row_data_filled = row_data.replace(0, np.nan).ffill()
+                    # Also try backward fill for any remaining NaNs at the start
+                    row_data_filled = row_data_filled.bfill()
+                    df.loc[metric, cols] = row_data_filled
+                    
+                    # Count actual interpolations (zeros that were filled)
+                    filled_count = original_zeros - (df.loc[metric, cols] == 0).sum()
+                    if filled_count > 0:
+                        interpolation_count[metric] = filled_count
+            
+            # Log interpolations
+            if interpolation_count:
+                for metric, count in interpolation_count.items():
+                    print(f"✅ @{username}: Interpolated {count} zero value(s) for {metric}")
+        
+        return all_account_data
+
     def upload_to_google_drive(self, all_account_data=None):
         """
         Upload to Google Drive with data validation.
@@ -613,6 +666,9 @@ class TikTokScraper:
             print(f"  📊 Validation: {reason}")
             if not should_upload:
                 return False
+            
+            # Interpolate zero values before upload
+            all_account_data = self.interpolate_zero_values(all_account_data)
         
         try:
             result = subprocess.run(['rclone', 'version'], 
