@@ -255,6 +255,11 @@ INSTRUCTIONS:
 4. [clear, direct instruction]
 (etc.)
 
+CRITICAL FORMATTING RULES:
+- Instructions MUST be numbered with format "1. ", "2. ", "3. " etc. (number, period, space)
+- NEVER use "Step 1:" or "1)" or any other format
+- ALWAYS use the exact format shown above
+
 Be concise but complete. Each instruction should be one clear action."""
 
         user_prompt = f"""Extract and simplify this recipe. Remove all stories, tips, and fluff. 
