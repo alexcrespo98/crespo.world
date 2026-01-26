@@ -44,70 +44,7 @@
       border-radius: 10px;
       text-align: left;
     }
-    .password-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .password-box {
-      background: #111;
-      border: 2px solid #0f0;
-      padding: 3em;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 400px;
-    }
-    .password-box h2 {
-      color: #0f0;
-      margin-bottom: 1em;
-    }
-    .password-box input {
-      width: 100%;
-      padding: 0.8em;
-      background: #000;
-      color: #0f0;
-      border: 2px solid #0f0;
-      font-family: monospace;
-      font-size: 1.2em;
-      text-align: center;
-      box-sizing: border-box;
-      margin-bottom: 1em;
-    }
-    .password-box input:focus {
-      outline: none;
-      box-shadow: 0 0 10px #0f0;
-    }
-    .password-box button {
-      width: 100%;
-      padding: 1em;
-      background: #000;
-      color: #0f0;
-      border: 2px solid #0f0;
-      font-family: monospace;
-      font-size: 1.2em;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .password-box button:hover {
-      background: #0f0;
-      color: #000;
-      box-shadow: 0 0 10px #0f0;
-    }
-    .password-error {
-      color: #f00;
-      margin-top: 0.5em;
-      display: none;
-    }
-    .main-content {
-      display: none;
-    }
+
     .input-group {
       margin: 2em 0;
     }
@@ -185,7 +122,7 @@
     }
     .recipe-section h3 {
       color: #0f0;
-      margin-bottom: 0.5em;
+      margin-bottom: 0.2em;
       font-size: 1.3em;
     }
     .multiplier-section {
@@ -215,9 +152,9 @@
       box-shadow: 0 0 10px #0f0;
     }
     .ingredient-item {
-      margin: 0.1em 0;
-      padding: 0.05em 0;
-      line-height: 1.3;
+      margin: 0;
+      padding: 0;
+      line-height: 1.0;
       font-size: 0.9em;
       cursor: pointer;
       transition: opacity 0.2s;
@@ -229,6 +166,20 @@
       text-decoration: line-through;
       opacity: 0.5;
     }
+    .ingredient-substitution {
+      color: #ffdd00;
+      font-style: italic;
+      background: rgba(255, 221, 0, 0.1);
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+    }
+    .ingredient-excluded {
+      color: #ff9933;
+      text-decoration: line-through;
+      background: rgba(255, 153, 51, 0.1);
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+    }
     .ingredient-amount {
       color: #0f0;
       font-weight: bold;
@@ -236,8 +187,8 @@
     .instruction-item {
       display: flex;
       align-items: flex-start;
-      margin: 0.5em 0;
-      padding: 0.3em 0;
+      margin: 0.2em 0;
+      padding: 0.1em 0;
     }
     .instruction-item input[type="checkbox"] {
       min-width: 24px;
@@ -300,24 +251,7 @@
   </style>
 </head>
 <body>
-  <!-- Password Protection Overlay -->
-  <div id="passwordOverlay" class="password-overlay">
-    <div class="password-box">
-      <h2>recipeasy</h2>
-      <p>Enter password to continue</p>
-      <input 
-        type="password" 
-        id="passwordInput" 
-        placeholder="Password"
-        onkeypress="if(event.key === 'Enter') checkPassword()"
-      />
-      <button onclick="checkPassword()">Submit</button>
-      <p class="password-error" id="passwordError">Incorrect password</p>
-    </div>
-  </div>
 
-  <!-- Main Content -->
-  <div class="main-content" id="mainContent">
     <nav>
       <a href="index.html">home</a>
       <a href="officecam.html">officecam</a>
@@ -348,6 +282,20 @@
             <input type="radio" name="units" value="imperial" style="cursor: pointer;">
             <span>Imperial (cups, oz)</span>
           </label>
+        </div>
+        <div style="margin-top: 1em;">
+          <label for="excludeIngredients" style="display: block; margin-bottom: 0.3em; font-size: 0.9em;">
+            Ingredients I don't have (comma-separated):
+          </label>
+          <input 
+            type="text" 
+            id="excludeIngredients" 
+            placeholder="e.g., eggs, milk, butter"
+            style="font-size: 0.9em; padding: 0.5em;"
+          />
+          <div class="help-text">
+            Enter ingredients to exclude. The recipe will suggest substitutions or find alternatives.
+          </div>
         </div>
       </div>
 
@@ -386,27 +334,9 @@
         <button onclick="downloadRecipe()">Download as Text</button>
       </div>
     </div>
-  </div>
 
   <script>
-    // Password protection
-    const CORRECT_PASSWORD = '0990';
     const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
-
-    function checkPassword() {
-      const passwordInput = document.getElementById('passwordInput');
-      const passwordError = document.getElementById('passwordError');
-      
-      if (passwordInput.value === CORRECT_PASSWORD) {
-        document.getElementById('passwordOverlay').style.display = 'none';
-        document.getElementById('mainContent').style.display = 'block';
-        passwordInput.value = '';
-      } else {
-        passwordError.style.display = 'block';
-        passwordInput.value = '';
-        passwordInput.focus();
-      }
-    }
 
     async function simplifyRecipe() {
       const input = document.getElementById('recipeInput').value.trim();
@@ -419,6 +349,7 @@
       // Get recipe options
       const includeOptional = document.getElementById('includeOptional').checked;
       const unitPreference = document.querySelector('input[name="units"]:checked').value;
+      const excludeIngredients = document.getElementById('excludeIngredients').value.trim();
 
       // Hide previous results
       document.getElementById('result').style.display = 'none';
@@ -438,7 +369,8 @@
           body: JSON.stringify({
             input: input,
             include_optional: includeOptional,
-            unit_preference: unitPreference
+            unit_preference: unitPreference,
+            exclude_ingredients: excludeIngredients
           })
         });
 
@@ -552,30 +484,42 @@
       html += '<h3>INGREDIENTS:</h3>';
       
       parsed.ingredients.forEach((ingredient, idx) => {
-        // Parse ingredient to highlight the amount
+        // Parse ingredient to highlight the amount and substitutions
         const parsed_ing = parseIngredientMeasurement(ingredient);
         let displayText = ingredient;
-        if (parsed_ing.amount) {
+        
+        // Check for substitution markers
+        const substitutionMatch = ingredient.match(/^(.+?)\s*\[SUBSTITUTION:\s*(.+?)\]$/i);
+        const excludedMatch = ingredient.match(/^(.+?)\s*\[EXCLUDED[^\]]*\]$/i);
+        
+        if (substitutionMatch) {
+          // Ingredient with substitution
+          const originalPart = substitutionMatch[1];
+          const substitution = substitutionMatch[2];
+          const parsed_orig = parseIngredientMeasurement(originalPart);
+          
+          if (parsed_orig.amount) {
+            displayText = `<span class="ingredient-amount">${parsed_orig.amount}${parsed_orig.unit ? ' ' + parsed_orig.unit : ''}</span> ${parsed_orig.item} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
+          } else {
+            displayText = `${originalPart} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
+          }
+        } else if (excludedMatch) {
+          // Excluded ingredient
+          const originalPart = excludedMatch[1];
+          displayText = `<span class="ingredient-excluded">${originalPart}</span>`;
+        } else if (parsed_ing.amount) {
+          // Normal ingredient
           displayText = `<span class="ingredient-amount">${parsed_ing.amount}${parsed_ing.unit ? ' ' + parsed_ing.unit : ''}</span> ${parsed_ing.item}`;
         }
         
-        html += `
-          <div class="ingredient-item" data-ingredient-idx="${idx}" data-original="${ingredient}" onclick="toggleIngredient(${idx})">
-            ${displayText}
-          </div>
-        `;
+        html += `<div class="ingredient-item" data-ingredient-idx="${idx}" data-original="${ingredient}" onclick="toggleIngredient(${idx})">${displayText}</div>`;
       });
       
       html += '</div><div class="recipe-section">';
       html += '<h3>INSTRUCTIONS:</h3>';
       
       parsed.instructions.forEach((instruction, idx) => {
-        html += `
-          <div class="instruction-item" data-step-number="${instruction.number}">
-            <input type="checkbox" id="instruction-${idx}" onchange="toggleInstruction(${instruction.number})">
-            <label for="instruction-${idx}">${instruction.number}. ${instruction.text}</label>
-          </div>
-        `;
+        html += `<div class="instruction-item" data-step-number="${instruction.number}"><input type="checkbox" id="instruction-${idx}" onchange="toggleInstruction(${instruction.number})"><label for="instruction-${idx}">${instruction.number}. ${instruction.text}</label></div>`;
       });
       
       html += '</div>';
