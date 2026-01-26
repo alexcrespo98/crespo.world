@@ -1068,7 +1068,6 @@ class TikTokScraper:
                     for attempt in range(1, max_attempts + 1):
                         if attempt > 1:
                             print(f"\n  🔄 Retry attempt {attempt}/{max_attempts} (waiting 10 seconds...)")
-                            import time
                             time.sleep(10)  # Wait longer between retries
                         
                         # Get TokCount stats
