@@ -418,10 +418,8 @@
     }
     
     function findIngredientInStep(ingredient, stepText) {
-      // Clean the ingredient text - remove measurements, markers, and parenthetical descriptions
+      // Clean the ingredient text - remove measurements and parenthetical descriptions
       let cleanIngredient = ingredient
-        .replace(/\[SUBSTITUTION:.*?\]/gi, '')
-        .replace(/\[EXCLUDED.*?\]/gi, '')
         .replace(/\(.*?\)/g, '') // Remove parenthetical descriptions like "(about 3/4 cup)"
         .replace(/\d+\/\d+/g, '') // Remove fractions
         .replace(/\d+\.\d+/g, '')  // Remove decimals
@@ -452,22 +450,37 @@
       const words = ingredientLower.split(/\s+/).filter(w => w.length >= 3);
       
       // Define compound ingredient patterns that should always stay together
+      // These prevent false matches (e.g., "baking powder" vs "baking sheet")
       const compoundPatterns = [
+        // Baking ingredients
         'baking powder', 'baking soda', 'baking sheet',
-        'olive oil', 'vegetable oil', 'coconut oil', 'canola oil', 'sesame oil',
-        'brown sugar', 'white sugar', 'powdered sugar', 'granulated sugar',
-        'heavy cream', 'sour cream', 'whipped cream', 'light cream',
-        'chicken broth', 'beef broth', 'vegetable broth',
-        'vanilla extract', 'almond extract', 'lemon extract',
         'cocoa powder', 'chili powder', 'curry powder', 'garlic powder', 'onion powder',
+        
+        // Oils
+        'olive oil', 'vegetable oil', 'coconut oil', 'canola oil', 'sesame oil',
+        
+        // Sugars
+        'brown sugar', 'white sugar', 'powdered sugar', 'granulated sugar',
+        
+        // Creams
+        'heavy cream', 'sour cream', 'whipped cream', 'light cream',
+        
+        // Broths
+        'chicken broth', 'beef broth', 'vegetable broth',
+        
+        // Extracts
+        'vanilla extract', 'almond extract', 'lemon extract',
+        
+        // Sauces
         'soy sauce', 'worcestershire sauce', 'hot sauce', 'fish sauce',
+        
+        // Cheeses
         'cream cheese', 'cheddar cheese', 'parmesan cheese', 'mozzarella cheese'
       ];
       
-      // Define common shortening mappings (ingredient → common shortened form in steps)
+      // Define common shortening mappings (ingredient → how it appears in steps)
       const shortenings = {
         'heavy cream': 'cream',
-        'sour cream': 'sour cream', // keep as is, no shortening
         'vanilla extract': 'vanilla',
         'almond extract': 'almond',
         'all-purpose flour': 'flour',
