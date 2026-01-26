@@ -38,10 +38,15 @@ ACCOUNTS_TO_TRACK = [
     "bucketgolfgame",
     "playbattlegolf",
     "flinggolf",
-    "golfpong.games",
+    "golfponggames",  # Changed from "golfpong.games"
     "discgogames",
     "low_tide_golf"
 ]
+
+# Mapping for accounts that need different sheet names in Excel
+SHEET_NAME_MAPPING = {
+    "golfponggames": "golfpong.games"  # Instagram account -> Excel sheet name
+}
 
 INSTAGRAM_COOKIES = [
     {'name': 'datr',       'value': 'FI9FaThKc4gAvqKXjFdg_hY_', 'domain': '.instagram.com'},
@@ -2191,7 +2196,14 @@ class InstagramScraper:
         if os.path.exists(OUTPUT_EXCEL):
             try:
                 excel_data = pd.read_excel(OUTPUT_EXCEL, sheet_name=None, index_col=0)
-                return excel_data
+                # Reverse the mapping for loading
+                reverse_mapping = {v: k for k, v in SHEET_NAME_MAPPING.items()}
+                loaded_data = {}
+                for sheet_name, df in excel_data.items():
+                    # Convert sheet name back to username if it was mapped
+                    username = reverse_mapping.get(sheet_name, sheet_name)
+                    loaded_data[username] = df
+                return loaded_data
             except:
                 return {}
         return {}
@@ -2258,7 +2270,9 @@ class InstagramScraper:
         import pandas as pd
         with pd.ExcelWriter(OUTPUT_EXCEL, engine='openpyxl') as writer:
             for username, df in all_account_data.items():
-                sheet_name = username[:31]
+                # Use mapping if exists, otherwise use username directly
+                sheet_name = SHEET_NAME_MAPPING.get(username, username)
+                sheet_name = sheet_name[:31]  # Excel sheet name limit
                 df.to_excel(writer, sheet_name=sheet_name)
         print(f"\n💾 Excel saved: {OUTPUT_EXCEL}")
 
