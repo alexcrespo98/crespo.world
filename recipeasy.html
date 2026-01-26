@@ -166,20 +166,6 @@
       text-decoration: line-through;
       opacity: 0.5;
     }
-    .ingredient-substitution {
-      color: #ffdd00;
-      font-style: italic;
-      background: rgba(255, 221, 0, 0.1);
-      padding: 0.1em 0.3em;
-      border-radius: 3px;
-    }
-    .ingredient-excluded {
-      color: #ff9933;
-      text-decoration: line-through;
-      background: rgba(255, 153, 51, 0.1);
-      padding: 0.1em 0.3em;
-      border-radius: 3px;
-    }
     .ingredient-amount {
       color: #0f0;
       font-weight: bold;
@@ -283,20 +269,6 @@
             <span>Imperial (cups, oz)</span>
           </label>
         </div>
-        <div style="margin-top: 1em;">
-          <label for="excludeIngredients" style="display: block; margin-bottom: 0.3em; font-size: 0.9em;">
-            Ingredients I don't have (comma-separated):
-          </label>
-          <input 
-            type="text" 
-            id="excludeIngredients" 
-            placeholder="e.g., eggs, milk, butter"
-            style="font-size: 0.9em; padding: 0.5em;"
-          />
-          <div class="help-text">
-            Enter ingredients to exclude. The recipe will suggest substitutions or find alternatives.
-          </div>
-        </div>
       </div>
 
       <div class="input-group">
@@ -349,7 +321,6 @@
       // Get recipe options
       const includeOptional = document.getElementById('includeOptional').checked;
       const unitPreference = document.querySelector('input[name="units"]:checked').value;
-      const excludeIngredients = document.getElementById('excludeIngredients').value.trim();
 
       // Hide previous results
       document.getElementById('result').style.display = 'none';
@@ -369,8 +340,7 @@
           body: JSON.stringify({
             input: input,
             include_optional: includeOptional,
-            unit_preference: unitPreference,
-            exclude_ingredients: excludeIngredients
+            unit_preference: unitPreference
           })
         });
 
@@ -448,19 +418,151 @@
     }
     
     function findIngredientInStep(ingredient, stepText) {
-      // Extract key words from ingredient (ignore measurements)
-      const ingredientWords = ingredient.toLowerCase()
+      // Clean the ingredient text - remove measurements and parenthetical descriptions
+      let cleanIngredient = ingredient
+        .replace(/\(.*?\)/g, '') // Remove parenthetical descriptions like "(about 3/4 cup)"
         .replace(/\d+\/\d+/g, '') // Remove fractions
         .replace(/\d+\.\d+/g, '')  // Remove decimals
         .replace(/\d+/g, '')       // Remove numbers
-        .replace(/cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|ml|l/gi, '')
-        .split(/[\s,()]+/)
-        .filter(word => word.length > 2);
+        .trim();
+      
+      // Remove measurement units
+      cleanIngredient = cleanIngredient.replace(
+        /\b(cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|°f|°c|degrees?|clove|cloves)\b/gi,
+        ''
+      ).trim();
+      
+      // Remove common descriptors/adjectives but keep the core ingredient
+      const descriptors = /\b(fresh|dried|frozen|canned|chopped|diced|minced|sliced|shredded|grated|ground|crushed|whole|halved|quartered|unsalted|salted|large|small|medium|extra|virgin|pure|raw|cooked|boneless|skinless|fine|coarse|all-purpose|self-rising|heavy|light|sour|sweet)\b/gi;
+      cleanIngredient = cleanIngredient.replace(descriptors, '').trim();
+      
+      // Clean up multiple spaces and commas
+      cleanIngredient = cleanIngredient.replace(/[,;]/g, ' ').replace(/\s+/g, ' ').trim();
+      
+      if (!cleanIngredient || cleanIngredient.length < 3) {
+        return false;
+      }
       
       const stepLower = stepText.toLowerCase();
+      const ingredientLower = cleanIngredient.toLowerCase();
       
-      // Check if any significant word from ingredient appears in step
-      return ingredientWords.some(word => stepLower.includes(word));
+      // Split into words
+      const words = ingredientLower.split(/\s+/).filter(w => w.length >= 3);
+      
+      // Define compound ingredient patterns that should always stay together
+      // These prevent false matches (e.g., "baking powder" vs "baking sheet")
+      const compoundPatterns = [
+        // Baking ingredients
+        'baking powder', 'baking soda', 'baking sheet',
+        'cocoa powder', 'chili powder', 'curry powder', 'garlic powder', 'onion powder',
+        
+        // Oils
+        'olive oil', 'vegetable oil', 'coconut oil', 'canola oil', 'sesame oil',
+        
+        // Sugars
+        'brown sugar', 'white sugar', 'powdered sugar', 'granulated sugar',
+        
+        // Creams
+        'heavy cream', 'sour cream', 'whipped cream', 'light cream',
+        
+        // Broths
+        'chicken broth', 'beef broth', 'vegetable broth',
+        
+        // Extracts
+        'vanilla extract', 'almond extract', 'lemon extract',
+        
+        // Sauces
+        'soy sauce', 'worcestershire sauce', 'hot sauce', 'fish sauce',
+        
+        // Cheeses
+        'cream cheese', 'cheddar cheese', 'parmesan cheese', 'mozzarella cheese'
+      ];
+      
+      // Define common shortening mappings (ingredient → how it appears in steps)
+      const shortenings = {
+        'heavy cream': 'cream',
+        'vanilla extract': 'vanilla',
+        'almond extract': 'almond',
+        'all-purpose flour': 'flour',
+        'self-rising flour': 'flour'
+      };
+      
+      // Check if this is a known compound ingredient
+      let isCompound = false;
+      for (const pattern of compoundPatterns) {
+        if (ingredientLower.includes(pattern) || pattern.includes(ingredientLower)) {
+          isCompound = true;
+          break;
+        }
+      }
+      
+      // Generate variations to check
+      const variations = new Set();
+      
+      // Always check the full cleaned ingredient
+      variations.add(ingredientLower);
+      
+      // Check if there's a common shortening for this ingredient
+      for (const [full, short] of Object.entries(shortenings)) {
+        if (ingredientLower.includes(full)) {
+          variations.add(short);
+        }
+      }
+      
+      if (isCompound || words.length > 1) {
+        // For compound ingredients, be strict - require full phrase match
+        // But also check for reasonable shortened forms
+        if (words.length === 2) {
+          // For 2-word ingredients, also check each word individually ONLY if not a known compound
+          if (!isCompound) {
+            words.forEach(w => variations.add(w));
+          }
+        } else if (words.length >= 3) {
+          // For 3+ word ingredients, check various combinations
+          variations.add(words.slice(-2).join(' ')); // last 2 words
+          variations.add(words.slice(0, 2).join(' ')); // first 2 words
+          // Add individual words for very long ingredient names
+          words.forEach(w => {
+            if (w.length >= 4) { // Only longer words
+              variations.add(w);
+            }
+          });
+        }
+      } else {
+        // Single word ingredient - just use it as is
+        variations.add(ingredientLower);
+      }
+      
+      // Check each variation with word boundaries
+      for (const variant of variations) {
+        if (variant.length < 3) continue;
+        
+        // Escape special regex characters
+        const escapedVariant = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Create regex with word boundaries
+        const regex = new RegExp('\\b' + escapedVariant + '\\b', 'i');
+        
+        if (regex.test(stepLower)) {
+          // If we matched a single word from a multi-word ingredient, verify it's correct
+          if (words.length > 1 && !variant.includes(' ')) {
+            // Single word match from multi-word ingredient - need additional verification
+            // Check if the full phrase also exists in the step
+            const fullRegex = new RegExp('\\b' + ingredientLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+            if (fullRegex.test(stepLower)) {
+              return true; // Full phrase found, definitely correct
+            }
+            
+            // Otherwise, this might be a false positive - skip it
+            continue;
+          } else {
+            // Full phrase match or single-word ingredient matched
+            return true;
+          }
+        }
+      }
+      
+      return false;
     }
     
     
@@ -484,30 +586,11 @@
       html += '<h3>INGREDIENTS:</h3>';
       
       parsed.ingredients.forEach((ingredient, idx) => {
-        // Parse ingredient to highlight the amount and substitutions
+        // Parse ingredient to highlight the amount
         const parsed_ing = parseIngredientMeasurement(ingredient);
         let displayText = ingredient;
         
-        // Check for substitution markers
-        const substitutionMatch = ingredient.match(/^(.+?)\s*\[SUBSTITUTION:\s*(.+?)\]$/i);
-        const excludedMatch = ingredient.match(/^(.+?)\s*\[EXCLUDED[^\]]*\]$/i);
-        
-        if (substitutionMatch) {
-          // Ingredient with substitution
-          const originalPart = substitutionMatch[1];
-          const substitution = substitutionMatch[2];
-          const parsed_orig = parseIngredientMeasurement(originalPart);
-          
-          if (parsed_orig.amount) {
-            displayText = `<span class="ingredient-amount">${parsed_orig.amount}${parsed_orig.unit ? ' ' + parsed_orig.unit : ''}</span> ${parsed_orig.item} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
-          } else {
-            displayText = `${originalPart} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
-          }
-        } else if (excludedMatch) {
-          // Excluded ingredient
-          const originalPart = excludedMatch[1];
-          displayText = `<span class="ingredient-excluded">${originalPart}</span>`;
-        } else if (parsed_ing.amount) {
+        if (parsed_ing.amount) {
           // Normal ingredient
           displayText = `<span class="ingredient-amount">${parsed_ing.amount}${parsed_ing.unit ? ' ' + parsed_ing.unit : ''}</span> ${parsed_ing.item}`;
         }
