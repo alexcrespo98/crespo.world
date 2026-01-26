@@ -14,6 +14,7 @@ Usage:
 import os
 import re
 import requests
+import subprocess
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -27,10 +28,27 @@ except ImportError:
     pass
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Enable CORS for all routes, allowing requests from crespo.world and any origin
+CORS(app, origins=["*"])
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def get_tailscale_ip():
+    """Get the Tailscale IPv4 address of this machine"""
+    try:
+        result = subprocess.run(['tailscale', 'ip', '-4'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=5)
+        if result.returncode == 0:
+            ip = result.stdout.strip()
+            if ip:
+                return ip
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        pass
+    return None
+
 
 def is_url(text):
     """Check if the input text is a URL"""
@@ -221,13 +239,22 @@ if __name__ == '__main__':
         print("Or create a .env file with: OPENAI_API_KEY=your-key-here")
         print("=" * 60)
     
+    # Get Tailscale IP
+    tailscale_ip = get_tailscale_ip()
+    
     print("\n" + "=" * 60)
-    print("🍳 Recipeasy API Server Starting")
+    print("Recipeasy API Server Starting")
     print("=" * 60)
     print(f"Server will be available at:")
     print(f"  - http://localhost:5000")
     print(f"  - http://0.0.0.0:5000")
-    print(f"  - http://[your-tailscale-ip]:5000")
+    if tailscale_ip:
+        print(f"  - http://{tailscale_ip}:5000")
+        print(f"\nTailscale IP detected: {tailscale_ip}")
+        print(f"API endpoint: http://{tailscale_ip}:5000/simplify")
+    else:
+        print(f"  - http://[your-tailscale-ip]:5000")
+        print(f"\nNote: Tailscale IP could not be auto-detected")
     print("\nEndpoints:")
     print("  GET  /health   - Health check")
     print("  POST /simplify - Simplify recipe")
