@@ -189,18 +189,50 @@ def fetch_webpage_content(url):
         print(f"Error fetching webpage: {e}")
         raise
 
-def simplify_recipe_with_ai(content):
+def simplify_recipe_with_ai(content, include_optional=True, unit_preference='original'):
     """Use OpenAI to extract and simplify the recipe"""
     try:
-        system_prompt = """You are a recipe extraction expert. Your job is to extract recipes from web content and format them in a clean, no-nonsense way.
+        # Build unit conversion instructions
+        unit_instructions = ""
+        if unit_preference == 'metric':
+            unit_instructions = """
+UNIT CONVERSION:
+- Convert ALL measurements to metric (grams, ml, celsius)
+- For dry ingredients: provide grams AND practical volume (e.g., "100g flour (about 3/4 cup)")
+- For liquids: provide ml AND practical volume (e.g., "240ml milk (1 cup)")
+- For items like meat: use grams AND practical descriptions (e.g., "450g chicken breast (2 medium breasts)")
+"""
+        elif unit_preference == 'imperial':
+            unit_instructions = """
+UNIT CONVERSION:
+- Convert ALL measurements to imperial (cups, tablespoons, teaspoons, fahrenheit)
+- For weights: convert to volume when practical (e.g., "1 cup flour" instead of "125g")
+- For items like meat: use practical descriptions (e.g., "2 medium chicken breasts" instead of "1 pound")
+- Provide ounces AND volume for clarity (e.g., "8oz (1 cup)")
+"""
+        
+        optional_instructions = ""
+        if not include_optional:
+            optional_instructions = "- EXCLUDE all optional ingredients and garnishes"
+        
+        system_prompt = f"""You are a recipe extraction expert. Your job is to extract recipes from web content and format them in a clean, no-nonsense way.
 
 CRITICAL REQUIREMENTS:
-1. Extract ALL ingredients with exact measurements
-2. Extract ALL instructions in order
-3. Format EXACTLY as shown below
-4. Remove ALL fluff, stories, tips, and extra content
-5. ALWAYS include preheat temperature if there's baking
-6. ALWAYS include prep steps like "line baking sheet" at the start of instructions
+1. Extract ALL ingredients with SPECIFIC measurements (NEVER use ranges like "2-3 cups")
+2. For ranges, always use the middle or most practical value (e.g., "2.5 cups" or round to "2.5 cups")
+3. Extract ALL instructions in order
+4. Format EXACTLY as shown below
+5. Remove ALL fluff, stories, tips, and extra content
+6. ALWAYS include preheat temperature if there's baking
+7. ALWAYS include prep steps like "line baking sheet" at the start of instructions
+{optional_instructions}
+
+MEASUREMENT RULES:
+- NO RANGES: Convert "2-3 teaspoons" to "2.5 teaspoons" or "2.5 tsp"
+- NO RANGES: Convert "1/2 to 1 cup" to "3/4 cup"
+- Be specific and practical
+- Round to common fractions (1/4, 1/3, 1/2, 2/3, 3/4) when possible
+{unit_instructions}
 
 OUTPUT FORMAT (MUST MATCH EXACTLY):
 INGREDIENTS:
@@ -259,6 +291,10 @@ def simplify():
         if not user_input:
             return jsonify({'error': 'Input cannot be empty'}), 400
         
+        # Get optional parameters
+        include_optional = data.get('include_optional', True)
+        unit_preference = data.get('unit_preference', 'original')  # 'metric', 'imperial', or 'original'
+        
         # Determine if input is URL or search query
         if is_url(user_input):
             recipe_url = user_input
@@ -282,7 +318,7 @@ def simplify():
         
         # Simplify with AI
         print("Simplifying recipe with AI...")
-        simplified = simplify_recipe_with_ai(content)
+        simplified = simplify_recipe_with_ai(content, include_optional, unit_preference)
         
         return jsonify({
             'simplified_recipe': simplified,

@@ -305,6 +305,31 @@
         </div>
       </div>
 
+      <div class="config-section">
+        <label style="display: block; margin-bottom: 0.5em;">Recipe Options:</label>
+        <div style="display: flex; gap: 1.5em; flex-wrap: wrap;">
+          <label style="display: flex; align-items: center; gap: 0.5em; cursor: pointer;">
+            <input type="checkbox" id="includeOptional" checked style="cursor: pointer;">
+            <span>Include optional ingredients</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5em; cursor: pointer;">
+            <input type="radio" name="units" value="original" checked style="cursor: pointer;">
+            <span>Original units</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5em; cursor: pointer;">
+            <input type="radio" name="units" value="metric" style="cursor: pointer;">
+            <span>Metric (g, ml)</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5em; cursor: pointer;">
+            <input type="radio" name="units" value="imperial" style="cursor: pointer;">
+            <span>Imperial (cups, oz)</span>
+          </label>
+        </div>
+        <div class="help-text">
+          Unit conversion converts measurements to your preference. No ranges - specific amounts only.
+        </div>
+      </div>
+
       <div class="input-group">
         <label for="recipeInput">Recipe URL or Search Query:</label>
         <input 
@@ -395,6 +420,10 @@
       const apiEndpointInput = document.getElementById('apiEndpoint').value.trim();
       const apiEndpoint = apiEndpointInput || currentApiEndpoint;
 
+      // Get recipe options
+      const includeOptional = document.getElementById('includeOptional').checked;
+      const unitPreference = document.querySelector('input[name="units"]:checked').value;
+
       // Hide previous results
       document.getElementById('result').style.display = 'none';
       document.getElementById('resultActions').classList.add('hidden');
@@ -410,7 +439,9 @@
             'Accept': 'application/json',
           },
           body: JSON.stringify({
-            input: input
+            input: input,
+            include_optional: includeOptional,
+            unit_preference: unitPreference
           })
         });
 
