@@ -166,20 +166,6 @@
       text-decoration: line-through;
       opacity: 0.5;
     }
-    .ingredient-substitution {
-      color: #ffdd00;
-      font-style: italic;
-      background: rgba(255, 221, 0, 0.1);
-      padding: 0.1em 0.3em;
-      border-radius: 3px;
-    }
-    .ingredient-excluded {
-      color: #ff9933;
-      text-decoration: line-through;
-      background: rgba(255, 153, 51, 0.1);
-      padding: 0.1em 0.3em;
-      border-radius: 3px;
-    }
     .ingredient-amount {
       color: #0f0;
       font-weight: bold;
@@ -283,20 +269,6 @@
             <span>Imperial (cups, oz)</span>
           </label>
         </div>
-        <div style="margin-top: 1em;">
-          <label for="excludeIngredients" style="display: block; margin-bottom: 0.3em; font-size: 0.9em;">
-            Ingredients I don't have (comma-separated):
-          </label>
-          <input 
-            type="text" 
-            id="excludeIngredients" 
-            placeholder="e.g., eggs, milk, butter"
-            style="font-size: 0.9em; padding: 0.5em;"
-          />
-          <div class="help-text">
-            Enter ingredients to exclude. The recipe will suggest substitutions or find alternatives.
-          </div>
-        </div>
       </div>
 
       <div class="input-group">
@@ -349,7 +321,6 @@
       // Get recipe options
       const includeOptional = document.getElementById('includeOptional').checked;
       const unitPreference = document.querySelector('input[name="units"]:checked').value;
-      const excludeIngredients = document.getElementById('excludeIngredients').value.trim();
 
       // Hide previous results
       document.getElementById('result').style.display = 'none';
@@ -369,8 +340,7 @@
           body: JSON.stringify({
             input: input,
             include_optional: includeOptional,
-            unit_preference: unitPreference,
-            exclude_ingredients: excludeIngredients
+            unit_preference: unitPreference
           })
         });
 
@@ -448,19 +418,39 @@
     }
     
     function findIngredientInStep(ingredient, stepText) {
-      // Extract key words from ingredient (ignore measurements)
-      const ingredientWords = ingredient.toLowerCase()
+      // Clean the ingredient text - remove measurements and markers
+      let cleanIngredient = ingredient
+        .replace(/\[SUBSTITUTION:.*?\]/gi, '')
+        .replace(/\[EXCLUDED.*?\]/gi, '')
         .replace(/\d+\/\d+/g, '') // Remove fractions
         .replace(/\d+\.\d+/g, '')  // Remove decimals
         .replace(/\d+/g, '')       // Remove numbers
-        .replace(/cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|ml|l/gi, '')
-        .split(/[\s,()]+/)
-        .filter(word => word.length > 2);
+        .replace(/cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|ml|l|°f|°c|degrees?/gi, '')
+        .trim();
+      
+      // Extract the main ingredient name (without parenthetical descriptions)
+      const mainIngredient = cleanIngredient.split('(')[0].trim();
+      
+      if (!mainIngredient || mainIngredient.length < 3) {
+        return false;
+      }
       
       const stepLower = stepText.toLowerCase();
+      const ingredientLower = mainIngredient.toLowerCase();
       
-      // Check if any significant word from ingredient appears in step
-      return ingredientWords.some(word => stepLower.includes(word));
+      // Create a word boundary regex to match whole words/phrases
+      // This ensures "baking powder" doesn't match "baking sheet"
+      // and "salt" doesn't accidentally match "salted" when we want exact match
+      
+      // Escape special regex characters in the ingredient
+      const escapedIngredient = ingredientLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // Match the ingredient as a complete phrase with word boundaries
+      // Using \b for word boundaries, which works for single words
+      // For multi-word phrases, we check if the phrase appears with proper word boundaries
+      const regex = new RegExp('\\b' + escapedIngredient + '\\b', 'i');
+      
+      return regex.test(stepLower);
     }
     
     
@@ -484,30 +474,11 @@
       html += '<h3>INGREDIENTS:</h3>';
       
       parsed.ingredients.forEach((ingredient, idx) => {
-        // Parse ingredient to highlight the amount and substitutions
+        // Parse ingredient to highlight the amount
         const parsed_ing = parseIngredientMeasurement(ingredient);
         let displayText = ingredient;
         
-        // Check for substitution markers
-        const substitutionMatch = ingredient.match(/^(.+?)\s*\[SUBSTITUTION:\s*(.+?)\]$/i);
-        const excludedMatch = ingredient.match(/^(.+?)\s*\[EXCLUDED[^\]]*\]$/i);
-        
-        if (substitutionMatch) {
-          // Ingredient with substitution
-          const originalPart = substitutionMatch[1];
-          const substitution = substitutionMatch[2];
-          const parsed_orig = parseIngredientMeasurement(originalPart);
-          
-          if (parsed_orig.amount) {
-            displayText = `<span class="ingredient-amount">${parsed_orig.amount}${parsed_orig.unit ? ' ' + parsed_orig.unit : ''}</span> ${parsed_orig.item} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
-          } else {
-            displayText = `${originalPart} <span class="ingredient-substitution">[→ ${substitution}]</span>`;
-          }
-        } else if (excludedMatch) {
-          // Excluded ingredient
-          const originalPart = excludedMatch[1];
-          displayText = `<span class="ingredient-excluded">${originalPart}</span>`;
-        } else if (parsed_ing.amount) {
+        if (parsed_ing.amount) {
           // Normal ingredient
           displayText = `<span class="ingredient-amount">${parsed_ing.amount}${parsed_ing.unit ? ' ' + parsed_ing.unit : ''}</span> ${parsed_ing.item}`;
         }

@@ -87,20 +87,10 @@ def is_recipe_url(url):
     return (any(site in url_lower for site in RECIPE_SITE_PATTERNS) or
             any(keyword in url_lower for keyword in RECIPE_KEYWORDS))
 
-def search_recipe(query, exclude_ingredients=''):
+def search_recipe(query):
     """Search for a recipe using multiple strategies and return the first valid URL"""
     
-    # Maximum number of excluded ingredients to include in search query
-    MAX_EXCLUSIONS_IN_SEARCH = 2
-    
-    # Enhance query with exclusions if provided
     search_query = query
-    if exclude_ingredients:
-        # Add "without" to search query for better results
-        excluded_items = [item.strip() for item in exclude_ingredients.split(',')]
-        exclude_terms = ' '.join([f'without {item}' for item in excluded_items[:MAX_EXCLUSIONS_IN_SEARCH]])
-        search_query = f"{query} {exclude_terms}"
-        print(f"Enhanced search query: {search_query}")
     
     # Strategy 1: Try popular recipe sites directly
     recipe_sites = [
@@ -215,7 +205,7 @@ def fetch_webpage_content(url):
         print(f"Error fetching webpage: {e}")
         raise
 
-def simplify_recipe_with_ai(content, include_optional=True, unit_preference='original', exclude_ingredients=''):
+def simplify_recipe_with_ai(content, include_optional=True, unit_preference='original'):
     """Use OpenAI to extract and simplify the recipe"""
     try:
         # Build unit conversion instructions
@@ -241,18 +231,6 @@ UNIT CONVERSION:
         if not include_optional:
             optional_instructions = "- EXCLUDE all optional ingredients and garnishes"
         
-        exclude_instructions = ""
-        if exclude_ingredients:
-            exclude_instructions = f"""
-INGREDIENT EXCLUSIONS:
-The user does NOT have these ingredients: {exclude_ingredients}
-- If searching for a recipe, find one that AVOIDS these ingredients when possible
-- If given a specific recipe URL that uses these ingredients, provide SUBSTITUTIONS
-- Mark substitutions with format: "- 1 cup milk [SUBSTITUTION: use almond milk or water]"
-- If no good substitution exists, note "[EXCLUDED - optional]" for optional ingredients
-- Prioritize recipes that naturally don't use the excluded ingredients
-"""
-        
         system_prompt = f"""You are a recipe extraction expert. Your job is to extract recipes from web content and format them in a clean, no-nonsense way.
 
 CRITICAL REQUIREMENTS:
@@ -264,7 +242,6 @@ CRITICAL REQUIREMENTS:
 6. ALWAYS include preheat temperature if there's baking
 7. ALWAYS include prep steps like "line baking sheet" at the start of instructions
 {optional_instructions}
-{exclude_instructions}
 
 MEASUREMENT RULES:
 - NO RANGES: Convert "2-3 teaspoons" to "2.5 teaspoons" or "2.5 tsp"
@@ -338,7 +315,6 @@ def simplify():
         # Get optional parameters
         include_optional = data.get('include_optional', True)
         unit_preference = data.get('unit_preference', 'original')  # 'metric', 'imperial', or 'original'
-        exclude_ingredients = data.get('exclude_ingredients', '')  # comma-separated ingredients to exclude
         
         # Determine if input is URL or search query
         if is_url(user_input):
@@ -346,7 +322,7 @@ def simplify():
             print(f"Processing URL: {recipe_url}")
         else:
             print(f"Searching for recipe: {user_input}")
-            recipe_url = search_recipe(user_input, exclude_ingredients)
+            recipe_url = search_recipe(user_input)
             if not recipe_url:
                 error_msg = (
                     f'Could not find a recipe for "{user_input}". '
@@ -363,7 +339,7 @@ def simplify():
         
         # Simplify with AI
         print("Simplifying recipe with AI...")
-        simplified = simplify_recipe_with_ai(content, include_optional, unit_preference, exclude_ingredients)
+        simplified = simplify_recipe_with_ai(content, include_optional, unit_preference)
         
         return jsonify({
             'simplified_recipe': simplified,
