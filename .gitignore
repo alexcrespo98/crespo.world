@@ -34,3 +34,5 @@ auto_scraper.log
 auto_scraper.pid
 .env
 .env
+.env
+.env
