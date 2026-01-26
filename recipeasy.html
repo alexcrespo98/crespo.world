@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>recipeasy - crespo.world</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      text-align: center;
+      margin: 0;
+      padding: 2em;
+    }
+    nav {
+      margin-bottom: 2em;
+    }
+    nav a {
+      color: #0f0;
+      text-decoration: none;
+      margin: 0 1em;
+      font-weight: bold;
+    }
+    nav a:hover {
+      text-decoration: underline;
+    }
+    h1 { 
+      font-size: 2.5em; 
+      margin-bottom: 0.5em;
+      text-shadow: 0 0 10px #0f0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2em;
+      border: 2px solid #0f0;
+      background: #111;
+      border-radius: 10px;
+      text-align: left;
+    }
+    .input-group {
+      margin: 2em 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5em;
+      font-size: 1.2em;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 0.8em;
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      font-family: monospace;
+      font-size: 1em;
+      box-sizing: border-box;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      box-shadow: 0 0 10px #0f0;
+    }
+    button {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 1em 2em;
+      margin: 1em 0.5em 0 0;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 1em;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+    button:hover {
+      background: #0f0;
+      color: #000;
+      box-shadow: 0 0 10px #0f0;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .config-section {
+      margin: 2em 0;
+      padding: 1em;
+      border: 1px solid #0f0;
+      border-radius: 5px;
+      background: #000;
+    }
+    .config-section h3 {
+      margin-top: 0;
+      color: #0f0;
+    }
+    .config-input {
+      margin: 1em 0;
+    }
+    .config-input label {
+      font-size: 1em;
+      margin-bottom: 0.3em;
+    }
+    .config-input input {
+      width: 100%;
+      padding: 0.5em;
+    }
+    .status {
+      margin: 1em 0;
+      padding: 1em;
+      border: 2px solid #0f0;
+      border-radius: 5px;
+      background: #000;
+    }
+    .status.error {
+      border-color: #f00;
+      color: #f00;
+    }
+    .status.success {
+      border-color: #0f0;
+      color: #0f0;
+    }
+    .status.loading {
+      border-color: #ff0;
+      color: #ff0;
+    }
+    #result {
+      margin-top: 2em;
+      padding: 2em;
+      border: 2px solid #0f0;
+      background: #000;
+      white-space: pre-wrap;
+      text-align: left;
+      display: none;
+      line-height: 1.6;
+    }
+    .result-actions {
+      margin-top: 1em;
+      text-align: center;
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #0f0;
+      border-top: 3px solid transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .hidden {
+      display: none;
+    }
+    .example {
+      font-size: 0.9em;
+      color: #0a0;
+      margin-top: 0.3em;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="index.html">home</a>
+    <a href="officecam.html">officecam</a>
+    <a href="crespomize.html">crespomize</a>
+    <a href="recipeasy.html">recipeasy</a>
+  </nav>
+
+  <h1>🍳 recipeasy</h1>
+  
+  <div class="container">
+    <p style="text-align: center; margin-bottom: 2em;">
+      NO FLUFF. Just ingredients and instructions. That's it.
+    </p>
+
+    <!-- Configuration Section -->
+    <div class="config-section">
+      <h3>⚙️ API Configuration</h3>
+      <div class="config-input">
+        <label for="apiEndpoint">API Endpoint URL:</label>
+        <input 
+          type="text" 
+          id="apiEndpoint" 
+          placeholder="http://your-tailscale-hostname:5000/simplify"
+          value="http://localhost:5000/simplify"
+        />
+        <div class="example">Example: http://100.64.1.2:5000/simplify or http://homeserver.tailnet.ts.net:5000/simplify</div>
+      </div>
+      <button onclick="saveConfig()">Save Configuration</button>
+      <button onclick="testConnection()">Test Connection</button>
+    </div>
+
+    <!-- Input Section -->
+    <div class="input-group">
+      <label for="recipeInput">Enter Recipe URL or Recipe Name:</label>
+      <input 
+        type="text" 
+        id="recipeInput" 
+        placeholder="https://joyfoodsunshine.com/the-most-amazing-chocolate-chip-cookies/ or 'chocolate chip cookies'"
+      />
+      <div class="example">
+        Try: https://joyfoodsunshine.com/the-most-amazing-chocolate-chip-cookies/
+      </div>
+    </div>
+
+    <button id="simplifyBtn" onclick="simplifyRecipe()">Simplify Recipe</button>
+    <button onclick="clearAll()">Clear</button>
+
+    <!-- Status Messages -->
+    <div id="status" class="hidden"></div>
+
+    <!-- Result Section -->
+    <div id="result"></div>
+    <div id="resultActions" class="result-actions hidden">
+      <button onclick="copyRecipe()">Copy to Clipboard</button>
+      <button onclick="downloadRecipe()">Download as Text</button>
+    </div>
+  </div>
+
+  <script>
+    // Load saved configuration
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedEndpoint = localStorage.getItem('recipeasy_api_endpoint');
+      if (savedEndpoint) {
+        document.getElementById('apiEndpoint').value = savedEndpoint;
+      }
+    });
+
+    function saveConfig() {
+      const endpoint = document.getElementById('apiEndpoint').value.trim();
+      if (!endpoint) {
+        showStatus('Please enter an API endpoint URL', 'error');
+        return;
+      }
+      localStorage.setItem('recipeasy_api_endpoint', endpoint);
+      showStatus('Configuration saved!', 'success');
+    }
+
+    async function testConnection() {
+      const endpoint = document.getElementById('apiEndpoint').value.trim();
+      if (!endpoint) {
+        showStatus('Please enter an API endpoint URL first', 'error');
+        return;
+      }
+
+      showStatus('Testing connection...', 'loading');
+      
+      try {
+        const baseUrl = endpoint.replace('/simplify', '');
+        const response = await fetch(`${baseUrl}/health`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          showStatus(`✓ Connection successful! API version: ${data.version || 'unknown'}`, 'success');
+        } else {
+          showStatus(`✗ Connection failed: ${response.status} ${response.statusText}`, 'error');
+        }
+      } catch (error) {
+        showStatus(`✗ Connection failed: ${error.message}. Make sure your API server is running.`, 'error');
+      }
+    }
+
+    async function simplifyRecipe() {
+      const input = document.getElementById('recipeInput').value.trim();
+      const endpoint = document.getElementById('apiEndpoint').value.trim();
+
+      if (!input) {
+        showStatus('Please enter a recipe URL or name', 'error');
+        return;
+      }
+
+      if (!endpoint) {
+        showStatus('Please configure the API endpoint first', 'error');
+        return;
+      }
+
+      // Hide previous results
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('resultActions').classList.add('hidden');
+
+      showStatus('Fetching and simplifying recipe... <span class="spinner"></span>', 'loading');
+      document.getElementById('simplifyBtn').disabled = true;
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            input: input
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.simplified_recipe) {
+          displayRecipe(data.simplified_recipe, data.source_url || input);
+          showStatus('✓ Recipe simplified successfully!', 'success');
+        } else {
+          throw new Error('Invalid response from API');
+        }
+      } catch (error) {
+        showStatus(`✗ Error: ${error.message}`, 'error');
+        console.error('Error:', error);
+      } finally {
+        document.getElementById('simplifyBtn').disabled = false;
+      }
+    }
+
+    function displayRecipe(recipeText, sourceUrl) {
+      const resultDiv = document.getElementById('result');
+      resultDiv.textContent = recipeText;
+      resultDiv.style.display = 'block';
+      document.getElementById('resultActions').classList.remove('hidden');
+      
+      // Store for copy/download
+      window.currentRecipe = recipeText;
+      window.currentSourceUrl = sourceUrl;
+    }
+
+    function copyRecipe() {
+      if (window.currentRecipe) {
+        navigator.clipboard.writeText(window.currentRecipe).then(() => {
+          showStatus('✓ Recipe copied to clipboard!', 'success');
+        }).catch(err => {
+          showStatus('✗ Failed to copy to clipboard', 'error');
+        });
+      }
+    }
+
+    function downloadRecipe() {
+      if (window.currentRecipe) {
+        const blob = new Blob([window.currentRecipe], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'recipe.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showStatus('✓ Recipe downloaded!', 'success');
+      }
+    }
+
+    function clearAll() {
+      document.getElementById('recipeInput').value = '';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('resultActions').classList.add('hidden');
+      document.getElementById('status').classList.add('hidden');
+      window.currentRecipe = null;
+      window.currentSourceUrl = null;
+    }
+
+    function showStatus(message, type) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = message;
+      statusDiv.className = `status ${type}`;
+      statusDiv.classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
