@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+"""
+Recipeasy API - AI-powered recipe simplifier
+Runs on your homeserver and simplifies recipes from any website.
+
+Usage:
+    1. Install dependencies: pip install flask openai requests beautifulsoup4 flask-cors python-dotenv
+    2. Set your OpenAI API key: export OPENAI_API_KEY="your-key-here"
+       OR create a .env file with: OPENAI_API_KEY=your-key-here
+    3. Run: python recipeasy_api.py
+    4. Access at: http://localhost:5000 (or via your Tailscale IP)
+"""
+
+import os
+import re
+import requests
+from bs4 import BeautifulSoup
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from openai import OpenAI
+
+# Try to load .env file if available
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
+# Initialize OpenAI client
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def is_url(text):
+    """Check if the input text is a URL"""
+    url_pattern = re.compile(
+        r'^https?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
+        r'localhost|'  # localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+        r'(?::\d+)?'  # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    return url_pattern.match(text) is not None
+
+def search_recipe(query):
+    """Search for a recipe using Google and return the first result URL"""
+    try:
+        search_url = f"https://www.google.com/search?q={query}+recipe"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(search_url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Find first real link (skip Google's own URLs)
+        for link in soup.find_all('a'):
+            href = link.get('href', '')
+            if '/url?q=' in href:
+                url = href.split('/url?q=')[1].split('&')[0]
+                if url.startswith('http') and 'google.com' not in url:
+                    return url
+        
+        return None
+    except Exception as e:
+        print(f"Error searching for recipe: {e}")
+        return None
+
+def fetch_webpage_content(url):
+    """Fetch and extract text content from a webpage"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "header", "footer"]):
+            script.decompose()
+        
+        # Get text and clean it up
+        text = soup.get_text()
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = ' '.join(chunk for chunk in chunks if chunk)
+        
+        # Limit to first 8000 characters to avoid token limits
+        return text[:8000]
+    except Exception as e:
+        print(f"Error fetching webpage: {e}")
+        raise
+
+def simplify_recipe_with_ai(content):
+    """Use OpenAI to extract and simplify the recipe"""
+    try:
+        system_prompt = """You are a recipe extraction expert. Your job is to extract recipes from web content and format them in a clean, no-nonsense way.
+
+CRITICAL REQUIREMENTS:
+1. Extract ALL ingredients with exact measurements
+2. Extract ALL instructions in order
+3. Format EXACTLY as shown below
+4. Remove ALL fluff, stories, tips, and extra content
+5. ALWAYS include preheat temperature if there's baking
+6. ALWAYS include prep steps like "line baking sheet" at the start of instructions
+
+OUTPUT FORMAT (MUST MATCH EXACTLY):
+INGREDIENTS:
+- ingredient 1 with measurement
+- ingredient 2 with measurement
+(etc.)
+
+INSTRUCTIONS:
+1. Preheat oven to [temperature] (if applicable)
+2. Line/prepare pans (if applicable)
+3. [clear, direct instruction]
+4. [clear, direct instruction]
+(etc.)
+
+Be concise but complete. Each instruction should be one clear action."""
+
+        user_prompt = f"""Extract and simplify this recipe. Remove all stories, tips, and fluff. 
+Format it with INGREDIENTS first (with measurements), then INSTRUCTIONS (numbered steps).
+
+Content:
+{content}"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Using cost-effective model
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,  # Lower temperature for more consistent formatting
+            max_tokens=2000
+        )
+        
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error calling OpenAI API: {e}")
+        raise
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'ok',
+        'version': '1.0',
+        'message': 'Recipeasy API is running'
+    })
+
+@app.route('/simplify', methods=['POST'])
+def simplify():
+    """Main endpoint to simplify recipes"""
+    try:
+        data = request.json
+        if not data or 'input' not in data:
+            return jsonify({'error': 'Missing "input" field in request'}), 400
+        
+        user_input = data['input'].strip()
+        if not user_input:
+            return jsonify({'error': 'Input cannot be empty'}), 400
+        
+        # Determine if input is URL or search query
+        if is_url(user_input):
+            recipe_url = user_input
+            print(f"Processing URL: {recipe_url}")
+        else:
+            print(f"Searching for recipe: {user_input}")
+            recipe_url = search_recipe(user_input)
+            if not recipe_url:
+                return jsonify({'error': f'Could not find a recipe for "{user_input}"'}), 404
+            print(f"Found recipe URL: {recipe_url}")
+        
+        # Fetch webpage content
+        print("Fetching webpage content...")
+        content = fetch_webpage_content(recipe_url)
+        
+        # Simplify with AI
+        print("Simplifying recipe with AI...")
+        simplified = simplify_recipe_with_ai(content)
+        
+        return jsonify({
+            'simplified_recipe': simplified,
+            'source_url': recipe_url
+        })
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Failed to fetch recipe: {str(e)}'}), 500
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+
+@app.route('/', methods=['GET'])
+def index():
+    """Root endpoint with API information"""
+    return jsonify({
+        'name': 'Recipeasy API',
+        'version': '1.0',
+        'endpoints': {
+            '/health': 'GET - Health check',
+            '/simplify': 'POST - Simplify a recipe (requires "input" field with URL or recipe name)',
+        },
+        'example': {
+            'method': 'POST',
+            'endpoint': '/simplify',
+            'body': {
+                'input': 'https://example.com/recipe or "chocolate chip cookies"'
+            }
+        }
+    })
+
+if __name__ == '__main__':
+    # Check for API key
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("=" * 60)
+        print("WARNING: OPENAI_API_KEY environment variable not set!")
+        print("Set it with: export OPENAI_API_KEY='your-key-here'")
+        print("Or create a .env file with: OPENAI_API_KEY=your-key-here")
+        print("=" * 60)
+    
+    print("\n" + "=" * 60)
+    print("🍳 Recipeasy API Server Starting")
+    print("=" * 60)
+    print(f"Server will be available at:")
+    print(f"  - http://localhost:5000")
+    print(f"  - http://0.0.0.0:5000")
+    print(f"  - http://[your-tailscale-ip]:5000")
+    print("\nEndpoints:")
+    print("  GET  /health   - Health check")
+    print("  POST /simplify - Simplify recipe")
+    print("=" * 60 + "\n")
+    
+    # Run the server
+    # Using 0.0.0.0 to allow external connections (Tailscale)
+    app.run(host='0.0.0.0', port=5000, debug=True)
