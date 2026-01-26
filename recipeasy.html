@@ -418,39 +418,138 @@
     }
     
     function findIngredientInStep(ingredient, stepText) {
-      // Clean the ingredient text - remove measurements and markers
+      // Clean the ingredient text - remove measurements, markers, and parenthetical descriptions
       let cleanIngredient = ingredient
         .replace(/\[SUBSTITUTION:.*?\]/gi, '')
         .replace(/\[EXCLUDED.*?\]/gi, '')
+        .replace(/\(.*?\)/g, '') // Remove parenthetical descriptions like "(about 3/4 cup)"
         .replace(/\d+\/\d+/g, '') // Remove fractions
         .replace(/\d+\.\d+/g, '')  // Remove decimals
         .replace(/\d+/g, '')       // Remove numbers
-        .replace(/cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|ml|l|°f|°c|degrees?/gi, '')
         .trim();
       
-      // Extract the main ingredient name (without parenthetical descriptions)
-      const mainIngredient = cleanIngredient.split('(')[0].trim();
+      // Remove measurement units
+      cleanIngredient = cleanIngredient.replace(
+        /\b(cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|°f|°c|degrees?|clove|cloves)\b/gi,
+        ''
+      ).trim();
       
-      if (!mainIngredient || mainIngredient.length < 3) {
+      // Remove common descriptors/adjectives but keep the core ingredient
+      const descriptors = /\b(fresh|dried|frozen|canned|chopped|diced|minced|sliced|shredded|grated|ground|crushed|whole|halved|quartered|unsalted|salted|large|small|medium|extra|virgin|pure|raw|cooked|boneless|skinless|fine|coarse|all-purpose|self-rising|heavy|light|sour|sweet)\b/gi;
+      cleanIngredient = cleanIngredient.replace(descriptors, '').trim();
+      
+      // Clean up multiple spaces and commas
+      cleanIngredient = cleanIngredient.replace(/[,;]/g, ' ').replace(/\s+/g, ' ').trim();
+      
+      if (!cleanIngredient || cleanIngredient.length < 3) {
         return false;
       }
       
       const stepLower = stepText.toLowerCase();
-      const ingredientLower = mainIngredient.toLowerCase();
+      const ingredientLower = cleanIngredient.toLowerCase();
       
-      // Create a word boundary regex to match whole words/phrases
-      // This ensures "baking powder" doesn't match "baking sheet"
-      // and "salt" doesn't accidentally match "salted" when we want exact match
+      // Split into words
+      const words = ingredientLower.split(/\s+/).filter(w => w.length >= 3);
       
-      // Escape special regex characters in the ingredient
-      const escapedIngredient = ingredientLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Define compound ingredient patterns that should always stay together
+      const compoundPatterns = [
+        'baking powder', 'baking soda', 'baking sheet',
+        'olive oil', 'vegetable oil', 'coconut oil', 'canola oil', 'sesame oil',
+        'brown sugar', 'white sugar', 'powdered sugar', 'granulated sugar',
+        'heavy cream', 'sour cream', 'whipped cream', 'light cream',
+        'chicken broth', 'beef broth', 'vegetable broth',
+        'vanilla extract', 'almond extract', 'lemon extract',
+        'cocoa powder', 'chili powder', 'curry powder', 'garlic powder', 'onion powder',
+        'soy sauce', 'worcestershire sauce', 'hot sauce', 'fish sauce',
+        'cream cheese', 'cheddar cheese', 'parmesan cheese', 'mozzarella cheese'
+      ];
       
-      // Match the ingredient as a complete phrase with word boundaries
-      // Using \b for word boundaries, which works for single words
-      // For multi-word phrases, we check if the phrase appears with proper word boundaries
-      const regex = new RegExp('\\b' + escapedIngredient + '\\b', 'i');
+      // Define common shortening mappings (ingredient → common shortened form in steps)
+      const shortenings = {
+        'heavy cream': 'cream',
+        'sour cream': 'sour cream', // keep as is, no shortening
+        'vanilla extract': 'vanilla',
+        'almond extract': 'almond',
+        'all-purpose flour': 'flour',
+        'self-rising flour': 'flour'
+      };
       
-      return regex.test(stepLower);
+      // Check if this is a known compound ingredient
+      let isCompound = false;
+      for (const pattern of compoundPatterns) {
+        if (ingredientLower.includes(pattern) || pattern.includes(ingredientLower)) {
+          isCompound = true;
+          break;
+        }
+      }
+      
+      // Generate variations to check
+      const variations = new Set();
+      
+      // Always check the full cleaned ingredient
+      variations.add(ingredientLower);
+      
+      // Check if there's a common shortening for this ingredient
+      for (const [full, short] of Object.entries(shortenings)) {
+        if (ingredientLower.includes(full)) {
+          variations.add(short);
+        }
+      }
+      
+      if (isCompound || words.length > 1) {
+        // For compound ingredients, be strict - require full phrase match
+        // But also check for reasonable shortened forms
+        if (words.length === 2) {
+          // For 2-word ingredients, also check each word individually ONLY if not a known compound
+          if (!isCompound) {
+            words.forEach(w => variations.add(w));
+          }
+        } else if (words.length >= 3) {
+          // For 3+ word ingredients, check various combinations
+          variations.add(words.slice(-2).join(' ')); // last 2 words
+          variations.add(words.slice(0, 2).join(' ')); // first 2 words
+          // Add individual words for very long ingredient names
+          words.forEach(w => {
+            if (w.length >= 4) { // Only longer words
+              variations.add(w);
+            }
+          });
+        }
+      } else {
+        // Single word ingredient - just use it as is
+        variations.add(ingredientLower);
+      }
+      
+      // Check each variation with word boundaries
+      for (const variant of variations) {
+        if (variant.length < 3) continue;
+        
+        // Escape special regex characters
+        const escapedVariant = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Create regex with word boundaries
+        const regex = new RegExp('\\b' + escapedVariant + '\\b', 'i');
+        
+        if (regex.test(stepLower)) {
+          // If we matched a single word from a multi-word ingredient, verify it's correct
+          if (words.length > 1 && !variant.includes(' ')) {
+            // Single word match from multi-word ingredient - need additional verification
+            // Check if the full phrase also exists in the step
+            const fullRegex = new RegExp('\\b' + ingredientLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+            if (fullRegex.test(stepLower)) {
+              return true; // Full phrase found, definitely correct
+            }
+            
+            // Otherwise, this might be a false positive - skip it
+            continue;
+          } else {
+            // Full phrase match or single-word ingredient matched
+            return true;
+          }
+        }
+      }
+      
+      return false;
     }
     
     
