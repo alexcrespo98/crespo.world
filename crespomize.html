@@ -678,14 +678,6 @@
       </select>
       <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
         
-        <!-- Fill Toggle in top right -->
-        <div style="position: absolute; top: 1em; right: 1em; z-index: 100;">
-          <label style="color: #0f0; font-size: 0.9em; cursor: pointer;">
-            <input type="checkbox" id="monthlyFillToggle" checked onchange="app.toggleMonthlyChartFill(this.checked)" style="margin-right: 0.5em; cursor: pointer;">
-            Area Fill
-          </label>
-        </div>
-        
         <div class="question" id="monthlyGraphsTitle"></div>
         
         <!-- Tab Navigation -->
@@ -886,9 +878,6 @@
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
       customDateRange: { start: null, end: null },
-      
-      // Monthly chart fill state
-      monthlyChartFill: true, // Toggle for area fill under line
       
       // Initialize the application
       init() {
@@ -1333,17 +1322,6 @@
         this.switchMonthlyTab('total');
       },
       
-      // Toggle monthly chart fill
-      toggleMonthlyChartFill(fillEnabled) {
-        this.monthlyChartFill = fillEnabled;
-        // Re-render current tab to apply new fill setting
-        const activeTab = document.querySelector('.monthly-tab.active');
-        if (activeTab) {
-          const tabName = activeTab.getAttribute('data-tab');
-          this.switchMonthlyTab(tabName);
-        }
-      },
-      
       // Switch between monthly analytics tabs
       switchMonthlyTab(tabName) {
         // Update tab button states
@@ -1431,9 +1409,26 @@
               }
               
               // Collect follower history data for combined chart
-              // Simply collect all data points - we'll sum them by date later
+              // Sum follower counts across all clients for each date
               if (client[platform].dailyFollowerData && client[platform].dailyFollowerData.length > 0) {
-                combinedFollowerData[platform].push(...client[platform].dailyFollowerData);
+                client[platform].dailyFollowerData.forEach(dataPoint => {
+                  const dateKey = dataPoint.date.toISOString().split('T')[0];
+                  // Find if we already have data for this date
+                  const existingIndex = combinedFollowerData[platform].findIndex(
+                    d => d.date.toISOString().split('T')[0] === dateKey
+                  );
+                  
+                  if (existingIndex >= 0) {
+                    // Add to existing follower count for this date
+                    combinedFollowerData[platform][existingIndex].followers += dataPoint.followers;
+                  } else {
+                    // First entry for this date, create a new one
+                    combinedFollowerData[platform].push({
+                      date: dataPoint.date,
+                      followers: dataPoint.followers
+                    });
+                  }
+                });
               }
             }
           });
@@ -1936,11 +1931,9 @@
             followerData[platform].forEach(point => {
               const dateKey = point.date.toISOString().split('T')[0];
               allDates.add(dateKey);
-              // Sum follower counts for the same date (for Total Moon Media aggregation)
-              if (!platformData[platform][dateKey]) {
-                platformData[platform][dateKey] = 0;
+              if (!platformData[platform][dateKey] || point.followers > platformData[platform][dateKey]) {
+                platformData[platform][dateKey] = point.followers;
               }
-              platformData[platform][dateKey] += point.followers;
             });
           }
         });
@@ -2044,7 +2037,7 @@
             pointRadius: 3,
             pointHoverRadius: 5,
             tension: 0.4,
-            fill: this.monthlyChartFill
+            fill: true
           });
         });
         
