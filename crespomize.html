@@ -711,11 +711,11 @@
       </select>
       <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
         
-        <!-- Global Export Screenshot Button -->
-        <button id="globalExportScreenshotBtn" class="export-btn" 
-                style="position: fixed; top: 20px; right: 20px; z-index: 1000; background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.8em 1.2em; cursor: pointer; font-family: monospace; border-radius: 5px;"
-                onclick="app.exportMonthlyScreenshot()">
-          📸 Export Screenshot
+        <!-- Toggle Export Buttons Button -->
+        <button id="toggleExportButtonsBtn" class="export-btn" 
+                style="position: absolute; top: -50px; right: 0; z-index: 1000; background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.6em 1em; cursor: pointer; font-family: monospace; border-radius: 5px; font-size: 0.9em;"
+                onclick="app.toggleExportButtons()">
+          👁️ Hide Export Buttons
         </button>
         
         <div class="question" id="monthlyGraphsTitle"></div>
@@ -926,6 +926,7 @@
       chartMetricKeys: {},
       allPlatformsData: {},
       allVideosUnfiltered: [],
+      exportButtonsVisible: true,  // Track visibility of export buttons
       
       // Easy graphs state
       easyGraphsData: {},
@@ -3742,32 +3743,21 @@
         document.addEventListener('keydown', closeMessage);
       },
       
-      // Export monthly screenshot
-      exportMonthlyScreenshot() {
-        const message = document.createElement('div');
-        message.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000; color: #0f0; border: 3px solid #0f0; padding: 2em; border-radius: 10px; z-index: 10000; text-align: center; font-family: monospace; max-width: 500px;';
-        message.innerHTML = `
-          <h3 style="margin-top: 0; color: #00ff00;">📸 Ready to Screenshot!</h3>
-          <p>Use your device's screenshot tool to capture the current view.</p>
-          <p style="font-size: 0.9em;">
-            <strong>Windows:</strong> Win + Shift + S or Snipping Tool<br>
-            <strong>Mac:</strong> Cmd + Shift + 4<br>
-            <strong>Linux:</strong> Print Screen or Screenshot app
-          </p>
-          <p style="margin-bottom: 0;">Click anywhere to close this message.</p>
-        `;
-        document.body.appendChild(message);
+      // Toggle export buttons visibility
+      toggleExportButtons() {
+        this.exportButtonsVisible = !this.exportButtonsVisible;
         
-        const closeMessage = () => {
-          document.body.removeChild(message);
-          document.removeEventListener('click', closeMessage);
-          document.removeEventListener('keydown', closeMessage);
-        };
+        // Update toggle button text
+        const toggleBtn = document.getElementById('toggleExportButtonsBtn');
+        if (toggleBtn) {
+          toggleBtn.textContent = this.exportButtonsVisible ? '👁️ Hide Export Buttons' : '👁️ Show Export Buttons';
+        }
         
-        setTimeout(() => {
-          document.addEventListener('click', closeMessage);
-          document.addEventListener('keydown', closeMessage);
-        }, 100);
+        // Toggle all export buttons
+        const exportButtons = document.querySelectorAll('.export-btn:not(#toggleExportButtonsBtn)');
+        exportButtons.forEach(btn => {
+          btn.style.display = this.exportButtonsVisible ? '' : 'none';
+        });
       },
       
       // Render easy graphs for client report
