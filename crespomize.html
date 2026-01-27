@@ -473,6 +473,9 @@
       font-size: 0.8em;
       margin-right: 0.5em;
     }
+    .style-selector label.secondary {
+      margin-left: 1em;
+    }
     .style-selector select {
       background: #000;
       color: #0f0;
@@ -687,7 +690,7 @@
             <option value="style-7">Dense</option>
           </select>
           
-          <label for="donutLabelStyleSelect" style="margin-left: 1em;">Donut Labels:</label>
+          <label for="donutLabelStyleSelect" class="secondary">Donut Labels:</label>
           <select id="donutLabelStyleSelect" onchange="app.changeDonutLabelStyle(this.value)">
             <option value="shadow">Shadow</option>
             <option value="background">Background</option>
@@ -1779,7 +1782,7 @@
                   const total = absData.reduce((sum, val) => sum + val, 0);
                   const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                   // Hide 0.0 values
-                  if (parseFloat(percentage) === 0) {
+                  if (+percentage === 0) {
                     return '';
                   }
                   return percentage + '%';
