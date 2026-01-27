@@ -543,16 +543,16 @@
       background: #000;
       border: 1px solid #0f0;
       border-radius: 5px;
-      padding: 1.5em;
+      padding: 1em;
       text-align: center;
     }
     .donut-chart-container h4 {
       color: #0f0;
-      margin: 0 0 1em 0;
-      font-size: 1em;
+      margin: 0 0 0.5em 0;
+      font-size: 0.9em;
     }
     .donut-chart-wrapper {
-      max-width: 400px;
+      max-width: 500px;
       margin: 0 auto;
       position: relative;
     }
@@ -711,6 +711,13 @@
       </select>
       <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
         
+        <!-- Global Export Screenshot Button -->
+        <button id="globalExportScreenshotBtn" class="export-btn" 
+                style="position: fixed; top: 20px; right: 20px; z-index: 1000; background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.8em 1.2em; cursor: pointer; font-family: monospace; border-radius: 5px;"
+                onclick="app.exportMonthlyScreenshot()">
+          📸 Export Screenshot
+        </button>
+        
         <div class="question" id="monthlyGraphsTitle"></div>
         
         <!-- Tab Navigation -->
@@ -733,13 +740,6 @@
           <div id="monthlyChartsList"></div>
         </div>
         
-        <div class="export-section" style="text-align: center; margin-top: 2em;">
-          <div style="margin-bottom: 1em;">
-            <button id="monthlyExportBtn" class="looks-good-btn" onclick="app.exportMonthlyReport()">
-              Export Monthly Report PDF
-            </button>
-          </div>
-        </div>
         <br>
         <button onclick="location.reload()">start over</button>
       </div>
@@ -1626,21 +1626,13 @@
         const changePrefix = followerChange >= 0 ? '+' : '';
         const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
         
-        // Display summary statistics
+        // Add report label instead of stats (stats are now in donut charts function)
+        const monthName = this.currentMonthlyMonth || 'Report';
         statsContainer.innerHTML = `
-          <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
-            <div class="value">
-              ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <h4>AVERAGE VIEWS/SECOND</h4>
-            <div class="value">${avgViewsPerSecond}</div>
-          </div>
+          <h2 style="color: #0f0; text-align: center; margin: 1.5em 0;">Total Moon Media ${monthName} Report</h2>
         `;
         
-        // Create donut charts for Total Moon Media
+        // Create donut charts for Total Moon Media (includes stats boxes now)
         this.createTotalDonutCharts(chartsContainer, {
           platformFollowers,
           platformFollowersChange,
@@ -1743,23 +1735,13 @@
         const changePrefix = followerChange >= 0 ? '+' : '';
         const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
         
-        // Display summary statistics
-        let statsHTML = `
-          <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
-            <div class="value">
-              ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <h4>AVERAGE VIEWS/SECOND</h4>
-            <div class="value">${avgViewsPerSecond}</div>
-          </div>
+        // Add report label instead of stats (stats are now in donut charts function)
+        const monthName = this.currentMonthlyMonth || 'Report';
+        statsContainer.innerHTML = `
+          <h2 style="color: #0f0; text-align: center; margin: 1.5em 0;">${clientName} ${monthName} Report</h2>
         `;
         
-        statsContainer.innerHTML = statsHTML;
-        
-        // Create donut charts for the client
+        // Create donut charts for the client (includes stats boxes now)
         this.createClientDonutCharts(chartsContainer, {
           platformFollowers,
           platformFollowersChange,
@@ -1884,8 +1866,10 @@
                 position: 'bottom',
                 labels: {
                   color: '#0f0',
-                  font: { family: 'monospace', size: 12 },
-                  padding: 15
+                  font: { family: 'monospace', size: 9 },
+                  padding: 8,
+                  boxWidth: 12,
+                  boxHeight: 12
                 }
               },
               tooltip: {
@@ -1965,33 +1949,90 @@
       createTotalDonutCharts(container, data) {
         const { platformFollowers, platformFollowersChange, platformLikes, platformViews, platformPosts, totalComments, totalShares, followerChange } = data;
         
-        const donutSection = document.createElement('div');
-        donutSection.className = 'donut-charts-section';
-        donutSection.style.position = 'relative';
+        // Create wrapper for stats and donuts with single export button
+        const statsDonutWrapper = document.createElement('div');
+        statsDonutWrapper.style.position = 'relative';
+        statsDonutWrapper.style.marginBottom = '2em';
         
-        // Create title with month name
-        const monthName = this.currentMonthlyMonth || 'Platform';
-        const sectionTitle = document.createElement('h3');
-        sectionTitle.textContent = `${monthName} Platform Breakdown`;
-        sectionTitle.style.display = 'inline-block';
-        donutSection.appendChild(sectionTitle);
-        
-        // Add export button at top right
+        // Add single export button at top right for both stats and donuts
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
-        exportBtn.textContent = 'Export';
+        exportBtn.textContent = 'Export Stats & Charts';
         exportBtn.style.position = 'absolute';
         exportBtn.style.right = '0';
         exportBtn.style.top = '0';
-        exportBtn.onclick = () => this.exportDonutCharts();
-        donutSection.appendChild(exportBtn);
+        exportBtn.style.zIndex = '10';
+        exportBtn.onclick = () => this.exportStatsAndDonuts();
+        statsDonutWrapper.appendChild(exportBtn);
         
+        // Create stats grid with all 4 boxes (2x2 layout)
+        const statsGrid = document.createElement('div');
+        statsGrid.className = 'stats-summary';
+        statsGrid.style.marginBottom = '2em';
+        statsGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        
+        // Calculate values
+        const totalFollowersEnd = platformFollowers.instagram + platformFollowers.tiktok + platformFollowers.youtube;
+        const totalFollowersStart = (platformFollowers.instagram - platformFollowersChange.instagram) + 
+                                    (platformFollowers.tiktok - platformFollowersChange.tiktok) + 
+                                    (platformFollowers.youtube - platformFollowersChange.youtube);
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
+        // Total Followers box (top left)
+        const followersCard = document.createElement('div');
+        followersCard.className = 'stat-card';
+        followersCard.innerHTML = `
+          <h4>TOTAL FOLLOWERS</h4>
+          <div class="value">
+            ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
+          </div>
+        `;
+        statsGrid.appendChild(followersCard);
+        
+        // Average Views/Second box (top right)
+        const avgViewsCard = document.createElement('div');
+        avgViewsCard.className = 'stat-card';
+        const totalViews = platformViews.instagram + platformViews.tiktok + platformViews.youtube;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
+        avgViewsCard.innerHTML = `
+          <h4>AVERAGE VIEWS/SECOND</h4>
+          <div class="value">${avgViewsPerSecond}</div>
+        `;
+        statsGrid.appendChild(avgViewsCard);
+        
+        // Total Comments box (bottom left)
+        if (totalComments > 0) {
+          const commentsCard = document.createElement('div');
+          commentsCard.className = 'stat-card';
+          commentsCard.innerHTML = `
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          `;
+          statsGrid.appendChild(commentsCard);
+        }
+        
+        // Total Shares box (bottom right)
+        if (totalShares > 0) {
+          const sharesCard = document.createElement('div');
+          sharesCard.className = 'stat-card';
+          sharesCard.innerHTML = `
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
+          `;
+          statsGrid.appendChild(sharesCard);
+        }
+        
+        statsDonutWrapper.appendChild(statsGrid);
+        
+        // Create donut charts section (without title, just the charts)
         const donutGrid = document.createElement('div');
         donutGrid.className = 'donut-charts-grid';
         
         const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
         
-        // Followers donut chart - show follower CHANGE in center
+        // Followers donut chart
         const followerData = [
           platformFollowers.instagram,
           platformFollowers.tiktok,
@@ -2023,82 +2064,98 @@
         ];
         this.createDonutChart(donutGrid, 'Total Posts by Platform', postsData, followerLabels, 'total-posts-donut');
         
-        donutSection.appendChild(donutGrid);
-        
-        // Add shares & comments stat boxes if there's data (move to after main stats)
-        if (totalComments > 0 || totalShares > 0) {
-          const extraStatsGrid = document.createElement('div');
-          extraStatsGrid.className = 'stats-summary';
-          extraStatsGrid.style.marginTop = '1em';
-          extraStatsGrid.style.position = 'relative';
-          
-          // Add export button for stats
-          const statsExportBtn = document.createElement('button');
-          statsExportBtn.className = 'export-btn';
-          statsExportBtn.textContent = 'Export';
-          statsExportBtn.style.position = 'absolute';
-          statsExportBtn.style.right = '0';
-          statsExportBtn.style.top = '-2.5em';
-          statsExportBtn.onclick = () => this.exportStats();
-          extraStatsGrid.appendChild(statsExportBtn);
-          
-          if (totalComments > 0) {
-            const commentCard = document.createElement('div');
-            commentCard.className = 'stat-card';
-            commentCard.innerHTML = `
-              <h4>TOTAL COMMENTS</h4>
-              <div class="value">${this.formatNumber(totalComments)}</div>
-            `;
-            extraStatsGrid.appendChild(commentCard);
-          }
-          
-          if (totalShares > 0) {
-            const shareCard = document.createElement('div');
-            shareCard.className = 'stat-card';
-            shareCard.innerHTML = `
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
-            `;
-            extraStatsGrid.appendChild(shareCard);
-          }
-          
-          donutSection.appendChild(extraStatsGrid);
-        }
-        
-        container.appendChild(donutSection);
+        statsDonutWrapper.appendChild(donutGrid);
+        container.appendChild(statsDonutWrapper);
       },
       
       // Create donut charts for individual client view
       createClientDonutCharts(container, data) {
         const { platformFollowers, platformFollowersChange, platformLikes, platformViews, platformPosts, totalComments, totalShares, followerChange } = data;
         
-        const donutSection = document.createElement('div');
-        donutSection.className = 'donut-charts-section';
-        donutSection.style.position = 'relative';
+        // Create wrapper for stats and donuts with single export button
+        const statsDonutWrapper = document.createElement('div');
+        statsDonutWrapper.style.position = 'relative';
+        statsDonutWrapper.style.marginBottom = '2em';
         
-        // Create title with month name
-        const monthName = this.currentMonthlyMonth || 'Platform';
-        const sectionTitle = document.createElement('h3');
-        sectionTitle.textContent = `${monthName} Platform Breakdown`;
-        sectionTitle.style.display = 'inline-block';
-        donutSection.appendChild(sectionTitle);
-        
-        // Add export button at top right
+        // Add single export button at top right for both stats and donuts
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
-        exportBtn.textContent = 'Export';
+        exportBtn.textContent = 'Export Stats & Charts';
         exportBtn.style.position = 'absolute';
         exportBtn.style.right = '0';
         exportBtn.style.top = '0';
-        exportBtn.onclick = () => this.exportDonutCharts();
-        donutSection.appendChild(exportBtn);
+        exportBtn.style.zIndex = '10';
+        exportBtn.onclick = () => this.exportStatsAndDonuts();
+        statsDonutWrapper.appendChild(exportBtn);
         
+        // Create stats grid with all 4 boxes (2x2 layout)
+        const statsGrid = document.createElement('div');
+        statsGrid.className = 'stats-summary';
+        statsGrid.style.marginBottom = '2em';
+        statsGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        
+        // Calculate values
+        const totalFollowersEnd = platformFollowers.instagram + platformFollowers.tiktok + platformFollowers.youtube;
+        const totalFollowersStart = (platformFollowers.instagram - platformFollowersChange.instagram) + 
+                                    (platformFollowers.tiktok - platformFollowersChange.tiktok) + 
+                                    (platformFollowers.youtube - platformFollowersChange.youtube);
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
+        // Total Followers box (top left)
+        const followersCard = document.createElement('div');
+        followersCard.className = 'stat-card';
+        followersCard.innerHTML = `
+          <h4>TOTAL FOLLOWERS</h4>
+          <div class="value">
+            ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
+          </div>
+        `;
+        statsGrid.appendChild(followersCard);
+        
+        // Average Views/Second box (top right)
+        const avgViewsCard = document.createElement('div');
+        avgViewsCard.className = 'stat-card';
+        const totalViews = platformViews.instagram + platformViews.tiktok + platformViews.youtube;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
+        avgViewsCard.innerHTML = `
+          <h4>AVERAGE VIEWS/SECOND</h4>
+          <div class="value">${avgViewsPerSecond}</div>
+        `;
+        statsGrid.appendChild(avgViewsCard);
+        
+        // Total Comments box (bottom left)
+        if (totalComments > 0) {
+          const commentsCard = document.createElement('div');
+          commentsCard.className = 'stat-card';
+          commentsCard.innerHTML = `
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          `;
+          statsGrid.appendChild(commentsCard);
+        }
+        
+        // Total Shares box (bottom right)
+        if (totalShares > 0) {
+          const sharesCard = document.createElement('div');
+          sharesCard.className = 'stat-card';
+          sharesCard.innerHTML = `
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
+          `;
+          statsGrid.appendChild(sharesCard);
+        }
+        
+        statsDonutWrapper.appendChild(statsGrid);
+        
+        // Create donut charts section (without title, just the charts)
         const donutGrid = document.createElement('div');
         donutGrid.className = 'donut-charts-grid';
         
         const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
         
-        // Followers donut chart - show follower CHANGE in center
+        // Followers donut chart
         const followerData = [
           platformFollowers.instagram,
           platformFollowers.tiktok,
@@ -2138,49 +2195,8 @@
           this.createDonutChart(donutGrid, 'Posts by Platform', postsData, followerLabels, 'client-posts-donut');
         }
         
-        donutSection.appendChild(donutGrid);
-        
-        // Add shares & comments stat boxes if there's data
-        if (totalComments > 0 || totalShares > 0) {
-          const extraStatsGrid = document.createElement('div');
-          extraStatsGrid.className = 'stats-summary';
-          extraStatsGrid.style.marginTop = '1em';
-          extraStatsGrid.style.position = 'relative';
-          
-          // Add export button for stats
-          const statsExportBtn = document.createElement('button');
-          statsExportBtn.className = 'export-btn';
-          statsExportBtn.textContent = 'Export';
-          statsExportBtn.style.position = 'absolute';
-          statsExportBtn.style.right = '0';
-          statsExportBtn.style.top = '-2.5em';
-          statsExportBtn.onclick = () => this.exportStats();
-          extraStatsGrid.appendChild(statsExportBtn);
-          
-          if (totalComments > 0) {
-            const commentCard = document.createElement('div');
-            commentCard.className = 'stat-card';
-            commentCard.innerHTML = `
-              <h4>TOTAL COMMENTS</h4>
-              <div class="value">${this.formatNumber(totalComments)}</div>
-            `;
-            extraStatsGrid.appendChild(commentCard);
-          }
-          
-          if (totalShares > 0) {
-            const shareCard = document.createElement('div');
-            shareCard.className = 'stat-card';
-            shareCard.innerHTML = `
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
-            `;
-            extraStatsGrid.appendChild(shareCard);
-          }
-          
-          donutSection.appendChild(extraStatsGrid);
-        }
-        
-        container.appendChild(donutSection);
+        statsDonutWrapper.appendChild(donutGrid);
+        container.appendChild(statsDonutWrapper);
       },
       
       // Create normalized follower growth chart (starts at 0)
@@ -3724,6 +3740,34 @@
         
         document.addEventListener('click', closeMessage);
         document.addEventListener('keydown', closeMessage);
+      },
+      
+      // Export monthly screenshot
+      exportMonthlyScreenshot() {
+        const message = document.createElement('div');
+        message.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000; color: #0f0; border: 3px solid #0f0; padding: 2em; border-radius: 10px; z-index: 10000; text-align: center; font-family: monospace; max-width: 500px;';
+        message.innerHTML = `
+          <h3 style="margin-top: 0; color: #00ff00;">📸 Ready to Screenshot!</h3>
+          <p>Use your device's screenshot tool to capture the current view.</p>
+          <p style="font-size: 0.9em;">
+            <strong>Windows:</strong> Win + Shift + S or Snipping Tool<br>
+            <strong>Mac:</strong> Cmd + Shift + 4<br>
+            <strong>Linux:</strong> Print Screen or Screenshot app
+          </p>
+          <p style="margin-bottom: 0;">Click anywhere to close this message.</p>
+        `;
+        document.body.appendChild(message);
+        
+        const closeMessage = () => {
+          document.body.removeChild(message);
+          document.removeEventListener('click', closeMessage);
+          document.removeEventListener('keydown', closeMessage);
+        };
+        
+        setTimeout(() => {
+          document.addEventListener('click', closeMessage);
+          document.addEventListener('keydown', closeMessage);
+        }, 100);
       },
       
       // Render easy graphs for client report
@@ -6540,6 +6584,12 @@
       exportStats() {
         alert('Exporting stats...');
         // TODO: Implement stats export
+      },
+      
+      // Export stats and donut charts together
+      exportStatsAndDonuts() {
+        alert('Exporting stats and donut charts...');
+        // TODO: Implement combined export
       },
       
       // Chart creation functions continued
