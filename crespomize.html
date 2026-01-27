@@ -1534,8 +1534,6 @@
           platformFollowers,
           platformLikes,
           platformViews,
-          platformComments,
-          platformShares,
           totalComments,
           totalShares
         });
@@ -1583,9 +1581,8 @@
         
         const ctx = canvas.getContext('2d');
         
-        // Handle negative values by using absolute values but keeping labels
+        // Handle negative values by using absolute values for chart display
         const absData = data.map(v => Math.abs(v));
-        const hasNegative = data.some(v => v < 0);
         
         // Platform colors
         const colors = {
@@ -6936,6 +6933,9 @@
         }
       }
     };
+    
+    // Expose app to global scope for inline event handlers
+    window.app = app;
     
     // Initialize the app when the page loads
     window.addEventListener('DOMContentLoaded', () => {
