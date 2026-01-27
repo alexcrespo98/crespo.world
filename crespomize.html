@@ -611,15 +611,15 @@
       <select id="monthlyMonthSelect">
         <option value="" disabled selected>-- select month --</option>
       </select>
-      <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-1">
+      <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
         <!-- Style Selector -->
         <div class="style-selector">
           <label for="monthlyStyleSelect">Style:</label>
           <select id="monthlyStyleSelect" onchange="app.changeMonthlyStyle(this.value)">
+            <option value="style-4">Compact</option>
             <option value="style-1">Grid Layout</option>
             <option value="style-2">Stacked (Large)</option>
             <option value="style-3">Two Columns</option>
-            <option value="style-4">Compact</option>
           </select>
         </div>
         
@@ -1255,7 +1255,7 @@
         document.getElementById('monthlyGraphsTitle').textContent = `Monthly Reports: ${monthLabel}`;
         
         // Restore saved style preference
-        const savedStyle = sessionStorage.getItem('monthlyReportsStyle') || 'style-1';
+        const savedStyle = sessionStorage.getItem('monthlyReportsStyle') || 'style-4';
         const container = document.getElementById('monthlyGraphsContainer');
         container.classList.add(`monthly-reports-${savedStyle}`);
         document.getElementById('monthlyStyleSelect').value = savedStyle;
@@ -1865,6 +1865,11 @@
             fill: false
           });
         });
+        
+        // If no datasets were created, skip chart
+        if (datasets.length === 0) {
+          return;
+        }
         
         // Create the chart
         const chartDiv = document.createElement('div');
