@@ -570,7 +570,7 @@
       grid-template-columns: repeat(2, 1fr);
     }
     .monthly-reports-style-4 .donut-charts-grid {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
     }
     .monthly-reports-style-2 .stat-card h4 {
       font-size: 1em;
@@ -802,9 +802,14 @@
     <div id="charts" class="hidden">
       <div class="question">analytics for <span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
-      <!-- Custom Analytics Tabs - shown after initial selection -->
-      <div id="customAnalyticsTabs" class="custom-tabs-container hidden">
-        <div class="custom-tabs" id="customTabsButtons"></div>
+      <!-- Custom Analytics Account Tabs -->
+      <div id="customAccountTabs" class="custom-tabs-container hidden">
+        <div class="custom-tabs" id="customAccountTabsButtons"></div>
+      </div>
+      
+      <!-- Custom Analytics Platform Tabs -->
+      <div id="customPlatformTabs" class="custom-tabs-container hidden">
+        <div class="custom-tabs" id="customPlatformTabsButtons"></div>
       </div>
       
       <!-- Summary stats -->
@@ -890,6 +895,7 @@
       accountData: {},
       isMoonMediaTotal: false,
       isAllPlatforms: false,
+      selectedCustomAccount: 'all',  // For Custom Analytics: 'all' or specific account name
       selectedTimeRange: 'all',
       chartInstances: {},
       trendlineStates: {},
@@ -1195,7 +1201,8 @@
         } else if (type === 'monthly') {
           this.initializeMonthlyGraphsMode();
         } else if (type === 'custom') {
-          document.getElementById('step0Custom').classList.remove('hidden');
+          // Auto-select "All Platforms" and go directly to timeframe selection
+          this.selectPlatform('all');
         }
       },
       
@@ -1449,7 +1456,7 @@
               }
               
               // Collect follower history data for combined chart
-              // Sum follower counts across all clients for each date
+              // Track follower counts per client per date to avoid double-counting
               if (client[platform].dailyFollowerData && client[platform].dailyFollowerData.length > 0) {
                 client[platform].dailyFollowerData.forEach(dataPoint => {
                   const dateKey = dataPoint.date.toISOString().split('T')[0];
@@ -1459,13 +1466,23 @@
                   );
                   
                   if (existingIndex >= 0) {
-                    // Add to existing follower count for this date
-                    combinedFollowerData[platform][existingIndex].followers += dataPoint.followers;
+                    // Only add if this client hasn't contributed to this date yet
+                    // Store client tracking info if not exists
+                    if (!combinedFollowerData[platform][existingIndex].clientsAdded) {
+                      combinedFollowerData[platform][existingIndex].clientsAdded = new Set();
+                    }
+                    if (!combinedFollowerData[platform][existingIndex].clientsAdded.has(client.name)) {
+                      combinedFollowerData[platform][existingIndex].followers += dataPoint.followers;
+                      combinedFollowerData[platform][existingIndex].clientsAdded.add(client.name);
+                    }
                   } else {
                     // First entry for this date, create a new one
+                    const clientsAdded = new Set();
+                    clientsAdded.add(client.name);
                     combinedFollowerData[platform].push({
                       date: dataPoint.date,
-                      followers: dataPoint.followers
+                      followers: dataPoint.followers,
+                      clientsAdded: clientsAdded
                     });
                   }
                 });
@@ -4473,18 +4490,6 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
         
-        // Update UI labels
-        let accountText = '';
-        if (this.isAllPlatforms) {
-          accountText = 'All MoonMedia Platforms';
-        } else if (this.isMoonMediaTotal) {
-          accountText = 'All MoonMedia';
-        } else {
-          accountText = '@' + this.selectedAccount;
-        }
-        
-        document.getElementById('accountName').textContent = accountText;
-        
         let rangeText = '';
         if (days === 'all') rangeText = '(All Time)';
         else if (days === 365) rangeText = '(Last 1 Year)';
@@ -4498,6 +4503,9 @@
         // Create tabs for easy switching between platforms/accounts
         this.createCustomAnalyticsTabs();
         
+        // Update account name display
+        this.updateAccountNameDisplay();
+        
         if (this.isAllPlatforms) {
           this.renderAllPlatformsDashboard();
         } else {
@@ -4507,135 +4515,197 @@
       
       // Create tabs for Custom Analytics after initial selection
       createCustomAnalyticsTabs() {
-        const tabsContainer = document.getElementById('customAnalyticsTabs');
-        const tabsButtons = document.getElementById('customTabsButtons');
+        const accountTabsContainer = document.getElementById('customAccountTabs');
+        const accountTabsButtons = document.getElementById('customAccountTabsButtons');
+        const platformTabsContainer = document.getElementById('customPlatformTabs');
+        const platformTabsButtons = document.getElementById('customPlatformTabsButtons');
         
-        // Clear existing tabs
-        tabsButtons.innerHTML = '';
+        // Always show both tab rows for Custom Analytics
+        accountTabsContainer.classList.remove('hidden');
+        platformTabsContainer.classList.remove('hidden');
         
-        if (this.isAllPlatforms) {
-          // Show platform tabs: All Moon Media, TikTok, Instagram, YouTube
-          tabsContainer.classList.remove('hidden');
-          
-          const platforms = [
-            { key: 'all', label: 'All Moon Media' },
-            { key: 'tiktok', label: 'TikTok' },
-            { key: 'instagram', label: 'Instagram' },
-            { key: 'youtube', label: 'YouTube' }
-          ];
-          
-          platforms.forEach(platform => {
-            const tab = document.createElement('button');
-            tab.className = 'custom-tab';
-            if (platform.key === 'all') {
-              tab.classList.add('active');
-            }
-            tab.textContent = platform.label;
-            tab.setAttribute('data-platform', platform.key);
-            tab.onclick = () => this.switchCustomAnalyticsPlatform(platform.key);
-            tabsButtons.appendChild(tab);
-          });
-        } else {
-          // For single platform, show account tabs if we have the workbook data
-          if (this.workbookData && this.workbookData.SheetNames && this.workbookData.SheetNames.length > 0) {
-            tabsContainer.classList.remove('hidden');
-            
-            // Add "All MoonMedia Analytics" option
-            const allTab = document.createElement('button');
-            allTab.className = 'custom-tab';
-            if (this.isMoonMediaTotal) {
-              allTab.classList.add('active');
-            }
-            allTab.textContent = 'All MoonMedia Analytics';
-            allTab.onclick = () => this.switchCustomAnalyticsAccount('MOONMEDIA_TOTAL');
-            tabsButtons.appendChild(allTab);
-            
-            // Add individual account tabs
-            this.workbookData.SheetNames.forEach(account => {
-              const tab = document.createElement('button');
-              tab.className = 'custom-tab';
-              if (account === this.selectedAccount && !this.isMoonMediaTotal) {
-                tab.classList.add('active');
-              }
-              tab.textContent = '@' + account;
-              tab.onclick = () => this.switchCustomAnalyticsAccount(account);
-              tabsButtons.appendChild(tab);
-            });
-          } else {
-            tabsContainer.classList.add('hidden');
-          }
+        // Create Account Tabs (first row)
+        accountTabsButtons.innerHTML = '';
+        
+        // Add "All Moon Media" tab
+        const allAccountTab = document.createElement('button');
+        allAccountTab.className = 'custom-tab';
+        if (this.selectedCustomAccount === 'all') {
+          allAccountTab.classList.add('active');
         }
+        allAccountTab.textContent = 'All Moon Media';
+        allAccountTab.onclick = () => this.switchCustomAccount('all');
+        accountTabsButtons.appendChild(allAccountTab);
+        
+        // Add individual account tabs from ACCOUNT_MAPPING
+        Object.keys(this.ACCOUNT_MAPPING).forEach(accountKey => {
+          const tab = document.createElement('button');
+          tab.className = 'custom-tab';
+          if (accountKey === this.selectedCustomAccount) {
+            tab.classList.add('active');
+          }
+          tab.textContent = '@' + accountKey;
+          tab.onclick = () => this.switchCustomAccount(accountKey);
+          accountTabsButtons.appendChild(tab);
+        });
+        
+        // Create Platform Tabs (second row)
+        platformTabsButtons.innerHTML = '';
+        
+        const platforms = [
+          { key: 'all', label: 'All Platforms' },
+          { key: 'tiktok', label: 'TikTok' },
+          { key: 'instagram', label: 'Instagram' },
+          { key: 'youtube', label: 'YouTube' }
+        ];
+        
+        platforms.forEach(platform => {
+          const tab = document.createElement('button');
+          tab.className = 'custom-tab';
+          if ((this.isAllPlatforms && platform.key === 'all') || 
+              (!this.isAllPlatforms && this.selectedPlatform === platform.key)) {
+            tab.classList.add('active');
+          }
+          tab.textContent = platform.label;
+          tab.onclick = () => this.switchCustomPlatform(platform.key);
+          platformTabsButtons.appendChild(tab);
+        });
       },
       
-      // Switch platform in Custom Analytics (for All MoonMedia Platforms view)
-      async switchCustomAnalyticsPlatform(platform) {
-        // Update active tab
-        const tabs = document.querySelectorAll('.custom-tab');
-        tabs.forEach(tab => {
-          if (tab.getAttribute('data-platform') === platform) {
+      // Switch account in Custom Analytics
+      async switchCustomAccount(accountKey) {
+        this.selectedCustomAccount = accountKey;
+        
+        // Update account tabs
+        const accountTabs = document.querySelectorAll('#customAccountTabsButtons .custom-tab');
+        accountTabs.forEach(tab => {
+          if ((accountKey === 'all' && tab.textContent === 'All Moon Media') ||
+              tab.textContent === '@' + accountKey) {
             tab.classList.add('active');
           } else {
             tab.classList.remove('active');
           }
         });
         
-        if (platform === 'all') {
-          // Show All Moon Media view
-          this.isAllPlatforms = true;
-          this.renderAllPlatformsDashboard();
-          document.getElementById('accountName').textContent = 'All MoonMedia Platforms';
+        // Reload data for the selected account and current platform
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (accountKey === 'all') {
+          // Load all platforms data for all accounts
+          if (this.isAllPlatforms) {
+            await this.loadAllPlatformsData(this.selectedTimeRange);
+            this.renderAllPlatformsDashboard();
+          } else {
+            // Load single platform data for all accounts
+            await this.loadSheetData();
+            this.selectedAccount = 'MOONMEDIA_TOTAL';
+            this.isMoonMediaTotal = true;
+            this.processData(this.selectedTimeRange);
+            this.renderDashboard();
+          }
         } else {
-          // Show single platform view
-          // Need to load the specific platform's data if not already loaded
-          document.getElementById('loading').classList.remove('hidden');
-          document.getElementById('charts').classList.add('hidden');
+          // Load specific account data for current platform
+          if (this.isAllPlatforms) {
+            // Need to switch to showing just this account across all platforms
+            // For now, we'll load all platforms and filter in rendering
+            await this.loadAllPlatformsData(this.selectedTimeRange);
+            this.renderSpecificAccountAllPlatforms(accountKey);
+          } else {
+            // Load single platform data for this specific account
+            await this.loadSheetData();
+            // Find the actual account name for this platform
+            const platformAccountName = this.ACCOUNT_MAPPING[accountKey][this.selectedPlatform];
+            if (platformAccountName) {
+              this.selectedAccount = platformAccountName;
+              this.isMoonMediaTotal = false;
+              this.processData(this.selectedTimeRange);
+              this.renderDashboard();
+            }
+          }
+        }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        this.updateAccountNameDisplay();
+      },
+      
+      // Switch platform in Custom Analytics
+      async switchCustomPlatform(platformKey) {
+        // Update platform tabs
+        const platformTabs = document.querySelectorAll('#customPlatformTabsButtons .custom-tab');
+        platformTabs.forEach(tab => {
+          if ((platformKey === 'all' && tab.textContent === 'All Platforms') ||
+              tab.textContent === platformKey.charAt(0).toUpperCase() + platformKey.slice(1)) {
+            tab.classList.add('active');
+          } else {
+            tab.classList.remove('active');
+          }
+        });
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (platformKey === 'all') {
+          this.isAllPlatforms = true;
+          this.selectedPlatform = 'all';
+          await this.loadAllPlatformsData(this.selectedTimeRange);
           
-          this.selectedPlatform = platform;
+          if (this.selectedCustomAccount === 'all') {
+            this.renderAllPlatformsDashboard();
+          } else {
+            this.renderSpecificAccountAllPlatforms(this.selectedCustomAccount);
+          }
+        } else {
           this.isAllPlatforms = false;
-          
+          this.selectedPlatform = platformKey;
           await this.loadSheetData();
           
-          // Auto-select "All MoonMedia Analytics" for the platform
-          this.selectedAccount = 'MOONMEDIA_TOTAL';
-          this.isMoonMediaTotal = true;
+          if (this.selectedCustomAccount === 'all') {
+            this.selectedAccount = 'MOONMEDIA_TOTAL';
+            this.isMoonMediaTotal = true;
+          } else {
+            const platformAccountName = this.ACCOUNT_MAPPING[this.selectedCustomAccount][platformKey];
+            if (platformAccountName) {
+              this.selectedAccount = platformAccountName;
+              this.isMoonMediaTotal = false;
+            }
+          }
           
-          // Process data and display - finalizeDataDisplay will recreate tabs
           this.processData(this.selectedTimeRange);
-          this.finalizeDataDisplay(this.selectedTimeRange);
+          this.renderDashboard();
         }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        this.updateAccountNameDisplay();
       },
       
-      // Switch account in Custom Analytics (for single platform view)
-      switchCustomAnalyticsAccount(account) {
-        // Update active tab
-        const tabs = document.querySelectorAll('.custom-tab');
-        tabs.forEach(tab => {
-          const tabText = tab.textContent;
-          const isAllTab = tabText === 'All MoonMedia Analytics';
-          const isAccountTab = tabText === '@' + account;
-          
-          if ((account === 'MOONMEDIA_TOTAL' && isAllTab) || isAccountTab) {
-            tab.classList.add('active');
-          } else {
-            tab.classList.remove('active');
-          }
-        });
-        
-        this.selectedAccount = account;
-        this.isMoonMediaTotal = (account === 'MOONMEDIA_TOTAL');
-        
-        // Re-process and render data
-        this.processData(this.selectedTimeRange);
-        this.renderDashboard();
-        
-        // Update account name
+      // Helper to update account name display
+      updateAccountNameDisplay() {
         let accountText = '';
-        if (this.isMoonMediaTotal) {
-          accountText = 'All MoonMedia';
+        if (this.selectedCustomAccount === 'all') {
+          if (this.isAllPlatforms) {
+            accountText = 'All Moon Media - All Platforms';
+          } else {
+            accountText = 'All Moon Media - ' + this.selectedPlatform.charAt(0).toUpperCase() + this.selectedPlatform.slice(1);
+          }
         } else {
-          accountText = '@' + account;
+          if (this.isAllPlatforms) {
+            accountText = '@' + this.selectedCustomAccount + ' - All Platforms';
+          } else {
+            accountText = '@' + this.selectedCustomAccount + ' - ' + this.selectedPlatform.charAt(0).toUpperCase() + this.selectedPlatform.slice(1);
+          }
         }
         document.getElementById('accountName').textContent = accountText;
+      },
+      
+      // Render specific account across all platforms
+      renderSpecificAccountAllPlatforms(accountKey) {
+        // This is a simplified version - filters allPlatformsData to show only this account
+        // For now, just render the all platforms dashboard
+        // TODO: Implement filtering by specific account
+        this.renderAllPlatformsDashboard();
       },
       
       // Load all platforms data
