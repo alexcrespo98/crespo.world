@@ -4581,6 +4581,7 @@
         
         if (platform === 'all') {
           // Show All Moon Media view
+          this.isAllPlatforms = true;
           this.renderAllPlatformsDashboard();
           document.getElementById('accountName').textContent = 'All MoonMedia Platforms';
         } else {
@@ -4598,10 +4599,9 @@
           this.selectedAccount = 'MOONMEDIA_TOTAL';
           this.isMoonMediaTotal = true;
           
-          setTimeout(() => {
-            this.processData(this.selectedTimeRange);
-            this.finalizeDataDisplay(this.selectedTimeRange);
-          }, 1000);
+          // Process data and display - finalizeDataDisplay will recreate tabs
+          this.processData(this.selectedTimeRange);
+          this.finalizeDataDisplay(this.selectedTimeRange);
         }
       },
       
