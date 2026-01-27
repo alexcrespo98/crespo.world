@@ -465,21 +465,21 @@
     <a href="recipeasy.html">recipeasy</a>
   </nav>
 
-  <h1>crespomize analytics</h1>
+  <h1>crespomize monthly reports</h1>
   
   <div class="container">
     <!-- Step 0: Analytics Type Selection -->
     <div id="step0" class="step">
-      <div class="question">what type of analytics?</div>
+      <div class="question">what type of report?</div>
       <select id="analyticsTypeSelect">
-        <option value="" disabled selected>-- select analytics type --</option>
-        <option value="easy">Weekly Analytics (this week's progress)</option>
-        <option value="monthly">Monthly Analytics (monthly reports)</option>
-        <option value="custom">Custom Analytics</option>
+        <option value="" disabled selected>-- select report type --</option>
+        <!-- <option value="easy">Weekly Analytics (this week's progress)</option> -->
+        <option value="monthly">Monthly Reports</option>
+        <!-- <option value="custom">Custom Analytics</option> -->
       </select>
     </div>
 
-    <!-- Easy Graphs Section (now Weekly Analytics) -->
+    <!-- HIDDEN: Easy Graphs Section (now Weekly Analytics) - Temporarily removed
     <div id="easyGraphsSection" class="step hidden">
       <div class="question">select week for analytics:</div>
       <select id="monthSelect">
@@ -509,10 +509,11 @@
         <button onclick="location.reload()">start over</button>
       </div>
     </div>
+    -->
 
     <!-- Monthly Analytics Section -->
     <div id="monthlyGraphsSection" class="step hidden">
-      <div class="question">select month for analytics:</div>
+      <div class="question">select month for report:</div>
       <select id="monthlyMonthSelect">
         <option value="" disabled selected>-- select month --</option>
       </select>
@@ -551,7 +552,7 @@
       </div>
     </div>
 
-    <!-- Custom Analytics: Platform selection -->
+    <!-- HIDDEN: Custom Analytics sections - Temporarily removed
     <div id="step0Custom" class="step hidden">
       <div class="question">which platform?</div>
       <select id="platformSelect">
@@ -563,7 +564,6 @@
       </select>
     </div>
 
-    <!-- Step 1: Select account (for single platform) -->
     <div id="step1" class="step hidden">
       <div class="question">pick a company:</div>
       <select id="accountSelect">
@@ -571,7 +571,6 @@
       </select>
     </div>
 
-    <!-- Step 2: Time range selection -->
     <div id="step2" class="step hidden">
       <div class="question">select time range for analysis:</div>
       <div class="time-range-buttons" id="timeRangeButtons">
@@ -581,7 +580,6 @@
         <button id="btn-30" onclick="app.selectPresetTimeRange(30)">1 Month</button>
       </div>
       
-      <!-- Custom Date Range Slider -->
       <div class="custom-date-slider-container" id="customDateSliderContainer">
         <div class="custom-date-slider-label">or choose a custom date range:</div>
         <div class="dual-slider-wrapper">
@@ -604,21 +602,18 @@
       </div>
     </div>
 
-    <!-- Charts display -->
     <div id="charts" class="hidden">
       <div class="question">analytics for <span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
-      <!-- Summary stats -->
       <div class="stats-summary" id="statsSummary"></div>
       
-      <!-- Platform breakdown for "All MoonMedia" -->
       <div id="platformBreakdown" class="hidden"></div>
       
-      <!-- Charts -->
       <div id="chartsList"></div>
       <br>
       <button onclick="location.reload()">start over</button>
     </div>
+    -->
 
     <div id="loading" class="loading hidden">loading data...</div>
   </div>
@@ -630,7 +625,7 @@
       SHEET_IDS: {
         tiktok: '1FUGfhPVsVi1WOOw88BKfUKueJh4eMPj1',
         instagram: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2',
-        youtube: '1yRLZpJLdaB9oPZtjcwIeJx-6q8lGF2dO'
+        youtube: '1Gnsg8OuZHsPRDhfUWO6zCuaBT7XhCW6h19ygEvjRLb4'
       },
       
       // Explicit account mapping across platforms
@@ -641,9 +636,9 @@
         'popdartsgame': { instagram: 'popdartsgame', tiktok: 'popdartsgame', youtube: 'popdartsgame' },
         'bucketgolfgame': { instagram: 'bucketgolfgame', tiktok: 'bucketgolfgame', youtube: 'bucketgolfgame' },
         'playbattlegolf': { instagram: 'playbattlegolf', tiktok: 'playbattlegolf', youtube: 'playbattlegolf' },
-        'flinggolf': { instagram: 'flinggolf', tiktok: 'flinggolf', youtube: 'flinggolf' },
-        'golfponggames': { instagram: 'golfpong.games', tiktok: 'golfponggames', youtube: 'golfponggames' },
-        'discgogames': { instagram: 'discgogames', tiktok: 'discgogames', youtube: 'discgogames' },
+        'flinggolf': { instagram: 'flinggolf', tiktok: 'flinggolf', youtube: 'FlingGolf' },
+        'golfponggames': { instagram: 'golfpong.games', tiktok: 'golfponggames', youtube: 'GolfPongGames' },
+        'discgogames': { instagram: 'discgogames', tiktok: 'discgogames', youtube: 'DiscGOGames' },
         'lowtidegolf': { instagram: 'low_tide_golf', tiktok: 'lowtidegolf', youtube: null }  // No YouTube
       },
       
@@ -1122,7 +1117,7 @@
         
         // Show loading
         document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('loading').textContent = 'generating monthly analytics...';
+        document.getElementById('loading').textContent = 'generating monthly report...';
         
         // Store current month for all tabs
         this.currentMonthlyMonth = monthLabel;
@@ -1146,7 +1141,7 @@
         
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
-        document.getElementById('monthlyGraphsTitle').textContent = `Monthly Analytics: ${monthLabel}`;
+        document.getElementById('monthlyGraphsTitle').textContent = `Monthly Report: ${monthLabel}`;
         
         // Switch to default tab (Total Moon Media)
         this.switchMonthlyTab('total');
@@ -2349,7 +2344,7 @@
         this.chartInstances = {};
         
         document.getElementById('monthlyGraphsTitle').textContent = 
-          `Monthly Analytics: ${monthLabel}`;
+          `Monthly Report: ${monthLabel}`;
         
         // Match accounts across platforms
         const matchedAccounts = this.matchAccountsAcrossPlatforms();
