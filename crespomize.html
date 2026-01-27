@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body {
@@ -550,6 +551,67 @@
     .monthly-reports-style-4 .stats-summary {
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     }
+    
+    /* Style 5: Dark Mode Enhanced - Similar to compact but with different color scheme */
+    .monthly-reports-style-5 .donut-charts-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .monthly-reports-style-5 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .monthly-reports-style-5 .stat-card {
+      background: #0a0a0a;
+      border-color: #00aa00;
+    }
+    .monthly-reports-style-5 .stat-card h4 {
+      color: #00ff88;
+    }
+    .monthly-reports-style-5 .donut-chart-container h4 {
+      color: #00ff88;
+    }
+    
+    /* Style 6: Minimal - Extra spacing, cleaner look */
+    .monthly-reports-style-6 .donut-charts-grid {
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 3em;
+    }
+    .monthly-reports-style-6 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2em;
+      margin-bottom: 3em;
+    }
+    .monthly-reports-style-6 .stat-card {
+      padding: 2em;
+    }
+    .monthly-reports-style-6 .donut-chart-container {
+      padding: 2em;
+    }
+    
+    /* Style 7: Dense - Even more compact than compact */
+    .monthly-reports-style-7 .donut-charts-grid {
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5em;
+    }
+    .monthly-reports-style-7 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.5em;
+    }
+    .monthly-reports-style-7 .stat-card {
+      padding: 0.5em;
+    }
+    .monthly-reports-style-7 .stat-card h4 {
+      font-size: 0.7em;
+      margin-bottom: 0.3em;
+    }
+    .monthly-reports-style-7 .stat-card .value {
+      font-size: 1.2em;
+    }
+    .monthly-reports-style-7 .donut-chart-container {
+      padding: 0.5em;
+    }
+    .monthly-reports-style-7 .donut-chart-container h4 {
+      font-size: 0.9em;
+    }
   </style>
 </head>
 <body>
@@ -611,15 +673,18 @@
       <select id="monthlyMonthSelect">
         <option value="" disabled selected>-- select month --</option>
       </select>
-      <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-1">
+      <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
         <!-- Style Selector -->
         <div class="style-selector">
           <label for="monthlyStyleSelect">Style:</label>
           <select id="monthlyStyleSelect" onchange="app.changeMonthlyStyle(this.value)">
+            <option value="style-4">Compact</option>
             <option value="style-1">Grid Layout</option>
             <option value="style-2">Stacked (Large)</option>
             <option value="style-3">Two Columns</option>
-            <option value="style-4">Compact</option>
+            <option value="style-5">Dark Mode Enhanced</option>
+            <option value="style-6">Minimal</option>
+            <option value="style-7">Dense</option>
           </select>
         </div>
         
@@ -730,6 +795,9 @@
   </div>
 
   <script>
+    // Register Chart.js plugins
+    Chart.register(ChartDataLabels);
+    
     // Application state
     const app = {
       // Configuration
@@ -1255,7 +1323,7 @@
         document.getElementById('monthlyGraphsTitle').textContent = `Monthly Reports: ${monthLabel}`;
         
         // Restore saved style preference
-        const savedStyle = sessionStorage.getItem('monthlyReportsStyle') || 'style-1';
+        const savedStyle = sessionStorage.getItem('monthlyReportsStyle') || 'style-4';
         const container = document.getElementById('monthlyGraphsContainer');
         container.classList.add(`monthly-reports-${savedStyle}`);
         document.getElementById('monthlyStyleSelect').value = savedStyle;
@@ -1305,6 +1373,7 @@
         );
         
         // Aggregate metrics across all clients and platforms
+        let totalFollowersStart = 0;
         let totalFollowersEnd = 0;
         let totalLikes = 0;
         let totalViews = 0;
@@ -1314,10 +1383,12 @@
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
+        let totalVideoDuration = 0; // For average views/second calculation
         
         clientStats.forEach(client => {
           ['instagram', 'tiktok', 'youtube'].forEach(platform => {
             if (client[platform]) {
+              totalFollowersStart += client[platform].followersStart || 0;
               totalFollowersEnd += client[platform].followersEnd || 0;
               platformFollowers[platform] += client[platform].followersEnd || 0;
               
@@ -1328,11 +1399,13 @@
                   const views = video.views || 0;
                   const comments = video.comments || 0;
                   const shares = video.shares || 0;
+                  const duration = video.duration || 0;
                   
                   totalLikes += likes;
                   totalViews += views;
                   totalComments += comments;
                   totalShares += shares;
+                  totalVideoDuration += duration;
                   
                   platformLikes[platform] += likes;
                   platformViews[platform] += views;
@@ -1347,31 +1420,20 @@
           });
         });
         
+        // Calculate follower change and average views/second
+        const followerChange = totalFollowersEnd - totalFollowersStart;
+        const avgViewsPerSecond = totalVideoDuration > 0 ? (totalViews / totalVideoDuration).toFixed(2) : 0;
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
         // Display summary statistics
         statsContainer.innerHTML = `
           <div class="stat-card">
             <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL LIKES</h4>
-            <div class="value">${this.formatNumber(totalLikes)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL VIEWS</h4>
-            <div class="value">${this.formatNumber(totalViews)}</div>
+            <div class="value">
+              ${this.formatNumber(totalFollowersEnd)}
+              <span style="color: ${changeColor}; font-size: 0.7em; margin-left: 0.3em;">${changePrefix}${this.formatNumber(followerChange)}</span>
+            </div>
           </div>
           <div class="stat-card">
             <h4>TOTAL COMMENTS</h4>
@@ -1380,6 +1442,10 @@
           <div class="stat-card">
             <h4>TOTAL SHARES</h4>
             <div class="value">${this.formatNumber(totalShares)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>AVERAGE VIEWS/SECOND</h4>
+            <div class="value">${avgViewsPerSecond}</div>
           </div>
         `;
         
@@ -1417,6 +1483,7 @@
         }
         
         // Aggregate metrics for this client
+        let totalFollowersStart = 0;
         let totalFollowersEnd = 0;
         let totalLikes = 0;
         let totalViews = 0;
@@ -1428,12 +1495,15 @@
         let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformShares = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
+        let totalVideoDuration = 0; // For average views/second calculation
         
         ['instagram', 'tiktok', 'youtube'].forEach(platform => {
           if (clientStats[platform]) {
-            const followers = clientStats[platform].followersEnd || 0;
-            totalFollowersEnd += followers;
-            platformFollowers[platform] = followers;
+            const followersStart = clientStats[platform].followersStart || 0;
+            const followersEnd = clientStats[platform].followersEnd || 0;
+            totalFollowersStart += followersStart;
+            totalFollowersEnd += followersEnd;
+            platformFollowers[platform] = followersEnd;
             
             // Aggregate engagement metrics from month videos
             if (clientStats[platform].monthVideos) {
@@ -1442,11 +1512,13 @@
                 const views = video.views || 0;
                 const comments = video.comments || 0;
                 const shares = video.shares || 0;
+                const duration = video.duration || 0;
                 
                 totalLikes += likes;
                 totalViews += views;
                 totalComments += comments;
                 totalShares += shares;
+                totalVideoDuration += duration;
                 
                 platformLikes[platform] += likes;
                 platformViews[platform] += views;
@@ -1462,70 +1534,34 @@
           }
         });
         
+        // Calculate follower change and average views/second
+        const followerChange = totalFollowersEnd - totalFollowersStart;
+        const avgViewsPerSecond = totalVideoDuration > 0 ? (totalViews / totalVideoDuration).toFixed(2) : 0;
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
         // Display summary statistics
         let statsHTML = `
           <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
-          </div>
-        `;
-        
-        // Add engagement metric cards
-        statsHTML += `
-          <div class="stat-card">
-            <h4>INSTAGRAM LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
-          </div>
-        `;
-        
-        if (totalShares > 0) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
+            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
+            <div class="value">
+              ${this.formatNumber(totalFollowersEnd)}
+              <span style="color: ${changeColor}; font-size: 0.7em; margin-left: 0.3em;">${changePrefix}${this.formatNumber(followerChange)}</span>
             </div>
-          `;
-        }
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>AVERAGE VIEWS/SECOND</h4>
+            <div class="value">${avgViewsPerSecond}</div>
+          </div>
+        `;
         
         statsContainer.innerHTML = statsHTML;
         
@@ -1553,7 +1589,7 @@
       changeMonthlyStyle(style) {
         const container = document.getElementById('monthlyGraphsContainer');
         // Remove all style classes
-        container.classList.remove('monthly-reports-style-1', 'monthly-reports-style-2', 'monthly-reports-style-3', 'monthly-reports-style-4');
+        container.classList.remove('monthly-reports-style-1', 'monthly-reports-style-2', 'monthly-reports-style-3', 'monthly-reports-style-4', 'monthly-reports-style-5', 'monthly-reports-style-6', 'monthly-reports-style-7');
         // Add selected style class
         container.classList.add(`monthly-reports-${style}`);
         // Store in session storage
@@ -1584,6 +1620,9 @@
         // Handle negative values by using absolute values for chart display
         const absData = data.map(v => Math.abs(v));
         
+        // Calculate total for center display
+        const total = absData.reduce((sum, val) => sum + val, 0);
+        
         // Platform colors
         const colors = {
           'Instagram': '#E1306C',
@@ -1592,6 +1631,26 @@
         };
         
         const backgroundColors = labels.map(label => colors[label] || '#0f0');
+        
+        // Center text plugin for total
+        const centerTextPlugin = {
+          id: 'centerText',
+          beforeDraw: (chart) => {
+            const { width, height, ctx } = chart;
+            ctx.restore();
+            const fontSize = (height / 114).toFixed(2);
+            ctx.font = `bold ${fontSize}em monospace`;
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#0f0';
+            
+            const text = this.formatNumber(total);
+            const textX = Math.round((width - ctx.measureText(text).width) / 2);
+            const textY = height / 2;
+            
+            ctx.fillText(text, textX, textY);
+            ctx.save();
+          }
+        };
         
         this.chartInstances[chartId] = new Chart(ctx, {
           type: 'doughnut',
@@ -1632,9 +1691,27 @@
                     return `${label}: ${this.formatNumber(value)} (${percentage}%)`;
                   }
                 }
+              },
+              datalabels: {
+                color: (context) => {
+                  // Use original data value to determine color
+                  const originalValue = data[context.dataIndex];
+                  return originalValue >= 0 ? '#00ff00' : '#ff0000';
+                },
+                font: {
+                  weight: 'bold',
+                  size: 14,
+                  family: 'monospace'
+                },
+                formatter: (value, context) => {
+                  const total = absData.reduce((sum, val) => sum + val, 0);
+                  const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                  return percentage + '%';
+                }
               }
             }
-          }
+          },
+          plugins: [centerTextPlugin]
         });
       },
       
@@ -1865,6 +1942,11 @@
             fill: false
           });
         });
+        
+        // If no datasets were created, skip chart
+        if (datasets.length === 0) {
+          return;
+        }
         
         // Create the chart
         const chartDiv = document.createElement('div');
