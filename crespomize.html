@@ -1374,6 +1374,7 @@
         let platformFollowersChange = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformPosts = { instagram: 0, tiktok: 0, youtube: 0 };  // Track posts per platform
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
         let totalVideoDuration = 0; // For average views/second calculation
         
@@ -1390,6 +1391,7 @@
               
               // Aggregate engagement metrics from month videos
               if (client[platform].monthVideos) {
+                platformPosts[platform] += client[platform].monthVideos.length;  // Count posts
                 client[platform].monthVideos.forEach(video => {
                   const likes = video.likes || 0;
                   const views = video.views || 0;
@@ -1468,6 +1470,7 @@
           platformFollowersChange,
           platformLikes,
           platformViews,
+          platformPosts,
           totalComments,
           totalShares,
           followerChange
@@ -1509,6 +1512,7 @@
         let platformFollowersChange = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformPosts = { instagram: 0, tiktok: 0, youtube: 0 };  // Track posts per platform
         let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformShares = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
@@ -1526,6 +1530,7 @@
             
             // Aggregate engagement metrics from month videos
             if (clientStats[platform].monthVideos) {
+              platformPosts[platform] = clientStats[platform].monthVideos.length;  // Count posts
               clientStats[platform].monthVideos.forEach(video => {
                 const likes = video.likes || 0;
                 const views = video.views || 0;
@@ -1582,6 +1587,7 @@
           platformFollowersChange,
           platformLikes,
           platformViews,
+          platformPosts,
           totalComments,
           totalShares,
           followerChange
@@ -1779,7 +1785,7 @@
       
       // Create donut charts for Total Moon Media view
       createTotalDonutCharts(container, data) {
-        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, totalComments, totalShares, followerChange } = data;
+        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, platformPosts, totalComments, totalShares, followerChange } = data;
         
         const donutSection = document.createElement('div');
         donutSection.className = 'donut-charts-section';
@@ -1791,8 +1797,9 @@
         const donutGrid = document.createElement('div');
         donutGrid.className = 'donut-charts-grid';
         
-        // Followers donut chart - show follower CHANGE in center
         const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
+        
+        // Followers donut chart - top left - show follower CHANGE in center
         const followerData = [
           platformFollowers.instagram,
           platformFollowers.tiktok,
@@ -1800,7 +1807,15 @@
         ];
         this.createDonutChart(donutGrid, 'Total Followers by Platform', followerData, followerLabels, 'total-followers-donut', followerChange);
         
-        // Likes donut chart
+        // Views donut chart - top right
+        const viewData = [
+          platformViews.instagram,
+          platformViews.tiktok,
+          platformViews.youtube
+        ];
+        this.createDonutChart(donutGrid, 'Total Views by Platform', viewData, followerLabels, 'total-views-donut');
+        
+        // Likes donut chart - bottom left
         const likeData = [
           platformLikes.instagram,
           platformLikes.tiktok,
@@ -1808,13 +1823,13 @@
         ];
         this.createDonutChart(donutGrid, 'Total Likes by Platform', likeData, followerLabels, 'total-likes-donut');
         
-        // Views donut chart
-        const viewData = [
-          platformViews.instagram,
-          platformViews.tiktok,
-          platformViews.youtube
+        // Posts donut chart - bottom right
+        const postsData = [
+          platformPosts.instagram,
+          platformPosts.tiktok,
+          platformPosts.youtube
         ];
-        this.createDonutChart(donutGrid, 'Total Views by Platform', viewData, followerLabels, 'total-views-donut');
+        this.createDonutChart(donutGrid, 'Total Posts by Platform', postsData, followerLabels, 'total-posts-donut');
         
         donutSection.appendChild(donutGrid);
         
@@ -1850,7 +1865,7 @@
       
       // Create donut charts for individual client view
       createClientDonutCharts(container, data) {
-        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, totalComments, totalShares, followerChange } = data;
+        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, platformPosts, totalComments, totalShares, followerChange } = data;
         
         const donutSection = document.createElement('div');
         donutSection.className = 'donut-charts-section';
@@ -1864,7 +1879,7 @@
         
         const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
         
-        // Followers donut chart - show follower CHANGE in center
+        // Followers donut chart - top left - show follower CHANGE in center
         const followerData = [
           platformFollowers.instagram,
           platformFollowers.tiktok,
@@ -1874,7 +1889,17 @@
           this.createDonutChart(donutGrid, 'Followers by Platform', followerData, followerLabels, 'client-followers-donut', followerChange);
         }
         
-        // Likes donut chart
+        // Views donut chart - top right
+        const viewData = [
+          platformViews.instagram,
+          platformViews.tiktok,
+          platformViews.youtube
+        ];
+        if (viewData.some(v => v !== 0)) {
+          this.createDonutChart(donutGrid, 'Views by Platform', viewData, followerLabels, 'client-views-donut');
+        }
+        
+        // Likes donut chart - bottom left
         const likeData = [
           platformLikes.instagram,
           platformLikes.tiktok,
@@ -1884,14 +1909,14 @@
           this.createDonutChart(donutGrid, 'Likes by Platform', likeData, followerLabels, 'client-likes-donut');
         }
         
-        // Views donut chart
-        const viewData = [
-          platformViews.instagram,
-          platformViews.tiktok,
-          platformViews.youtube
+        // Posts donut chart - bottom right
+        const postsData = [
+          platformPosts.instagram,
+          platformPosts.tiktok,
+          platformPosts.youtube
         ];
-        if (viewData.some(v => v !== 0)) {
-          this.createDonutChart(donutGrid, 'Views by Platform', viewData, followerLabels, 'client-views-donut');
+        if (postsData.some(v => v !== 0)) {
+          this.createDonutChart(donutGrid, 'Posts by Platform', postsData, followerLabels, 'client-posts-donut');
         }
         
         donutSection.appendChild(donutGrid);
