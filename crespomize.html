@@ -648,7 +648,8 @@
         MIN_LIKES_RATIO: 0.001,       // Reject if likes < 0.1% of views (implausibly low)
         SIGNIFICANT_VIEWS: 5000,      // Views threshold for applying ratio checks
         FOLLOWER_SPIKE_THRESHOLD: 3.0, // Only flag spikes >300% if unsustained (drops >50% next day)
-        Z_SCORE_THRESHOLD: 3.0,       // Standard deviations for statistical outlier detection
+        Z_SCORE_THRESHOLD: 3.0,       // Standard deviations for statistical outlier detection (interpolation)
+        Z_SCORE_CHART_THRESHOLD: 2.5, // More lenient threshold for visual outlier highlighting
         MAX_GAP_DAYS: 14,             // Maximum gap (days) before special handling
         LARGE_GAP_DAYS: 7,            // Gap size (days) that triggers conservative interpolation
         LIKES_FALLBACK_RATIO: 0.1     // Cap likes at 10% of views if validation fails
@@ -6065,8 +6066,8 @@
             const logRatio = Math.log10(v.likes + 1) - Math.log10(v.views + 1);
             const zScore = ratioStdDev > 0 ? Math.abs(logRatio - ratioMean) / ratioStdDev : 0;
             
-            // Flag as outlier if Z-score > 2.5 (more lenient than 3σ for visibility)
-            if (zScore > 2.5) {
+            // Flag as outlier if Z-score exceeds chart threshold
+            if (zScore > this.ANOMALY_THRESHOLDS.Z_SCORE_CHART_THRESHOLD) {
               outlierPosts.push({ 
                 x: v.views, 
                 y: v.likes,
