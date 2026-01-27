@@ -1434,6 +1434,13 @@
           });
         });
         
+        // Sort the combined follower data by date for each platform
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          if (combinedFollowerData[platform].length > 0) {
+            combinedFollowerData[platform].sort((a, b) => a.date - b.date);
+          }
+        });
+        
         // Calculate follower change and average views/second
         const followerChange = totalFollowersEnd - totalFollowersStart;
         const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
@@ -1966,7 +1973,23 @@
           if (dateKeys.length === 0) return;
           
           // Get initial value (baseline for normalization)
-          const initialValue = data[dateKeys[0]];
+          // Use the value at the start of the month range to ensure consistent baseline
+          const startDateKey = startDate.toISOString().split('T')[0];
+          let initialValue = data[startDateKey];
+          
+          // If no data for exact start date, find the closest date at or after start
+          if (initialValue === undefined) {
+            for (const dateKey of dateKeys) {
+              if (dateKey >= startDateKey) {
+                initialValue = data[dateKey];
+                break;
+              }
+            }
+            // If still no value found, fall back to first available
+            if (initialValue === undefined) {
+              initialValue = data[dateKeys[0]];
+            }
+          }
           
           // Create normalized data points for all days in month with linear interpolation
           const chartData = [];
