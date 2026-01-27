@@ -677,26 +677,6 @@
         <option value="" disabled selected>-- select month --</option>
       </select>
       <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
-        <!-- Style Selector -->
-        <div class="style-selector">
-          <label for="monthlyStyleSelect">Style:</label>
-          <select id="monthlyStyleSelect" onchange="app.changeMonthlyStyle(this.value)">
-            <option value="style-4">Compact</option>
-            <option value="style-1">Grid Layout</option>
-            <option value="style-2">Stacked (Large)</option>
-            <option value="style-3">Two Columns</option>
-            <option value="style-5">Dark Mode Enhanced</option>
-            <option value="style-6">Minimal</option>
-            <option value="style-7">Dense</option>
-          </select>
-          
-          <label for="donutLabelStyleSelect" class="secondary">Donut Labels:</label>
-          <select id="donutLabelStyleSelect" onchange="app.changeDonutLabelStyle(this.value)">
-            <option value="shadow">Shadow</option>
-            <option value="background">Background</option>
-            <option value="box">Box</option>
-          </select>
-        </div>
         
         <div class="question" id="monthlyGraphsTitle"></div>
         
@@ -893,7 +873,7 @@
       currentMonthlyStartDate: null,
       currentMonthlyEndDate: null,
       currentMonthlyAccountStats: [],
-      donutLabelStyle: 'shadow', // Options: 'shadow', 'background', 'box'
+      donutLabelStyle: 'background', // Fixed to background style
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -1333,14 +1313,10 @@
         document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
         document.getElementById('monthlyGraphsTitle').textContent = `Monthly Reports: ${monthLabel}`;
         
-        // Restore saved style preferences
-        const savedStyle = sessionStorage.getItem('monthlyReportsStyle') || 'style-4';
-        const savedDonutLabelStyle = sessionStorage.getItem('donutLabelStyle') || 'shadow';
+        // Set fixed compact style with background labels
         const container = document.getElementById('monthlyGraphsContainer');
-        container.classList.add(`monthly-reports-${savedStyle}`);
-        document.getElementById('monthlyStyleSelect').value = savedStyle;
-        this.donutLabelStyle = savedDonutLabelStyle;
-        document.getElementById('donutLabelStyleSelect').value = savedDonutLabelStyle;
+        container.classList.add('monthly-reports-style-4');
+        this.donutLabelStyle = 'background';
         
         // Switch to default tab (Total Moon Media)
         this.switchMonthlyTab('total');
@@ -1450,19 +1426,10 @@
         // Display summary statistics
         statsContainer.innerHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
+            <h4>TOTAL FOLLOWERS</h4>
             <div class="value">
-              ${this.formatNumber(totalFollowersEnd)}
-              <span style="color: ${changeColor}; font-size: 0.7em; margin-left: 0.3em;">${changePrefix}${this.formatNumber(followerChange)}</span>
+              ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
             </div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL COMMENTS</h4>
-            <div class="value">${this.formatNumber(totalComments)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL SHARES</h4>
-            <div class="value">${this.formatNumber(totalShares)}</div>
           </div>
           <div class="stat-card">
             <h4>AVERAGE VIEWS/SECOND</h4>
@@ -1571,19 +1538,10 @@
         // Display summary statistics
         let statsHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
+            <h4>TOTAL FOLLOWERS</h4>
             <div class="value">
-              ${this.formatNumber(totalFollowersEnd)}
-              <span style="color: ${changeColor}; font-size: 0.7em; margin-left: 0.3em;">${changePrefix}${this.formatNumber(followerChange)}</span>
+              ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
             </div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL COMMENTS</h4>
-            <div class="value">${this.formatNumber(totalComments)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL SHARES</h4>
-            <div class="value">${this.formatNumber(totalShares)}</div>
           </div>
           <div class="stat-card">
             <h4>AVERAGE VIEWS/SECOND</h4>
@@ -1992,20 +1950,63 @@
           // Get initial value (baseline for normalization)
           const initialValue = data[dateKeys[0]];
           
-          // Create normalized data points for all days in month
+          // Create normalized data points for all days in month with linear interpolation
           const chartData = [];
           let lastKnownValue = initialValue;
           
-          monthDates.forEach(date => {
+          monthDates.forEach((date, index) => {
             const dateKey = date.toISOString().split('T')[0];
             
             if (data[dateKey] !== undefined) {
+              // We have data for this date
               lastKnownValue = data[dateKey];
+              const normalizedValue = lastKnownValue - initialValue;
+              chartData.push({ x: date, y: normalizedValue });
+            } else {
+              // No data for this date - need to interpolate
+              // Find previous known value
+              let prevIndex = -1;
+              let prevValue = null;
+              for (let i = index - 1; i >= 0; i--) {
+                const prevDateKey = monthDates[i].toISOString().split('T')[0];
+                if (data[prevDateKey] !== undefined) {
+                  prevIndex = i;
+                  prevValue = data[prevDateKey];
+                  break;
+                }
+              }
+              
+              // Find next known value
+              let nextIndex = -1;
+              let nextValue = null;
+              for (let i = index + 1; i < monthDates.length; i++) {
+                const nextDateKey = monthDates[i].toISOString().split('T')[0];
+                if (data[nextDateKey] !== undefined) {
+                  nextIndex = i;
+                  nextValue = data[nextDateKey];
+                  break;
+                }
+              }
+              
+              let interpolatedValue;
+              if (prevValue !== null && nextValue !== null) {
+                // Linear interpolation between prev and next
+                const ratio = (index - prevIndex) / (nextIndex - prevIndex);
+                interpolatedValue = prevValue + (nextValue - prevValue) * ratio;
+              } else if (prevValue !== null) {
+                // No next value, use previous value
+                interpolatedValue = prevValue;
+              } else if (nextValue !== null) {
+                // No previous value, use next value
+                interpolatedValue = nextValue;
+              } else {
+                // No values at all, use initial
+                interpolatedValue = initialValue;
+              }
+              
+              const normalizedValue = interpolatedValue - initialValue;
+              chartData.push({ x: date, y: normalizedValue });
             }
-            
-            // Normalize: subtract initial value so chart starts at 0
-            const normalizedValue = lastKnownValue - initialValue;
-            chartData.push({ x: date, y: normalizedValue });
           });
           
           const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
