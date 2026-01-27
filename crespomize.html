@@ -646,7 +646,12 @@
       ANOMALY_THRESHOLDS: {
         LIKES_VIEWS_RATIO: 0.05,     // Reject if likes within 5% of views (extraction error)
         MIN_LIKES_RATIO: 0.001,       // Reject if likes < 0.1% of views (implausibly low)
-        SIGNIFICANT_VIEWS: 5000       // Views threshold for applying ratio checks
+        SIGNIFICANT_VIEWS: 5000,      // Views threshold for applying ratio checks
+        FOLLOWER_DROP_THRESHOLD: 0.5, // Flag drops > 50% as potential outliers
+        FOLLOWER_SPIKE_THRESHOLD: 3.0, // Flag increases > 300% as potential outliers
+        Z_SCORE_THRESHOLD: 3.0,       // Standard deviations for statistical outlier detection
+        MAX_GAP_DAYS: 14,             // Maximum gap (days) before special handling
+        LARGE_GAP_DAYS: 7             // Gap size (days) that triggers conservative interpolation
       },
       
       // Weekly calculation constants
@@ -1557,7 +1562,9 @@
                     return '+' + this.formatNumber(value);
                   }
                 },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                grid: { color: 'rgba(0, 255, 0, 0.1)' },
+                // Add grace to prevent chart from being too tight
+                grace: '5%'
               }
             }
           }
@@ -2444,9 +2451,17 @@
           return null;
         }
         
-        // Get follower history for this month
-        const validFollowersHistory = (accountData.followersHistory || []).filter(h => 
-          h && h.value != null && typeof h.value === 'number' && h.value > 0
+        // Get follower history and apply robust interpolation
+        let followersHistory = accountData.followersHistory || [];
+        
+        // Apply enhanced interpolation to fill gaps and remove outliers
+        if (followersHistory.length > 0) {
+          followersHistory = this.interpolateHistoricalData(followersHistory);
+        }
+        
+        // Filter to valid data after interpolation
+        const validFollowersHistory = followersHistory.filter(h => 
+          h && h.value != null && typeof h.value === 'number' && h.value >= 0
         );
         
         let followersStart = 0;
@@ -2458,24 +2473,68 @@
           const beforeStart = validFollowersHistory.filter(h => h.date <= startDate).sort((a, b) => b.date - a.date);
           if (beforeStart.length > 0) {
             followersStart = beforeStart[0].value;
+          } else {
+            // If no data before start, use earliest available
+            const earliest = validFollowersHistory.sort((a, b) => a.date - b.date)[0];
+            if (earliest && earliest.date <= endDate) {
+              followersStart = earliest.value;
+            }
           }
           
           // Find followers at end of month (or closest before end)
           const beforeEnd = validFollowersHistory.filter(h => h.date <= endDate).sort((a, b) => b.date - a.date);
           if (beforeEnd.length > 0) {
             followersEnd = beforeEnd[0].value;
+          } else {
+            // If no data before end, check if we have data after (use that as end)
+            const afterEnd = validFollowersHistory.filter(h => h.date >= startDate).sort((a, b) => a.date - b.date);
+            if (afterEnd.length > 0) {
+              followersEnd = afterEnd[0].value;
+            } else {
+              followersEnd = followersStart; // Fallback to start value
+            }
+          }
+          
+          // Validate: end should not be less than start (follower counts don't decrease naturally)
+          if (followersEnd < followersStart && followersStart > 0) {
+            // This might be bad data - use start value as end
+            followersEnd = followersStart;
           }
           
           // Get daily follower progression throughout the month
           const monthData = validFollowersHistory.filter(h => h.date >= startDate && h.date <= endDate);
-          dailyFollowerData.push(...monthData.map(h => ({ date: h.date, followers: h.value })));
+          
+          // Apply smoothing to daily data if we have enough points
+          if (monthData.length > 3) {
+            // Simple moving average smoothing for display
+            const smoothed = this.applySmoothingToFollowerData(monthData);
+            dailyFollowerData.push(...smoothed.map(h => ({ date: h.date, followers: h.value })));
+          } else {
+            dailyFollowerData.push(...monthData.map(h => ({ date: h.date, followers: h.value })));
+          }
         }
         
-        // Filter posts published this month
+        // Filter posts published this month and validate data
         const allVideos = accountData.videos || [];
-        const monthVideos = allVideos.filter(v => 
-          v.date >= startDate && v.date <= endDate
-        );
+        const monthVideos = allVideos.filter(v => {
+          // Basic validation: must have date, views should be reasonable
+          if (!v.date || v.date < startDate || v.date > endDate) return false;
+          
+          // Ensure views are valid numbers
+          if (v.views !== undefined && v.views !== null) {
+            v.views = Math.max(0, parseInt(v.views) || 0);
+          }
+          
+          // Ensure likes are valid and not greater than views
+          if (v.likes !== undefined && v.likes !== null) {
+            v.likes = Math.max(0, parseInt(v.likes) || 0);
+            if (v.views !== undefined && v.likes > v.views) {
+              v.likes = Math.floor(v.views * 0.1); // Cap at 10% of views as fallback
+            }
+          }
+          
+          return true;
+        });
         
         return {
           followersStart,
@@ -2484,6 +2543,33 @@
           dailyFollowerData,
           monthVideos
         };
+      },
+      
+      // Apply gentle smoothing to follower data for cleaner charts
+      applySmoothingToFollowerData(data) {
+        if (data.length < 3) return data;
+        
+        // Use 3-point moving average for smoothing
+        const smoothed = data.map((item, idx, arr) => {
+          if (idx === 0 || idx === arr.length - 1) {
+            // Keep first and last points unchanged
+            return item;
+          }
+          
+          const prev = arr[idx - 1].value;
+          const curr = arr[idx].value;
+          const next = arr[idx + 1].value;
+          
+          // Weighted average: more weight on current value
+          const smoothedValue = Math.round((prev * 0.25 + curr * 0.5 + next * 0.25));
+          
+          return {
+            ...item,
+            value: smoothedValue
+          };
+        });
+        
+        return smoothed;
       },
       
       // Create per-account follower growth charts showing daily progression
@@ -4946,37 +5032,226 @@
         return videos.filter(v => v.date >= cutoffDate);
       },
       
+      // Helper: Calculate mean and standard deviation for outlier detection
+      calculateStats(values) {
+        if (values.length === 0) return { mean: 0, stdDev: 0 };
+        const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+        const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+        const stdDev = Math.sqrt(variance);
+        return { mean, stdDev };
+      },
+      
+      // Helper: Detect statistical outliers using Z-score
+      isStatisticalOutlier(value, mean, stdDev) {
+        if (stdDev === 0) return false;
+        const zScore = Math.abs(value - mean) / stdDev;
+        return zScore > this.ANOMALY_THRESHOLDS.Z_SCORE_THRESHOLD;
+      },
+      
+      // Helper: Calculate days between two dates
+      daysBetween(date1, date2) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        return Math.abs(date2 - date1) / msPerDay;
+      },
+      
       interpolateHistoricalData(historyArray) {
         if (historyArray.length === 0) return historyArray;
         
-        // First pass: mark items that need interpolation (0, null, undefined, or abnormal drops)
-        const interpolated = historyArray.map((item, idx, arr) => {
-          let needsInterp = item.value === 0 || item.value === null || item.value === undefined;
+        // Filter out truly invalid data (null, undefined, negative)
+        const cleaned = historyArray.map(item => ({
+          ...item,
+          value: (item.value === null || item.value === undefined || item.value < 0) ? null : item.value
+        }));
+        
+        // Get valid values for statistical analysis
+        const validValues = cleaned.filter(item => item.value !== null && item.value > 0).map(item => item.value);
+        
+        if (validValues.length < 3) {
+          // Not enough data for statistical analysis, use simple approach
+          return this.simpleInterpolation(cleaned);
+        }
+        
+        // Calculate statistics for outlier detection
+        const { mean, stdDev } = this.calculateStats(validValues);
+        
+        // First pass: detect and mark outliers
+        const processed = cleaned.map((item, idx, arr) => {
+          let needsInterp = item.value === null || item.value === 0;
+          let reason = item.value === null ? 'missing' : (item.value === 0 ? 'zero' : null);
           
-          // Also check for abnormal drops (50%+ drop from previous valid value)
-          if (!needsInterp && idx > 0) {
+          if (!needsInterp && item.value > 0 && idx > 0) {
             // Find the previous valid value
             let prevValidValue = null;
+            let prevValidIdx = -1;
             for (let j = idx - 1; j >= 0; j--) {
-              const prevVal = arr[j].value;
-              if (prevVal > 0 && prevVal !== null && prevVal !== undefined) {
-                prevValidValue = prevVal;
+              if (arr[j].value > 0 && arr[j].value !== null) {
+                prevValidValue = arr[j].value;
+                prevValidIdx = j;
                 break;
               }
             }
             
-            // If there's a 50%+ drop, consider it invalid
-            if (prevValidValue !== null && item.value < prevValidValue * 0.5) {
-              needsInterp = true;
+            if (prevValidValue !== null) {
+              // Check for abnormal drops (followers shouldn't drop >50% suddenly)
+              if (item.value < prevValidValue * this.ANOMALY_THRESHOLDS.FOLLOWER_DROP_THRESHOLD) {
+                needsInterp = true;
+                reason = 'abnormal_drop';
+              }
+              
+              // Check for abnormal spikes (followers growing >300% overnight is suspicious)
+              if (item.value > prevValidValue * this.ANOMALY_THRESHOLDS.FOLLOWER_SPIKE_THRESHOLD) {
+                // Check if this is a statistical outlier
+                if (validValues.length >= 10 && this.isStatisticalOutlier(item.value, mean, stdDev)) {
+                  needsInterp = true;
+                  reason = 'abnormal_spike';
+                }
+              }
+            }
+            
+            // Statistical outlier detection (for datasets with enough data)
+            if (!needsInterp && validValues.length >= 10) {
+              if (this.isStatisticalOutlier(item.value, mean, stdDev)) {
+                // Double-check: is this a consistent trend or isolated spike?
+                let nextValidValue = null;
+                for (let j = idx + 1; j < arr.length && j < idx + 3; j++) {
+                  if (arr[j].value > 0 && arr[j].value !== null) {
+                    nextValidValue = arr[j].value;
+                    break;
+                  }
+                }
+                
+                // If next value is also high, it's likely a real trend, not an outlier
+                if (nextValidValue === null || nextValidValue < item.value * 0.7) {
+                  needsInterp = true;
+                  reason = 'statistical_outlier';
+                }
+              }
             }
           }
           
           return {
             ...item,
             index: idx,
-            needsInterp: needsInterp
+            needsInterp: needsInterp,
+            reason: reason,
+            originalValue: item.value
           };
         });
+        
+        // Second pass: interpolate marked values
+        let i = 0;
+        while (i < processed.length) {
+          if (!processed[i].needsInterp) {
+            i++;
+            continue;
+          }
+          
+          // Find the group of consecutive values needing interpolation
+          let groupStart = i;
+          let groupEnd = i;
+          while (groupEnd < processed.length && processed[groupEnd].needsInterp) {
+            groupEnd++;
+          }
+          groupEnd--;
+          
+          // Find previous valid value
+          let prevValue = null;
+          let prevIdx = -1;
+          for (let j = groupStart - 1; j >= 0; j--) {
+            if (!processed[j].needsInterp && processed[j].value > 0) {
+              prevValue = processed[j].value;
+              prevIdx = j;
+              break;
+            }
+          }
+          
+          // Find next valid value
+          let nextValue = null;
+          let nextIdx = -1;
+          for (let j = groupEnd + 1; j < processed.length; j++) {
+            if (!processed[j].needsInterp && processed[j].value > 0) {
+              nextValue = processed[j].value;
+              nextIdx = j;
+              break;
+            }
+          }
+          
+          // Calculate gap size in days if we have dates
+          let gapDays = 0;
+          if (prevIdx >= 0 && nextIdx >= 0 && processed[prevIdx].date && processed[nextIdx].date) {
+            gapDays = this.daysBetween(processed[prevIdx].date, processed[nextIdx].date);
+          }
+          
+          // Interpolate based on gap size
+          if (prevValue !== null && nextValue !== null) {
+            const groupSize = groupEnd - groupStart + 1;
+            
+            // For large gaps (>7 days), use conservative interpolation
+            if (gapDays > this.ANOMALY_THRESHOLDS.LARGE_GAP_DAYS) {
+              // Use logarithmic interpolation for more conservative estimates
+              const logPrev = Math.log(prevValue + 1);
+              const logNext = Math.log(nextValue + 1);
+              const totalSteps = groupSize + 1;
+              
+              for (let j = groupStart; j <= groupEnd; j++) {
+                const stepNumber = j - groupStart + 1;
+                const logInterp = logPrev + ((logNext - logPrev) * stepNumber / totalSteps);
+                processed[j].value = Math.round(Math.exp(logInterp) - 1);
+                processed[j].interpolated = true;
+                processed[j].interpolationType = 'logarithmic';
+              }
+            } else {
+              // For smaller gaps, use linear interpolation
+              const totalSteps = groupSize + 1;
+              
+              for (let j = groupStart; j <= groupEnd; j++) {
+                const stepNumber = j - groupStart + 1;
+                const interpolatedValue = prevValue + ((nextValue - prevValue) * stepNumber / totalSteps);
+                processed[j].value = Math.round(interpolatedValue);
+                processed[j].interpolated = true;
+                processed[j].interpolationType = 'linear';
+              }
+            }
+          } else if (prevValue !== null) {
+            // Only have previous value - use it (forward fill)
+            for (let j = groupStart; j <= groupEnd; j++) {
+              processed[j].value = prevValue;
+              processed[j].interpolated = true;
+              processed[j].interpolationType = 'forward_fill';
+            }
+          } else if (nextValue !== null) {
+            // Only have next value - use it (backward fill)
+            for (let j = groupStart; j <= groupEnd; j++) {
+              processed[j].value = nextValue;
+              processed[j].interpolated = true;
+              processed[j].interpolationType = 'backward_fill';
+            }
+          } else {
+            // No valid values at all - set to 0
+            for (let j = groupStart; j <= groupEnd; j++) {
+              processed[j].value = 0;
+              processed[j].interpolated = true;
+              processed[j].interpolationType = 'no_data';
+            }
+          }
+          
+          i = groupEnd + 1;
+        }
+        
+        // Return cleaned data
+        return processed.map(item => ({
+          date: item.date,
+          value: item.value
+        }));
+      },
+      
+      // Simple interpolation fallback for small datasets
+      simpleInterpolation(historyArray) {
+        const interpolated = historyArray.map((item, idx) => ({
+          ...item,
+          index: idx,
+          needsInterp: item.value === null || item.value === 0
+        }));
         
         let i = 0;
         while (i < interpolated.length) {
