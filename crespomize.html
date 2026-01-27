@@ -6042,6 +6042,46 @@
         const chartDiv = document.createElement('div');
         chartDiv.className = 'chart-container';
         
+        // Detect outliers BEFORE creating chart elements
+        // Calculate likes/views ratio for each post (in log scale for better distribution)
+        const engagementRatios = this.accountData.videos
+          .filter(v => v.views > 0 && v.likes > 0)
+          .map(v => {
+            // Use log ratio for better outlier detection across different scales
+            const logRatio = Math.log10(v.likes + 1) - Math.log10(v.views + 1);
+            return { video: v, ratio: logRatio };
+          });
+        
+        // Calculate statistics for outlier detection
+        const ratios = engagementRatios.map(e => e.ratio);
+        const { mean: ratioMean, stdDev: ratioStdDev } = this.calculateStats(ratios);
+        
+        // Classify posts as normal or outliers
+        const normalPosts = [];
+        const outlierPosts = [];
+        
+        this.accountData.videos.forEach(v => {
+          if (v.views > 0 && v.likes > 0) {
+            const logRatio = Math.log10(v.likes + 1) - Math.log10(v.views + 1);
+            const zScore = ratioStdDev > 0 ? Math.abs(logRatio - ratioMean) / ratioStdDev : 0;
+            
+            // Flag as outlier if Z-score > 2.5 (more lenient than 3σ for visibility)
+            if (zScore > 2.5) {
+              outlierPosts.push({ 
+                x: v.views, 
+                y: v.likes,
+                zScore: zScore.toFixed(2),
+                ratio: (v.likes / v.views * 100).toFixed(2)
+              });
+            } else {
+              normalPosts.push({ x: v.views, y: v.likes });
+            }
+          } else {
+            // Include zero values as normal points
+            normalPosts.push({ x: v.views || 0, y: v.likes || 0 });
+          }
+        });
+        
         const canvas = document.createElement('canvas');
         canvas.id = 'correlation';
         
@@ -6055,6 +6095,15 @@
         scaleBadge.onclick = () => this.toggleLogScale('correlation');
         
         header.appendChild(scaleBadge);
+        
+        // Add outlier summary badge
+        if (outlierPosts.length > 0) {
+          const outlierBadge = document.createElement('span');
+          outlierBadge.style.cssText = 'background: rgba(255, 50, 50, 0.8); color: #fff; padding: 0.3em 0.8em; border-radius: 3px; font-size: 0.8em; margin-left: 1em; font-weight: normal;';
+          outlierBadge.textContent = `⚠️ ${outlierPosts.length} Outlier${outlierPosts.length > 1 ? 's' : ''} Detected`;
+          outlierBadge.title = 'Posts with unusual engagement patterns - hover over red triangles for details';
+          header.appendChild(outlierBadge);
+        }
         
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
@@ -6079,17 +6128,30 @@
           max: Math.max(...allLikes)
         };
         
+        // Outliers already calculated above before creating chart elements
+        
         this.chartInstances['correlation'] = new Chart(ctx, {
           type: 'scatter',
           data: {
-            datasets: [{
-              label: 'Posts',
-              data: this.accountData.videos.map(v => ({ x: v.views, y: v.likes })),
-              backgroundColor: 'rgba(0, 210, 211, 0.6)',
-              borderColor: '#00d2d3',
-              pointRadius: 6,
-              pointHoverRadius: 8
-            }]
+            datasets: [
+              {
+                label: 'Normal Posts',
+                data: normalPosts,
+                backgroundColor: 'rgba(0, 210, 211, 0.6)',
+                borderColor: '#00d2d3',
+                pointRadius: 6,
+                pointHoverRadius: 8
+              },
+              {
+                label: 'Outliers (Inspect)',
+                data: outlierPosts,
+                backgroundColor: 'rgba(255, 50, 50, 0.8)',
+                borderColor: '#ff3232',
+                pointRadius: 8,
+                pointHoverRadius: 10,
+                pointStyle: 'triangle'
+              }
+            ]
           },
           options: {
             responsive: true,
@@ -6100,7 +6162,8 @@
                 display: true,
                 labels: {
                   color: '#0f0',
-                  font: { family: 'monospace', size: 12 }
+                  font: { family: 'monospace', size: 12 },
+                  usePointStyle: true
                 }
               },
               tooltip: {
@@ -6111,8 +6174,17 @@
                 borderWidth: 1,
                 callbacks: {
                   label: (context) => {
-                    return 'Views: ' + this.formatNumber(context.parsed.x) + 
-                           ', Likes: ' + this.formatNumber(context.parsed.y);
+                    const labels = ['Views: ' + this.formatNumber(context.parsed.x) + 
+                           ', Likes: ' + this.formatNumber(context.parsed.y)];
+                    
+                    // Add outlier info if this is an outlier point
+                    if (context.dataset.label === 'Outliers (Inspect)' && context.raw.zScore) {
+                      labels.push('Engagement: ' + context.raw.ratio + '%');
+                      labels.push('Z-Score: ' + context.raw.zScore);
+                      labels.push('⚠️ Flagged for inspection');
+                    }
+                    
+                    return labels;
                   }
                 }
               }
