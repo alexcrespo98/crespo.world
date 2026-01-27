@@ -651,7 +651,9 @@
         FOLLOWER_SPIKE_THRESHOLD: 3.0, // Flag increases > 300% as potential outliers
         Z_SCORE_THRESHOLD: 3.0,       // Standard deviations for statistical outlier detection
         MAX_GAP_DAYS: 14,             // Maximum gap (days) before special handling
-        LARGE_GAP_DAYS: 7             // Gap size (days) that triggers conservative interpolation
+        LARGE_GAP_DAYS: 7,            // Gap size (days) that triggers conservative interpolation
+        TREND_CONTINUATION_THRESHOLD: 0.7, // 70% of spike value confirms trend continuation
+        LIKES_FALLBACK_RATIO: 0.1     // Cap likes at 10% of views if validation fails
       },
       
       // Weekly calculation constants
@@ -2529,7 +2531,7 @@
           if (v.likes !== undefined && v.likes !== null) {
             v.likes = Math.max(0, parseInt(v.likes) || 0);
             if (v.views !== undefined && v.likes > v.views) {
-              v.likes = Math.floor(v.views * 0.1); // Cap at 10% of views as fallback
+              v.likes = Math.floor(v.views * this.ANOMALY_THRESHOLDS.LIKES_FALLBACK_RATIO);
             }
           }
           
@@ -5036,7 +5038,8 @@
       calculateStats(values) {
         if (values.length === 0) return { mean: 0, stdDev: 0 };
         const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
-        const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+        // Use sample variance (N-1) for better statistical accuracy with small samples
+        const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / Math.max(1, values.length - 1);
         const stdDev = Math.sqrt(variance);
         return { mean, stdDev };
       },
@@ -5121,7 +5124,7 @@
                 }
                 
                 // If next value is also high, it's likely a real trend, not an outlier
-                if (nextValidValue === null || nextValidValue < item.value * 0.7) {
+                if (nextValidValue === null || nextValidValue < item.value * this.ANOMALY_THRESHOLDS.TREND_CONTINUATION_THRESHOLD) {
                   needsInterp = true;
                   reason = 'statistical_outlier';
                 }
@@ -5189,6 +5192,7 @@
             // For large gaps (>7 days), use conservative interpolation
             if (gapDays > this.ANOMALY_THRESHOLDS.LARGE_GAP_DAYS) {
               // Use logarithmic interpolation for more conservative estimates
+              // Adding 1 to handle log(0) edge case and ensure smooth curves
               const logPrev = Math.log(prevValue + 1);
               const logNext = Math.log(nextValue + 1);
               const totalSteps = groupSize + 1;
