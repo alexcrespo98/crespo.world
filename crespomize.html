@@ -1809,8 +1809,28 @@
         
         const ctx = canvas.getContext('2d');
         
+        // Filter out zero values from data and corresponding labels
+        const filteredData = [];
+        const filteredLabels = [];
+        const filteredOriginalData = [];
+        
+        data.forEach((value, index) => {
+          if (value !== 0 && value !== 0.0) {
+            filteredData.push(value);
+            filteredLabels.push(labels[index]);
+            filteredOriginalData.push(value);
+          }
+        });
+        
+        // If all values are zero, show a message or keep one entry
+        if (filteredData.length === 0) {
+          filteredData.push(0);
+          filteredLabels.push('No Data');
+          filteredOriginalData.push(0);
+        }
+        
         // Handle negative values by using absolute values for chart display
-        const absData = data.map(v => Math.abs(v));
+        const absData = filteredData.map(v => Math.abs(v));
         
         // Calculate total for center display
         const total = centerValue !== null ? centerValue : absData.reduce((sum, val) => sum + val, 0);
@@ -1819,10 +1839,11 @@
         const colors = {
           'Instagram': '#E1306C',
           'TikTok': '#00f2ea',
-          'YouTube': '#FF0000'
+          'YouTube': '#FF0000',
+          'No Data': '#666666'
         };
         
-        const backgroundColors = labels.map(label => colors[label] || '#0f0');
+        const backgroundColors = filteredLabels.map(label => colors[label] || '#0f0');
         
         // Center text plugin for total
         const centerTextPlugin = {
@@ -1850,7 +1871,7 @@
         this.chartInstances[chartId] = new Chart(ctx, {
           type: 'doughnut',
           data: {
-            labels: labels,
+            labels: filteredLabels,
             datasets: [{
               data: absData,
               backgroundColor: backgroundColors,
@@ -1882,8 +1903,8 @@
                 callbacks: {
                   label: (context) => {
                     const label = context.label || '';
-                    const value = data[context.dataIndex]; // Use original value (might be negative)
-                    const total = data.reduce((sum, val) => sum + Math.abs(val), 0);
+                    const value = filteredOriginalData[context.dataIndex]; // Use filtered original value
+                    const total = filteredOriginalData.reduce((sum, val) => sum + Math.abs(val), 0);
                     const percentage = total > 0 ? ((Math.abs(value) / total) * 100).toFixed(1) : 0;
                     return `${label}: ${this.formatNumber(value)} (${percentage}%)`;
                   }
@@ -1891,8 +1912,8 @@
               },
               datalabels: {
                 color: (context) => {
-                  // Use original data value to determine color
-                  const originalValue = data[context.dataIndex];
+                  // Use filtered data value to determine color
+                  const originalValue = filteredOriginalData[context.dataIndex];
                   return originalValue >= 0 ? '#00ff00' : '#ff0000';
                 },
                 backgroundColor: (context) => {
