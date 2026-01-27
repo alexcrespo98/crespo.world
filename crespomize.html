@@ -551,6 +551,67 @@
     .monthly-reports-style-4 .stats-summary {
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     }
+    
+    /* Style 5: Dark Mode Enhanced - Similar to compact but with different color scheme */
+    .monthly-reports-style-5 .donut-charts-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .monthly-reports-style-5 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .monthly-reports-style-5 .stat-card {
+      background: #0a0a0a;
+      border-color: #00aa00;
+    }
+    .monthly-reports-style-5 .stat-card h4 {
+      color: #00ff88;
+    }
+    .monthly-reports-style-5 .donut-chart-container h4 {
+      color: #00ff88;
+    }
+    
+    /* Style 6: Minimal - Extra spacing, cleaner look */
+    .monthly-reports-style-6 .donut-charts-grid {
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 3em;
+    }
+    .monthly-reports-style-6 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2em;
+      margin-bottom: 3em;
+    }
+    .monthly-reports-style-6 .stat-card {
+      padding: 2em;
+    }
+    .monthly-reports-style-6 .donut-chart-container {
+      padding: 2em;
+    }
+    
+    /* Style 7: Dense - Even more compact than compact */
+    .monthly-reports-style-7 .donut-charts-grid {
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5em;
+    }
+    .monthly-reports-style-7 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.5em;
+    }
+    .monthly-reports-style-7 .stat-card {
+      padding: 0.5em;
+    }
+    .monthly-reports-style-7 .stat-card h4 {
+      font-size: 0.7em;
+      margin-bottom: 0.3em;
+    }
+    .monthly-reports-style-7 .stat-card .value {
+      font-size: 1.2em;
+    }
+    .monthly-reports-style-7 .donut-chart-container {
+      padding: 0.5em;
+    }
+    .monthly-reports-style-7 .donut-chart-container h4 {
+      font-size: 0.9em;
+    }
   </style>
 </head>
 <body>
@@ -621,6 +682,9 @@
             <option value="style-1">Grid Layout</option>
             <option value="style-2">Stacked (Large)</option>
             <option value="style-3">Two Columns</option>
+            <option value="style-5">Dark Mode Enhanced</option>
+            <option value="style-6">Minimal</option>
+            <option value="style-7">Dense</option>
           </select>
         </div>
         
@@ -1530,7 +1594,7 @@
       changeMonthlyStyle(style) {
         const container = document.getElementById('monthlyGraphsContainer');
         // Remove all style classes
-        container.classList.remove('monthly-reports-style-1', 'monthly-reports-style-2', 'monthly-reports-style-3', 'monthly-reports-style-4');
+        container.classList.remove('monthly-reports-style-1', 'monthly-reports-style-2', 'monthly-reports-style-3', 'monthly-reports-style-4', 'monthly-reports-style-5', 'monthly-reports-style-6', 'monthly-reports-style-7');
         // Add selected style class
         container.classList.add(`monthly-reports-${style}`);
         // Store in session storage
