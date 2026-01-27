@@ -711,13 +711,6 @@
       </select>
       <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
         
-        <!-- Toggle Export Buttons Button -->
-        <button id="toggleExportButtonsBtn" class="export-btn" 
-                style="position: absolute; top: -50px; right: 0; z-index: 1000; background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.6em 1em; cursor: pointer; font-family: monospace; border-radius: 5px; font-size: 0.9em;"
-                onclick="app.toggleExportButtons()">
-          👁️ Hide Export Buttons
-        </button>
-        
         <div class="question" id="monthlyGraphsTitle"></div>
         
         <!-- Tab Navigation -->
@@ -926,7 +919,6 @@
       chartMetricKeys: {},
       allPlatformsData: {},
       allVideosUnfiltered: [],
-      exportButtonsVisible: true,  // Track visibility of export buttons
       
       // Easy graphs state
       easyGraphsData: {},
@@ -1976,17 +1968,6 @@
         statsDonutWrapper.style.position = 'relative';
         statsDonutWrapper.style.marginBottom = '2em';
         
-        // Add single export button at top right for both stats and donuts
-        const exportBtn = document.createElement('button');
-        exportBtn.className = 'export-btn';
-        exportBtn.textContent = 'Export Stats & Charts';
-        exportBtn.style.position = 'absolute';
-        exportBtn.style.right = '0';
-        exportBtn.style.top = '0';
-        exportBtn.style.zIndex = '10';
-        exportBtn.onclick = () => this.exportStatsAndDonuts();
-        statsDonutWrapper.appendChild(exportBtn);
-        
         // Create stats grid with all 4 boxes (2x2 layout)
         const statsGrid = document.createElement('div');
         statsGrid.className = 'stats-summary';
@@ -2094,21 +2075,10 @@
       createClientDonutCharts(container, data) {
         const { platformFollowers, platformFollowersChange, platformLikes, platformViews, platformPosts, totalComments, totalShares, followerChange } = data;
         
-        // Create wrapper for stats and donuts with single export button
+        // Create wrapper for stats and donuts
         const statsDonutWrapper = document.createElement('div');
         statsDonutWrapper.style.position = 'relative';
         statsDonutWrapper.style.marginBottom = '2em';
-        
-        // Add single export button at top right for both stats and donuts
-        const exportBtn = document.createElement('button');
-        exportBtn.className = 'export-btn';
-        exportBtn.textContent = 'Export Stats & Charts';
-        exportBtn.style.position = 'absolute';
-        exportBtn.style.right = '0';
-        exportBtn.style.top = '0';
-        exportBtn.style.zIndex = '10';
-        exportBtn.onclick = () => this.exportStatsAndDonuts();
-        statsDonutWrapper.appendChild(exportBtn);
         
         // Create stats grid with all 4 boxes (2x2 layout)
         const statsGrid = document.createElement('div');
@@ -2374,13 +2344,7 @@
         const header = document.createElement('h3');
         header.textContent = title;
         
-        const exportBtn = document.createElement('button');
-        exportBtn.className = 'export-btn';
-        exportBtn.textContent = 'Export';
-        exportBtn.onclick = () => this.exportChart(chartId, title);
-        
         chartDiv.appendChild(header);
-        chartDiv.appendChild(exportBtn);
         chartDiv.appendChild(canvas);
         container.appendChild(chartDiv);
         
@@ -3762,23 +3726,6 @@
         
         document.addEventListener('click', closeMessage);
         document.addEventListener('keydown', closeMessage);
-      },
-      
-      // Toggle export buttons visibility
-      toggleExportButtons() {
-        this.exportButtonsVisible = !this.exportButtonsVisible;
-        
-        // Update toggle button text
-        const toggleBtn = document.getElementById('toggleExportButtonsBtn');
-        if (toggleBtn) {
-          toggleBtn.textContent = this.exportButtonsVisible ? '👁️ Hide Export Buttons' : '👁️ Show Export Buttons';
-        }
-        
-        // Toggle all export buttons
-        const exportButtons = document.querySelectorAll('.export-btn:not(#toggleExportButtonsBtn)');
-        exportButtons.forEach(btn => {
-          btn.style.display = this.exportButtonsVisible ? '' : 'none';
-        });
       },
       
       // Render easy graphs for client report
