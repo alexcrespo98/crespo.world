@@ -465,21 +465,21 @@
     <a href="recipeasy.html">recipeasy</a>
   </nav>
 
-  <h1>crespomize analytics</h1>
+  <h1>crespomize monthly reports</h1>
   
   <div class="container">
     <!-- Step 0: Analytics Type Selection -->
     <div id="step0" class="step">
-      <div class="question">what type of analytics?</div>
+      <div class="question">what type of report?</div>
       <select id="analyticsTypeSelect">
-        <option value="" disabled selected>-- select analytics type --</option>
-        <option value="easy">Weekly Analytics (this week's progress)</option>
-        <option value="monthly">Monthly Analytics (monthly reports)</option>
-        <option value="custom">Custom Analytics</option>
+        <option value="" disabled selected>-- select report type --</option>
+        <!-- <option value="easy">Weekly Analytics (this week's progress)</option> -->
+        <option value="monthly">Monthly Reports</option>
+        <!-- <option value="custom">Custom Analytics</option> -->
       </select>
     </div>
 
-    <!-- Easy Graphs Section (now Weekly Analytics) -->
+    <!-- HIDDEN: Easy Graphs Section (now Weekly Analytics) - Temporarily removed
     <div id="easyGraphsSection" class="step hidden">
       <div class="question">select week for analytics:</div>
       <select id="monthSelect">
@@ -509,15 +509,26 @@
         <button onclick="location.reload()">start over</button>
       </div>
     </div>
+    -->
 
     <!-- Monthly Analytics Section -->
     <div id="monthlyGraphsSection" class="step hidden">
-      <div class="question">select month for analytics:</div>
+      <div class="question">select month for report:</div>
       <select id="monthlyMonthSelect">
         <option value="" disabled selected>-- select month --</option>
       </select>
       <div id="monthlyGraphsContainer" class="hidden">
         <div class="question" id="monthlyGraphsTitle"></div>
+        
+        <!-- Layout Style Switcher (discreet) -->
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 0.5em; opacity: 0.6;">
+          <label style="font-size: 0.75em; color: #0f0; font-family: monospace; margin-right: 0.5em;">layout:</label>
+          <select id="layoutStyleSwitcher" onchange="app.switchLayoutStyle(this.value)" style="background: #000; color: #0f0; border: 1px solid #0f0; font-family: monospace; font-size: 0.75em; padding: 0.2em;">
+            <option value="compact">Compact</option>
+            <option value="detailed" selected>Detailed</option>
+            <option value="minimal">Minimal</option>
+          </select>
+        </div>
         
         <!-- Tab Navigation -->
         <div class="monthly-tabs-container">
@@ -551,7 +562,7 @@
       </div>
     </div>
 
-    <!-- Custom Analytics: Platform selection -->
+    <!-- HIDDEN: Custom Analytics sections - Temporarily removed
     <div id="step0Custom" class="step hidden">
       <div class="question">which platform?</div>
       <select id="platformSelect">
@@ -563,7 +574,6 @@
       </select>
     </div>
 
-    <!-- Step 1: Select account (for single platform) -->
     <div id="step1" class="step hidden">
       <div class="question">pick a company:</div>
       <select id="accountSelect">
@@ -571,7 +581,6 @@
       </select>
     </div>
 
-    <!-- Step 2: Time range selection -->
     <div id="step2" class="step hidden">
       <div class="question">select time range for analysis:</div>
       <div class="time-range-buttons" id="timeRangeButtons">
@@ -581,7 +590,6 @@
         <button id="btn-30" onclick="app.selectPresetTimeRange(30)">1 Month</button>
       </div>
       
-      <!-- Custom Date Range Slider -->
       <div class="custom-date-slider-container" id="customDateSliderContainer">
         <div class="custom-date-slider-label">or choose a custom date range:</div>
         <div class="dual-slider-wrapper">
@@ -604,21 +612,18 @@
       </div>
     </div>
 
-    <!-- Charts display -->
     <div id="charts" class="hidden">
       <div class="question">analytics for <span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
-      <!-- Summary stats -->
       <div class="stats-summary" id="statsSummary"></div>
       
-      <!-- Platform breakdown for "All MoonMedia" -->
       <div id="platformBreakdown" class="hidden"></div>
       
-      <!-- Charts -->
       <div id="chartsList"></div>
       <br>
       <button onclick="location.reload()">start over</button>
     </div>
+    -->
 
     <div id="loading" class="loading hidden">loading data...</div>
   </div>
@@ -630,7 +635,7 @@
       SHEET_IDS: {
         tiktok: '1FUGfhPVsVi1WOOw88BKfUKueJh4eMPj1',
         instagram: '19PDIP7_YaluxsmvQsDJ89Bn5JkXnK2n2',
-        youtube: '1yRLZpJLdaB9oPZtjcwIeJx-6q8lGF2dO'
+        youtube: '1Gnsg8OuZHsPRDhfUWO6zCuaBT7XhCW6h19ygEvjRLb4'
       },
       
       // Explicit account mapping across platforms
@@ -641,9 +646,9 @@
         'popdartsgame': { instagram: 'popdartsgame', tiktok: 'popdartsgame', youtube: 'popdartsgame' },
         'bucketgolfgame': { instagram: 'bucketgolfgame', tiktok: 'bucketgolfgame', youtube: 'bucketgolfgame' },
         'playbattlegolf': { instagram: 'playbattlegolf', tiktok: 'playbattlegolf', youtube: 'playbattlegolf' },
-        'flinggolf': { instagram: 'flinggolf', tiktok: 'flinggolf', youtube: 'flinggolf' },
-        'golfponggames': { instagram: 'golfpong.games', tiktok: 'golfponggames', youtube: 'golfponggames' },
-        'discgogames': { instagram: 'discgogames', tiktok: 'discgogames', youtube: 'discgogames' },
+        'flinggolf': { instagram: 'flinggolf', tiktok: 'flinggolf', youtube: 'FlingGolf' },
+        'golfponggames': { instagram: 'golfpong.games', tiktok: 'golfponggames', youtube: 'GolfPongGames' },
+        'discgogames': { instagram: 'discgogames', tiktok: 'discgogames', youtube: 'DiscGOGames' },
         'lowtidegolf': { instagram: 'low_tide_golf', tiktok: 'lowtidegolf', youtube: null }  // No YouTube
       },
       
@@ -651,7 +656,13 @@
       ANOMALY_THRESHOLDS: {
         LIKES_VIEWS_RATIO: 0.05,     // Reject if likes within 5% of views (extraction error)
         MIN_LIKES_RATIO: 0.001,       // Reject if likes < 0.1% of views (implausibly low)
-        SIGNIFICANT_VIEWS: 5000       // Views threshold for applying ratio checks
+        SIGNIFICANT_VIEWS: 5000,      // Views threshold for applying ratio checks
+        FOLLOWER_SPIKE_THRESHOLD: 3.0, // Only flag spikes >300% if unsustained (drops >50% next day)
+        Z_SCORE_THRESHOLD: 3.0,       // Standard deviations for statistical outlier detection (interpolation)
+        Z_SCORE_CHART_THRESHOLD: 2.5, // More lenient threshold for visual outlier highlighting
+        MAX_GAP_DAYS: 14,             // Maximum gap (days) before special handling
+        LARGE_GAP_DAYS: 7,            // Gap size (days) that triggers conservative interpolation
+        LIKES_FALLBACK_RATIO: 0.1     // Cap likes at 10% of views if validation fails
       },
       
       // Weekly calculation constants
@@ -709,6 +720,7 @@
       currentMonthlyStartDate: null,
       currentMonthlyEndDate: null,
       currentMonthlyAccountStats: [],
+      currentLayoutStyle: 'detailed', // Layout style: compact, detailed, minimal
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -1122,7 +1134,7 @@
         
         // Show loading
         document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('loading').textContent = 'generating monthly analytics...';
+        document.getElementById('loading').textContent = 'generating monthly report...';
         
         // Store current month for all tabs
         this.currentMonthlyMonth = monthLabel;
@@ -1146,10 +1158,21 @@
         
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
-        document.getElementById('monthlyGraphsTitle').textContent = `Monthly Analytics: ${monthLabel}`;
+        document.getElementById('monthlyGraphsTitle').textContent = `Monthly Report: ${monthLabel}`;
         
         // Switch to default tab (Total Moon Media)
         this.switchMonthlyTab('total');
+      },
+      
+      // Switch layout style
+      switchLayoutStyle(style) {
+        this.currentLayoutStyle = style;
+        // Re-render current tab with new style
+        const activeTab = document.querySelector('.monthly-tab.active');
+        if (activeTab) {
+          const tabName = activeTab.getAttribute('data-tab');
+          this.switchMonthlyTab(tabName);
+        }
       },
       
       // Switch between monthly analytics tabs
@@ -1181,6 +1204,105 @@
         }
       },
       
+      // Create metric card with total value and pie chart breakdown
+      createMetricCardWithPieChart(container, metricName, totalValue, platformData, chartId) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'metric-card-with-pie';
+        cardDiv.style.cssText = 'border: 1px solid #0f0; padding: 1.5em; margin: 1em 0; background: rgba(0, 255, 0, 0.02);';
+        
+        // Total value display
+        const totalDiv = document.createElement('div');
+        totalDiv.style.cssText = 'text-align: center; margin-bottom: 1em;';
+        totalDiv.innerHTML = `
+          <h3 style="color: #0f0; font-family: monospace; margin: 0; font-size: 1.2em;">${metricName.toUpperCase()}</h3>
+          <div style="color: #0f0; font-family: monospace; font-size: 2em; margin: 0.5em 0;">${this.formatNumber(totalValue)}</div>
+        `;
+        cardDiv.appendChild(totalDiv);
+        
+        // Pie chart container
+        const canvasContainer = document.createElement('div');
+        canvasContainer.style.cssText = 'max-width: 400px; margin: 0 auto;';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = chartId;
+        canvasContainer.appendChild(canvas);
+        cardDiv.appendChild(canvasContainer);
+        
+        container.appendChild(cardDiv);
+        
+        // Create the pie chart
+        const ctx = canvas.getContext('2d');
+        const platformColors = {
+          instagram: '#E1306C',
+          tiktok: '#00f2ea',
+          youtube: '#FF0000'
+        };
+        
+        const platforms = ['instagram', 'tiktok', 'youtube'];
+        const values = platforms.map(p => platformData[p] || 0);
+        const nonZeroIndices = values.map((v, i) => v > 0 ? i : -1).filter(i => i >= 0);
+        
+        if (nonZeroIndices.length === 0) return;
+        
+        const labels = nonZeroIndices.map(i => {
+          const platform = platforms[i];
+          const value = values[i];
+          const percentage = totalValue > 0 ? (value / totalValue * 100).toFixed(1) : 0;
+          return `${platform.charAt(0).toUpperCase() + platform.slice(1)}: ${this.formatNumber(value)} (${percentage}%)`;
+        });
+        
+        const filteredValues = nonZeroIndices.map(i => values[i]);
+        const filteredColors = nonZeroIndices.map(i => platformColors[platforms[i]]);
+        
+        this.chartInstances[chartId] = new Chart(ctx, {
+          type: this.currentLayoutStyle === 'minimal' ? 'doughnut' : 'pie',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: filteredValues,
+              backgroundColor: filteredColors,
+              borderColor: '#000',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 1.5,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 11 },
+                  padding: 10
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1
+              }
+            }
+          }
+        });
+      },
+      
+      // Create simple stat card (no pie chart)
+      createSimpleStatCard(container, metricName, value) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'simple-stat-card';
+        cardDiv.style.cssText = 'border: 1px solid #0f0; padding: 1.5em; margin: 1em 0; text-align: center; background: rgba(0, 255, 0, 0.02);';
+        cardDiv.innerHTML = `
+          <h3 style="color: #0f0; font-family: monospace; margin: 0; font-size: 1.2em;">${metricName.toUpperCase()}</h3>
+          <div style="color: #0f0; font-family: monospace; font-size: 2em; margin: 0.5em 0;">${this.formatNumber(value)}</div>
+        `;
+        container.appendChild(cardDiv);
+      },
+      
       // Render Total Moon Media monthly view (aggregate all clients)
       renderTotalMoonMediaMonthlyView() {
         const statsContainer = document.getElementById('monthlyStatsSummary');
@@ -1199,6 +1321,8 @@
         let totalComments = 0;
         let totalShares = 0;
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
         
         clientStats.forEach(client => {
@@ -1214,6 +1338,9 @@
                   totalViews += video.views || 0;
                   totalComments += video.comments || 0;
                   totalShares += video.shares || 0;
+                  
+                  platformLikes[platform] += video.likes || 0;
+                  platformViews[platform] += video.views || 0;
                 });
               }
               
@@ -1225,43 +1352,40 @@
           });
         });
         
-        // Display summary statistics
-        statsContainer.innerHTML = `
-          <div class="stat-card">
-            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL LIKES</h4>
-            <div class="value">${this.formatNumber(totalLikes)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL VIEWS</h4>
-            <div class="value">${this.formatNumber(totalViews)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL COMMENTS</h4>
-            <div class="value">${this.formatNumber(totalComments)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL SHARES</h4>
-            <div class="value">${this.formatNumber(totalShares)}</div>
-          </div>
-        `;
+        // Clear containers
+        statsContainer.innerHTML = '';
+        chartsContainer.innerHTML = '';
         
-        // Create normalized follower growth chart
+        // Create metric cards with pie charts based on layout style
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          'Total Followers',
+          totalFollowersEnd,
+          platformFollowers,
+          'total-followers-pie'
+        );
+        
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          'Total Likes',
+          totalLikes,
+          platformLikes,
+          'total-likes-pie'
+        );
+        
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          'Total Views',
+          totalViews,
+          platformViews,
+          'total-views-pie'
+        );
+        
+        // Create simple stat cards for Comments and Shares
+        this.createSimpleStatCard(statsContainer, 'Total Comments', totalComments);
+        this.createSimpleStatCard(statsContainer, 'Total Shares', totalShares);
+        
+        // Create normalized follower growth chart (below the metric cards)
         this.createNormalizedFollowerGrowthChart(
           chartsContainer,
           'Total Moon Media Follower Growth',
@@ -1294,8 +1418,6 @@
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
-        let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
-        let platformShares = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
         
         ['instagram', 'tiktok', 'youtube'].forEach(platform => {
@@ -1319,8 +1441,6 @@
                 
                 platformLikes[platform] += likes;
                 platformViews[platform] += views;
-                platformComments[platform] += comments;
-                platformShares[platform] += shares;
               });
             }
             
@@ -1331,72 +1451,40 @@
           }
         });
         
-        // Display summary statistics
-        let statsHTML = `
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
-          </div>
-        `;
+        // Clear containers
+        statsContainer.innerHTML = '';
+        chartsContainer.innerHTML = '';
         
-        // Add engagement metric cards
-        statsHTML += `
-          <div class="stat-card">
-            <h4>INSTAGRAM LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
-          </div>
-        `;
+        // Create metric cards with pie charts
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          `${clientName} Followers`,
+          totalFollowersEnd,
+          platformFollowers,
+          `${clientName}-followers-pie`
+        );
         
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          `${clientName} Likes`,
+          totalLikes,
+          platformLikes,
+          `${clientName}-likes-pie`
+        );
+        
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          `${clientName} Views`,
+          totalViews,
+          platformViews,
+          `${clientName}-views-pie`
+        );
+        
+        // Create simple stat cards for Comments and Shares
+        this.createSimpleStatCard(statsContainer, `${clientName} Comments`, totalComments);
         if (totalShares > 0) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
-            </div>
-          `;
+          this.createSimpleStatCard(statsContainer, `${clientName} Shares`, totalShares);
         }
-        
-        statsContainer.innerHTML = statsHTML;
         
         // Create normalized follower growth chart
         this.createNormalizedFollowerGrowthChart(
@@ -1407,6 +1495,135 @@
           this.currentMonthlyEndDate,
           `${clientName}-follower-growth`
         );
+      },
+      
+      // Create platform breakdown pie/donut charts
+      createPlatformBreakdownCharts(container, metrics, clientName, isTotalMoonMedia) {
+        const platformColors = {
+          instagram: '#E1306C',
+          tiktok: '#00f2ea',
+          youtube: '#FF0000'
+        };
+        
+        // Create a container for all pie charts
+        const pieChartsSection = document.createElement('div');
+        pieChartsSection.className = 'pie-charts-section';
+        pieChartsSection.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2em; margin: 2em 0;';
+        
+        // Helper function to create a single pie/donut chart
+        const createSinglePieChart = (metricName, data, chartType = 'doughnut') => {
+          const chartWrapper = document.createElement('div');
+          chartWrapper.className = 'chart-container';
+          chartWrapper.style.cssText = 'max-width: 400px; margin: 0 auto;';
+          
+          const canvas = document.createElement('canvas');
+          const chartId = `${clientName}-${metricName}-pie`.replace(/\s+/g, '-').toLowerCase();
+          canvas.id = chartId;
+          
+          const header = document.createElement('h3');
+          header.textContent = `${metricName} by Platform`;
+          header.style.textAlign = 'center';
+          
+          // Calculate totals and prepare data
+          const platforms = ['instagram', 'tiktok', 'youtube'];
+          const values = platforms.map(p => data[p] || 0);
+          const total = values.reduce((sum, v) => sum + v, 0);
+          
+          // Handle negative values by showing absolute values with labels
+          const absValues = values.map(v => Math.abs(v));
+          const labels = platforms.map((p, i) => {
+            const value = values[i];
+            const absValue = absValues[i];
+            const percentage = total !== 0 ? (absValue / Math.abs(total) * 100).toFixed(1) : 0;
+            const sign = value < 0 ? '-' : '';
+            return `${p.charAt(0).toUpperCase() + p.slice(1)}: ${sign}${this.formatNumber(absValue)} (${percentage}%)`;
+          });
+          
+          // Filter out zero values for cleaner charts
+          const nonZeroIndices = absValues.map((v, i) => v > 0 ? i : -1).filter(i => i >= 0);
+          const filteredLabels = nonZeroIndices.map(i => labels[i]);
+          const filteredValues = nonZeroIndices.map(i => absValues[i]);
+          const filteredColors = nonZeroIndices.map(i => platformColors[platforms[i]]);
+          
+          chartWrapper.appendChild(header);
+          
+          // Add total count display
+          const totalDisplay = document.createElement('div');
+          totalDisplay.style.cssText = 'text-align: center; color: #0f0; font-family: monospace; font-size: 1.2em; margin: 0.5em 0;';
+          const totalSign = total < 0 ? '-' : '';
+          totalDisplay.textContent = `Total: ${totalSign}${this.formatNumber(Math.abs(total))}`;
+          chartWrapper.appendChild(totalDisplay);
+          
+          chartWrapper.appendChild(canvas);
+          pieChartsSection.appendChild(chartWrapper);
+          
+          const ctx = canvas.getContext('2d');
+          
+          this.chartInstances[chartId] = new Chart(ctx, {
+            type: chartType,
+            data: {
+              labels: filteredLabels,
+              datasets: [{
+                data: filteredValues,
+                backgroundColor: filteredColors,
+                borderColor: '#000',
+                borderWidth: 2
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              aspectRatio: 1.5,
+              plugins: {
+                legend: {
+                  display: true,
+                  position: 'bottom',
+                  labels: {
+                    color: '#0f0',
+                    font: { family: 'monospace', size: 11 },
+                    padding: 10
+                  }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  titleColor: '#0f0',
+                  bodyColor: '#0f0',
+                  borderColor: '#0f0',
+                  borderWidth: 1,
+                  callbacks: {
+                    label: (context) => {
+                      return context.label;
+                    }
+                  }
+                }
+              }
+            }
+          });
+        };
+        
+        // For Total Moon Media, create multiple views with different chart types
+        if (isTotalMoonMedia) {
+          // Followers breakdown (pie chart)
+          createSinglePieChart('Followers', metrics.followers, 'pie');
+          
+          // Views breakdown (doughnut chart)
+          createSinglePieChart('Views', metrics.views, 'doughnut');
+          
+          // Likes breakdown (pie chart)
+          createSinglePieChart('Likes', metrics.likes, 'pie');
+          
+          // Comments breakdown (doughnut chart - if there are comments)
+          if (Object.values(metrics.comments).some(v => v > 0)) {
+            createSinglePieChart('Comments', metrics.comments, 'doughnut');
+          }
+        } else {
+          // For individual clients, show key metrics
+          createSinglePieChart('Followers', metrics.followers, 'doughnut');
+          createSinglePieChart('Views', metrics.views, 'pie');
+          createSinglePieChart('Likes', metrics.likes, 'doughnut');
+        }
+        
+        container.appendChild(pieChartsSection);
       },
       
       // Create normalized follower growth chart (starts at 0)
@@ -1562,7 +1779,9 @@
                     return '+' + this.formatNumber(value);
                   }
                 },
-                grid: { color: 'rgba(0, 255, 0, 0.1)' }
+                grid: { color: 'rgba(0, 255, 0, 0.1)' },
+                // Add grace to prevent chart from being too tight
+                grace: '5%'
               }
             }
           }
@@ -2349,7 +2568,7 @@
         this.chartInstances = {};
         
         document.getElementById('monthlyGraphsTitle').textContent = 
-          `Monthly Analytics: ${monthLabel}`;
+          `Monthly Report: ${monthLabel}`;
         
         // Match accounts across platforms
         const matchedAccounts = this.matchAccountsAcrossPlatforms();
@@ -2449,9 +2668,17 @@
           return null;
         }
         
-        // Get follower history for this month
-        const validFollowersHistory = (accountData.followersHistory || []).filter(h => 
-          h && h.value != null && typeof h.value === 'number' && h.value > 0
+        // Get follower history and apply robust interpolation
+        let followersHistory = accountData.followersHistory || [];
+        
+        // Apply enhanced interpolation to fill gaps and remove outliers
+        if (followersHistory.length > 0) {
+          followersHistory = this.interpolateHistoricalData(followersHistory);
+        }
+        
+        // Filter to valid data after interpolation
+        const validFollowersHistory = followersHistory.filter(h => 
+          h && h.value != null && typeof h.value === 'number' && h.value >= 0
         );
         
         let followersStart = 0;
@@ -2463,24 +2690,57 @@
           const beforeStart = validFollowersHistory.filter(h => h.date <= startDate).sort((a, b) => b.date - a.date);
           if (beforeStart.length > 0) {
             followersStart = beforeStart[0].value;
+          } else {
+            // If no data before start, use earliest available
+            const earliest = validFollowersHistory.sort((a, b) => a.date - b.date)[0];
+            if (earliest && earliest.date <= endDate) {
+              followersStart = earliest.value;
+            }
           }
           
           // Find followers at end of month (or closest before end)
           const beforeEnd = validFollowersHistory.filter(h => h.date <= endDate).sort((a, b) => b.date - a.date);
           if (beforeEnd.length > 0) {
             followersEnd = beforeEnd[0].value;
+          } else {
+            // If no data before end, check if we have data after (use that as end)
+            const afterEnd = validFollowersHistory.filter(h => h.date >= startDate).sort((a, b) => a.date - b.date);
+            if (afterEnd.length > 0) {
+              followersEnd = afterEnd[0].value;
+            } else {
+              followersEnd = followersStart; // Fallback to start value
+            }
           }
           
           // Get daily follower progression throughout the month
           const monthData = validFollowersHistory.filter(h => h.date >= startDate && h.date <= endDate);
+          
+          // Keep data as-is to show real trends including viral spikes and drops
           dailyFollowerData.push(...monthData.map(h => ({ date: h.date, followers: h.value })));
+          }
         }
         
-        // Filter posts published this month
+        // Filter posts published this month and validate data
         const allVideos = accountData.videos || [];
-        const monthVideos = allVideos.filter(v => 
-          v.date >= startDate && v.date <= endDate
-        );
+        const monthVideos = allVideos.filter(v => {
+          // Basic validation: must have date, views should be reasonable
+          if (!v.date || v.date < startDate || v.date > endDate) return false;
+          
+          // Ensure views are valid numbers
+          if (v.views !== undefined && v.views !== null) {
+            v.views = Math.max(0, parseInt(v.views) || 0);
+          }
+          
+          // Ensure likes are valid and not greater than views
+          if (v.likes !== undefined && v.likes !== null) {
+            v.likes = Math.max(0, parseInt(v.likes) || 0);
+            if (v.views !== undefined && v.likes > v.views) {
+              v.likes = Math.floor(v.views * this.ANOMALY_THRESHOLDS.LIKES_FALLBACK_RATIO);
+            }
+          }
+          
+          return true;
+        });
         
         return {
           followersStart,
@@ -2489,6 +2749,33 @@
           dailyFollowerData,
           monthVideos
         };
+      },
+      
+      // Apply gentle smoothing to follower data for cleaner charts
+      applySmoothingToFollowerData(data) {
+        if (data.length < 3) return data;
+        
+        // Use 3-point moving average for smoothing
+        const smoothed = data.map((item, idx, arr) => {
+          if (idx === 0 || idx === arr.length - 1) {
+            // Keep first and last points unchanged
+            return item;
+          }
+          
+          const prev = arr[idx - 1].value;
+          const curr = arr[idx].value;
+          const next = arr[idx + 1].value;
+          
+          // Weighted average: more weight on current value
+          const smoothedValue = Math.round((prev * 0.25 + curr * 0.5 + next * 0.25));
+          
+          return {
+            ...item,
+            value: smoothedValue
+          };
+        });
+        
+        return smoothed;
       },
       
       // Create per-account follower growth charts showing daily progression
@@ -4951,37 +5238,223 @@
         return videos.filter(v => v.date >= cutoffDate);
       },
       
+      // Helper: Calculate mean and standard deviation for outlier detection
+      calculateStats(values) {
+        if (values.length === 0) return { mean: 0, stdDev: 0 };
+        const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+        // Use sample variance (N-1) for better statistical accuracy with small samples
+        const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / Math.max(1, values.length - 1);
+        const stdDev = Math.sqrt(variance);
+        return { mean, stdDev };
+      },
+      
+      // Helper: Detect statistical outliers using Z-score
+      isStatisticalOutlier(value, mean, stdDev) {
+        if (stdDev === 0) return false;
+        const zScore = Math.abs(value - mean) / stdDev;
+        return zScore > this.ANOMALY_THRESHOLDS.Z_SCORE_THRESHOLD;
+      },
+      
+      // Helper: Calculate days between two dates
+      daysBetween(date1, date2) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        return Math.abs(date2 - date1) / msPerDay;
+      },
+      
       interpolateHistoricalData(historyArray) {
         if (historyArray.length === 0) return historyArray;
         
-        // First pass: mark items that need interpolation (0, null, undefined, or abnormal drops)
-        const interpolated = historyArray.map((item, idx, arr) => {
-          let needsInterp = item.value === 0 || item.value === null || item.value === undefined;
+        // Filter out truly invalid data (null, undefined, negative)
+        const cleaned = historyArray.map(item => ({
+          ...item,
+          value: (item.value === null || item.value === undefined || item.value < 0) ? null : item.value
+        }));
+        
+        // Get valid values for statistical analysis
+        const validValues = cleaned.filter(item => item.value !== null && item.value > 0).map(item => item.value);
+        
+        if (validValues.length < 3) {
+          // Not enough data for statistical analysis, use simple approach
+          return this.simpleInterpolation(cleaned);
+        }
+        
+        // Calculate statistics for outlier detection
+        const { mean, stdDev } = this.calculateStats(validValues);
+        
+        // First pass: detect and mark outliers
+        const processed = cleaned.map((item, idx, arr) => {
+          let needsInterp = item.value === null || item.value === 0;
+          let reason = item.value === null ? 'missing' : (item.value === 0 ? 'zero' : null);
           
-          // Also check for abnormal drops (50%+ drop from previous valid value)
-          if (!needsInterp && idx > 0) {
+          if (!needsInterp && item.value > 0 && idx > 0) {
             // Find the previous valid value
             let prevValidValue = null;
+            let prevValidIdx = -1;
             for (let j = idx - 1; j >= 0; j--) {
-              const prevVal = arr[j].value;
-              if (prevVal > 0 && prevVal !== null && prevVal !== undefined) {
-                prevValidValue = prevVal;
+              if (arr[j].value > 0 && arr[j].value !== null) {
+                prevValidValue = arr[j].value;
+                prevValidIdx = j;
                 break;
               }
             }
             
-            // If there's a 50%+ drop, consider it invalid
-            if (prevValidValue !== null && item.value < prevValidValue * 0.5) {
-              needsInterp = true;
+            if (prevValidValue !== null) {
+              // Check for abnormal drops (>50% drop could be legitimate, like bot purges)
+              // Only flag if it's a data error (exact zero after having followers)
+              // Don't interpolate natural decreases - they're valid
+              
+              // Check for abnormal spikes (followers growing >300% overnight)
+              // Only flag if it's clearly a data error, not viral growth
+              if (item.value > prevValidValue * this.ANOMALY_THRESHOLDS.FOLLOWER_SPIKE_THRESHOLD) {
+                // Check if this is a statistical outlier AND the spike is unsustained
+                if (validValues.length >= 10 && this.isStatisticalOutlier(item.value, mean, stdDev)) {
+                  // Look ahead to see if growth is sustained (viral) or just an error
+                  let nextValidValue = null;
+                  for (let j = idx + 1; j < arr.length && j < idx + 3; j++) {
+                    if (arr[j].value > 0 && arr[j].value !== null) {
+                      nextValidValue = arr[j].value;
+                      break;
+                    }
+                  }
+                  
+                  // If spike drops back down quickly, it's likely a data error
+                  // If it stays high (>50% of spike), it's likely viral growth - keep it
+                  if (nextValidValue !== null && nextValidValue < item.value * 0.5) {
+                    needsInterp = true;
+                    reason = 'unsustained_spike';
+                  }
+                }
+              }
             }
+            
+            // Note: We removed general statistical outlier detection to preserve viral spikes
+            // Only specific patterns (unsustained spikes) are flagged above
           }
           
           return {
             ...item,
             index: idx,
-            needsInterp: needsInterp
+            needsInterp: needsInterp,
+            reason: reason,
+            originalValue: item.value
           };
         });
+        
+        // Second pass: interpolate marked values
+        let i = 0;
+        while (i < processed.length) {
+          if (!processed[i].needsInterp) {
+            i++;
+            continue;
+          }
+          
+          // Find the group of consecutive values needing interpolation
+          let groupStart = i;
+          let groupEnd = i;
+          while (groupEnd < processed.length && processed[groupEnd].needsInterp) {
+            groupEnd++;
+          }
+          groupEnd--;
+          
+          // Find previous valid value
+          let prevValue = null;
+          let prevIdx = -1;
+          for (let j = groupStart - 1; j >= 0; j--) {
+            if (!processed[j].needsInterp && processed[j].value > 0) {
+              prevValue = processed[j].value;
+              prevIdx = j;
+              break;
+            }
+          }
+          
+          // Find next valid value
+          let nextValue = null;
+          let nextIdx = -1;
+          for (let j = groupEnd + 1; j < processed.length; j++) {
+            if (!processed[j].needsInterp && processed[j].value > 0) {
+              nextValue = processed[j].value;
+              nextIdx = j;
+              break;
+            }
+          }
+          
+          // Calculate gap size in days if we have dates
+          let gapDays = 0;
+          if (prevIdx >= 0 && nextIdx >= 0 && processed[prevIdx].date && processed[nextIdx].date) {
+            gapDays = this.daysBetween(processed[prevIdx].date, processed[nextIdx].date);
+          }
+          
+          // Interpolate based on gap size
+          if (prevValue !== null && nextValue !== null) {
+            const groupSize = groupEnd - groupStart + 1;
+            
+            // For large gaps (>7 days), use conservative interpolation
+            if (gapDays > this.ANOMALY_THRESHOLDS.LARGE_GAP_DAYS) {
+              // Use logarithmic interpolation for more conservative estimates
+              // Adding 1 to handle log(0) edge case and ensure smooth curves
+              const logPrev = Math.log(prevValue + 1);
+              const logNext = Math.log(nextValue + 1);
+              const totalSteps = groupSize + 1;
+              
+              for (let j = groupStart; j <= groupEnd; j++) {
+                const stepNumber = j - groupStart + 1;
+                const logInterp = logPrev + ((logNext - logPrev) * stepNumber / totalSteps);
+                processed[j].value = Math.round(Math.exp(logInterp) - 1);
+                processed[j].interpolated = true;
+                processed[j].interpolationType = 'logarithmic';
+              }
+            } else {
+              // For smaller gaps, use linear interpolation
+              const totalSteps = groupSize + 1;
+              
+              for (let j = groupStart; j <= groupEnd; j++) {
+                const stepNumber = j - groupStart + 1;
+                const interpolatedValue = prevValue + ((nextValue - prevValue) * stepNumber / totalSteps);
+                processed[j].value = Math.round(interpolatedValue);
+                processed[j].interpolated = true;
+                processed[j].interpolationType = 'linear';
+              }
+            }
+          } else if (prevValue !== null) {
+            // Only have previous value - use it (forward fill)
+            for (let j = groupStart; j <= groupEnd; j++) {
+              processed[j].value = prevValue;
+              processed[j].interpolated = true;
+              processed[j].interpolationType = 'forward_fill';
+            }
+          } else if (nextValue !== null) {
+            // Only have next value - use it (backward fill)
+            for (let j = groupStart; j <= groupEnd; j++) {
+              processed[j].value = nextValue;
+              processed[j].interpolated = true;
+              processed[j].interpolationType = 'backward_fill';
+            }
+          } else {
+            // No valid values at all - set to 0
+            for (let j = groupStart; j <= groupEnd; j++) {
+              processed[j].value = 0;
+              processed[j].interpolated = true;
+              processed[j].interpolationType = 'no_data';
+            }
+          }
+          
+          i = groupEnd + 1;
+        }
+        
+        // Return cleaned data
+        return processed.map(item => ({
+          date: item.date,
+          value: item.value
+        }));
+      },
+      
+      // Simple interpolation fallback for small datasets
+      simpleInterpolation(historyArray) {
+        const interpolated = historyArray.map((item, idx) => ({
+          ...item,
+          index: idx,
+          needsInterp: item.value === null || item.value === 0
+        }));
         
         let i = 0;
         while (i < interpolated.length) {
@@ -5786,6 +6259,46 @@
         const chartDiv = document.createElement('div');
         chartDiv.className = 'chart-container';
         
+        // Detect outliers BEFORE creating chart elements
+        // Calculate likes/views ratio for each post (in log scale for better distribution)
+        const engagementRatios = this.accountData.videos
+          .filter(v => v.views > 0 && v.likes > 0)
+          .map(v => {
+            // Use log ratio for better outlier detection across different scales
+            const logRatio = Math.log10(v.likes + 1) - Math.log10(v.views + 1);
+            return { video: v, ratio: logRatio };
+          });
+        
+        // Calculate statistics for outlier detection
+        const ratios = engagementRatios.map(e => e.ratio);
+        const { mean: ratioMean, stdDev: ratioStdDev } = this.calculateStats(ratios);
+        
+        // Classify posts as normal or outliers
+        const normalPosts = [];
+        const outlierPosts = [];
+        
+        this.accountData.videos.forEach(v => {
+          if (v.views > 0 && v.likes > 0) {
+            const logRatio = Math.log10(v.likes + 1) - Math.log10(v.views + 1);
+            const zScore = ratioStdDev > 0 ? Math.abs(logRatio - ratioMean) / ratioStdDev : 0;
+            
+            // Flag as outlier if Z-score exceeds chart threshold
+            if (zScore > this.ANOMALY_THRESHOLDS.Z_SCORE_CHART_THRESHOLD) {
+              outlierPosts.push({ 
+                x: v.views, 
+                y: v.likes,
+                zScore: zScore.toFixed(2),
+                ratio: (v.likes / v.views * 100).toFixed(2)
+              });
+            } else {
+              normalPosts.push({ x: v.views, y: v.likes });
+            }
+          } else {
+            // Include zero values as normal points
+            normalPosts.push({ x: v.views || 0, y: v.likes || 0 });
+          }
+        });
+        
         const canvas = document.createElement('canvas');
         canvas.id = 'correlation';
         
@@ -5799,6 +6312,15 @@
         scaleBadge.onclick = () => this.toggleLogScale('correlation');
         
         header.appendChild(scaleBadge);
+        
+        // Add outlier summary badge
+        if (outlierPosts.length > 0) {
+          const outlierBadge = document.createElement('span');
+          outlierBadge.style.cssText = 'background: rgba(255, 50, 50, 0.8); color: #fff; padding: 0.3em 0.8em; border-radius: 3px; font-size: 0.8em; margin-left: 1em; font-weight: normal;';
+          outlierBadge.textContent = `⚠️ ${outlierPosts.length} Outlier${outlierPosts.length > 1 ? 's' : ''} Detected`;
+          outlierBadge.title = 'Posts with unusual engagement patterns - hover over red triangles for details';
+          header.appendChild(outlierBadge);
+        }
         
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
@@ -5823,17 +6345,30 @@
           max: Math.max(...allLikes)
         };
         
+        // Outliers already calculated above before creating chart elements
+        
         this.chartInstances['correlation'] = new Chart(ctx, {
           type: 'scatter',
           data: {
-            datasets: [{
-              label: 'Posts',
-              data: this.accountData.videos.map(v => ({ x: v.views, y: v.likes })),
-              backgroundColor: 'rgba(0, 210, 211, 0.6)',
-              borderColor: '#00d2d3',
-              pointRadius: 6,
-              pointHoverRadius: 8
-            }]
+            datasets: [
+              {
+                label: 'Normal Posts',
+                data: normalPosts,
+                backgroundColor: 'rgba(0, 210, 211, 0.6)',
+                borderColor: '#00d2d3',
+                pointRadius: 6,
+                pointHoverRadius: 8
+              },
+              {
+                label: 'Outliers (Inspect)',
+                data: outlierPosts,
+                backgroundColor: 'rgba(255, 50, 50, 0.8)',
+                borderColor: '#ff3232',
+                pointRadius: 8,
+                pointHoverRadius: 10,
+                pointStyle: 'triangle'
+              }
+            ]
           },
           options: {
             responsive: true,
@@ -5844,7 +6379,8 @@
                 display: true,
                 labels: {
                   color: '#0f0',
-                  font: { family: 'monospace', size: 12 }
+                  font: { family: 'monospace', size: 12 },
+                  usePointStyle: true
                 }
               },
               tooltip: {
@@ -5855,8 +6391,17 @@
                 borderWidth: 1,
                 callbacks: {
                   label: (context) => {
-                    return 'Views: ' + this.formatNumber(context.parsed.x) + 
-                           ', Likes: ' + this.formatNumber(context.parsed.y);
+                    const labels = ['Views: ' + this.formatNumber(context.parsed.x) + 
+                           ', Likes: ' + this.formatNumber(context.parsed.y)];
+                    
+                    // Add outlier info if this is an outlier point
+                    if (context.dataset.label === 'Outliers (Inspect)' && context.raw.zScore) {
+                      labels.push('Engagement: ' + context.raw.ratio + '%');
+                      labels.push('Z-Score: ' + context.raw.zScore);
+                      labels.push('⚠️ Flagged for inspection');
+                    }
+                    
+                    return labels;
                   }
                 }
               }
