@@ -473,6 +473,9 @@
       font-size: 0.8em;
       margin-right: 0.5em;
     }
+    .style-selector label.secondary {
+      margin-left: 1em;
+    }
     .style-selector select {
       background: #000;
       color: #0f0;
@@ -686,6 +689,13 @@
             <option value="style-6">Minimal</option>
             <option value="style-7">Dense</option>
           </select>
+          
+          <label for="donutLabelStyleSelect" class="secondary">Donut Labels:</label>
+          <select id="donutLabelStyleSelect" onchange="app.changeDonutLabelStyle(this.value)">
+            <option value="shadow">Shadow</option>
+            <option value="background">Background</option>
+            <option value="box">Box</option>
+          </select>
         </div>
         
         <div class="question" id="monthlyGraphsTitle"></div>
@@ -883,6 +893,7 @@
       currentMonthlyStartDate: null,
       currentMonthlyEndDate: null,
       currentMonthlyAccountStats: [],
+      donutLabelStyle: 'shadow', // Options: 'shadow', 'background', 'box'
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -1322,11 +1333,14 @@
         document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
         document.getElementById('monthlyGraphsTitle').textContent = `Monthly Reports: ${monthLabel}`;
         
-        // Restore saved style preference
+        // Restore saved style preferences
         const savedStyle = sessionStorage.getItem('monthlyReportsStyle') || 'style-4';
+        const savedDonutLabelStyle = sessionStorage.getItem('donutLabelStyle') || 'shadow';
         const container = document.getElementById('monthlyGraphsContainer');
         container.classList.add(`monthly-reports-${savedStyle}`);
         document.getElementById('monthlyStyleSelect').value = savedStyle;
+        this.donutLabelStyle = savedDonutLabelStyle;
+        document.getElementById('donutLabelStyleSelect').value = savedDonutLabelStyle;
         
         // Switch to default tab (Total Moon Media)
         this.switchMonthlyTab('total');
@@ -1380,6 +1394,8 @@
         let totalComments = 0;
         let totalShares = 0;
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersStart = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersChange = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
@@ -1388,9 +1404,13 @@
         clientStats.forEach(client => {
           ['instagram', 'tiktok', 'youtube'].forEach(platform => {
             if (client[platform]) {
-              totalFollowersStart += client[platform].followersStart || 0;
-              totalFollowersEnd += client[platform].followersEnd || 0;
-              platformFollowers[platform] += client[platform].followersEnd || 0;
+              const followersStart = client[platform].followersStart || 0;
+              const followersEnd = client[platform].followersEnd || 0;
+              totalFollowersStart += followersStart;
+              totalFollowersEnd += followersEnd;
+              platformFollowers[platform] += followersEnd;
+              platformFollowersStart[platform] += followersStart;
+              platformFollowersChange[platform] += (followersEnd - followersStart);
               
               // Aggregate engagement metrics from month videos
               if (client[platform].monthVideos) {
@@ -1422,7 +1442,8 @@
         
         // Calculate follower change and average views/second
         const followerChange = totalFollowersEnd - totalFollowersStart;
-        const avgViewsPerSecond = totalVideoDuration > 0 ? (totalViews / totalVideoDuration).toFixed(2) : 0;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
         const changePrefix = followerChange >= 0 ? '+' : '';
         const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
         
@@ -1452,10 +1473,12 @@
         // Create donut charts for Total Moon Media
         this.createTotalDonutCharts(chartsContainer, {
           platformFollowers,
+          platformFollowersChange,
           platformLikes,
           platformViews,
           totalComments,
-          totalShares
+          totalShares,
+          followerChange
         });
         
         // Create normalized follower growth chart
@@ -1490,6 +1513,8 @@
         let totalComments = 0;
         let totalShares = 0;
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersStart = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersChange = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
@@ -1504,6 +1529,8 @@
             totalFollowersStart += followersStart;
             totalFollowersEnd += followersEnd;
             platformFollowers[platform] = followersEnd;
+            platformFollowersStart[platform] = followersStart;
+            platformFollowersChange[platform] = followersEnd - followersStart;
             
             // Aggregate engagement metrics from month videos
             if (clientStats[platform].monthVideos) {
@@ -1536,7 +1563,8 @@
         
         // Calculate follower change and average views/second
         const followerChange = totalFollowersEnd - totalFollowersStart;
-        const avgViewsPerSecond = totalVideoDuration > 0 ? (totalViews / totalVideoDuration).toFixed(2) : 0;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
         const changePrefix = followerChange >= 0 ? '+' : '';
         const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
         
@@ -1568,10 +1596,12 @@
         // Create donut charts for the client
         this.createClientDonutCharts(chartsContainer, {
           platformFollowers,
+          platformFollowersChange,
           platformLikes,
           platformViews,
           totalComments,
-          totalShares
+          totalShares,
+          followerChange
         });
         
         // Create normalized follower growth chart
@@ -1596,8 +1626,20 @@
         sessionStorage.setItem('monthlyReportsStyle', style);
       },
       
+      // Change donut label style
+      changeDonutLabelStyle(style) {
+        this.donutLabelStyle = style;
+        sessionStorage.setItem('donutLabelStyle', style);
+        // Re-render current tab to apply new style
+        const activeTab = document.querySelector('.monthly-tab.active');
+        if (activeTab) {
+          const tabName = activeTab.getAttribute('data-tab');
+          this.switchMonthlyTab(tabName);
+        }
+      },
+      
       // Create donut chart
-      createDonutChart(container, title, data, labels, chartId) {
+      createDonutChart(container, title, data, labels, chartId, centerValue = null) {
         const chartDiv = document.createElement('div');
         chartDiv.className = 'donut-chart-container';
         
@@ -1621,7 +1663,7 @@
         const absData = data.map(v => Math.abs(v));
         
         // Calculate total for center display
-        const total = absData.reduce((sum, val) => sum + val, 0);
+        const total = centerValue !== null ? centerValue : absData.reduce((sum, val) => sum + val, 0);
         
         // Platform colors
         const colors = {
@@ -1635,9 +1677,11 @@
         // Center text plugin for total
         const centerTextPlugin = {
           id: 'centerText',
-          beforeDraw: (chart) => {
-            const { width, height, ctx } = chart;
-            ctx.restore();
+          afterDraw: (chart) => {
+            const { width, height, ctx, chartArea } = chart;
+            if (!chartArea) return;
+            
+            ctx.save();
             const fontSize = (height / 114).toFixed(2);
             ctx.font = `bold ${fontSize}em monospace`;
             ctx.textBaseline = 'middle';
@@ -1645,10 +1689,11 @@
             
             const text = this.formatNumber(total);
             const textX = Math.round((width - ctx.measureText(text).width) / 2);
-            const textY = height / 2;
+            // Use chartArea to properly center in the donut
+            const textY = (chartArea.top + chartArea.bottom) / 2;
             
             ctx.fillText(text, textX, textY);
-            ctx.save();
+            ctx.restore();
           }
         };
         
@@ -1698,14 +1743,48 @@
                   const originalValue = data[context.dataIndex];
                   return originalValue >= 0 ? '#00ff00' : '#ff0000';
                 },
+                backgroundColor: (context) => {
+                  if (this.donutLabelStyle === 'background') {
+                    return 'rgba(0, 0, 0, 0.7)';
+                  } else if (this.donutLabelStyle === 'box') {
+                    return 'rgba(0, 0, 0, 0.8)';
+                  }
+                  return null;
+                },
+                borderColor: (context) => {
+                  if (this.donutLabelStyle === 'box') {
+                    const originalValue = data[context.dataIndex];
+                    return originalValue >= 0 ? '#00ff00' : '#ff0000';
+                  }
+                  return null;
+                },
+                borderWidth: (context) => {
+                  return this.donutLabelStyle === 'box' ? 2 : 0;
+                },
+                borderRadius: (context) => {
+                  return (this.donutLabelStyle === 'background' || this.donutLabelStyle === 'box') ? 4 : 0;
+                },
+                padding: (context) => {
+                  return (this.donutLabelStyle === 'background' || this.donutLabelStyle === 'box') ? 4 : 0;
+                },
                 font: {
                   weight: 'bold',
                   size: 14,
                   family: 'monospace'
                 },
+                textShadowBlur: (context) => {
+                  return this.donutLabelStyle === 'shadow' ? 10 : 0;
+                },
+                textShadowColor: (context) => {
+                  return this.donutLabelStyle === 'shadow' ? '#000000' : null;
+                },
                 formatter: (value, context) => {
                   const total = absData.reduce((sum, val) => sum + val, 0);
                   const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                  // Hide 0.0 values
+                  if (+percentage === 0) {
+                    return '';
+                  }
                   return percentage + '%';
                 }
               }
@@ -1717,7 +1796,7 @@
       
       // Create donut charts for Total Moon Media view
       createTotalDonutCharts(container, data) {
-        const { platformFollowers, platformLikes, platformViews, totalComments, totalShares } = data;
+        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, totalComments, totalShares, followerChange } = data;
         
         const donutSection = document.createElement('div');
         donutSection.className = 'donut-charts-section';
@@ -1729,14 +1808,14 @@
         const donutGrid = document.createElement('div');
         donutGrid.className = 'donut-charts-grid';
         
-        // Followers donut chart
+        // Followers donut chart - show follower CHANGE in center
         const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
         const followerData = [
           platformFollowers.instagram,
           platformFollowers.tiktok,
           platformFollowers.youtube
         ];
-        this.createDonutChart(donutGrid, 'Total Followers by Platform', followerData, followerLabels, 'total-followers-donut');
+        this.createDonutChart(donutGrid, 'Total Followers by Platform', followerData, followerLabels, 'total-followers-donut', followerChange);
         
         // Likes donut chart
         const likeData = [
@@ -1788,7 +1867,7 @@
       
       // Create donut charts for individual client view
       createClientDonutCharts(container, data) {
-        const { platformFollowers, platformLikes, platformViews, totalComments, totalShares } = data;
+        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, totalComments, totalShares, followerChange } = data;
         
         const donutSection = document.createElement('div');
         donutSection.className = 'donut-charts-section';
@@ -1802,14 +1881,14 @@
         
         const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
         
-        // Followers donut chart
+        // Followers donut chart - show follower CHANGE in center
         const followerData = [
           platformFollowers.instagram,
           platformFollowers.tiktok,
           platformFollowers.youtube
         ];
         if (followerData.some(v => v !== 0)) {
-          this.createDonutChart(donutGrid, 'Followers by Platform', followerData, followerLabels, 'client-followers-donut');
+          this.createDonutChart(donutGrid, 'Followers by Platform', followerData, followerLabels, 'client-followers-donut', followerChange);
         }
         
         // Likes donut chart
@@ -1939,7 +2018,7 @@
             pointRadius: 3,
             pointHoverRadius: 5,
             tension: 0.4,
-            fill: false
+            fill: true
           });
         });
         
@@ -2000,6 +2079,9 @@
                     return context.dataset.label + ': +' + this.formatNumber(context.parsed.y);
                   }
                 }
+              },
+              datalabels: {
+                display: false
               }
             },
             scales: {
