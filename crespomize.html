@@ -520,6 +520,16 @@
       <div id="monthlyGraphsContainer" class="hidden">
         <div class="question" id="monthlyGraphsTitle"></div>
         
+        <!-- Layout Style Switcher (discreet) -->
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 0.5em; opacity: 0.6;">
+          <label style="font-size: 0.75em; color: #0f0; font-family: monospace; margin-right: 0.5em;">layout:</label>
+          <select id="layoutStyleSwitcher" onchange="app.switchLayoutStyle(this.value)" style="background: #000; color: #0f0; border: 1px solid #0f0; font-family: monospace; font-size: 0.75em; padding: 0.2em;">
+            <option value="compact">Compact</option>
+            <option value="detailed" selected>Detailed</option>
+            <option value="minimal">Minimal</option>
+          </select>
+        </div>
+        
         <!-- Tab Navigation -->
         <div class="monthly-tabs-container">
           <div class="monthly-tabs">
@@ -710,6 +720,7 @@
       currentMonthlyStartDate: null,
       currentMonthlyEndDate: null,
       currentMonthlyAccountStats: [],
+      currentLayoutStyle: 'detailed', // Layout style: compact, detailed, minimal
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -1153,6 +1164,17 @@
         this.switchMonthlyTab('total');
       },
       
+      // Switch layout style
+      switchLayoutStyle(style) {
+        this.currentLayoutStyle = style;
+        // Re-render current tab with new style
+        const activeTab = document.querySelector('.monthly-tab.active');
+        if (activeTab) {
+          const tabName = activeTab.getAttribute('data-tab');
+          this.switchMonthlyTab(tabName);
+        }
+      },
+      
       // Switch between monthly analytics tabs
       switchMonthlyTab(tabName) {
         // Update tab button states
@@ -1182,6 +1204,105 @@
         }
       },
       
+      // Create metric card with total value and pie chart breakdown
+      createMetricCardWithPieChart(container, metricName, totalValue, platformData, chartId) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'metric-card-with-pie';
+        cardDiv.style.cssText = 'border: 1px solid #0f0; padding: 1.5em; margin: 1em 0; background: rgba(0, 255, 0, 0.02);';
+        
+        // Total value display
+        const totalDiv = document.createElement('div');
+        totalDiv.style.cssText = 'text-align: center; margin-bottom: 1em;';
+        totalDiv.innerHTML = `
+          <h3 style="color: #0f0; font-family: monospace; margin: 0; font-size: 1.2em;">${metricName.toUpperCase()}</h3>
+          <div style="color: #0f0; font-family: monospace; font-size: 2em; margin: 0.5em 0;">${this.formatNumber(totalValue)}</div>
+        `;
+        cardDiv.appendChild(totalDiv);
+        
+        // Pie chart container
+        const canvasContainer = document.createElement('div');
+        canvasContainer.style.cssText = 'max-width: 400px; margin: 0 auto;';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = chartId;
+        canvasContainer.appendChild(canvas);
+        cardDiv.appendChild(canvasContainer);
+        
+        container.appendChild(cardDiv);
+        
+        // Create the pie chart
+        const ctx = canvas.getContext('2d');
+        const platformColors = {
+          instagram: '#E1306C',
+          tiktok: '#00f2ea',
+          youtube: '#FF0000'
+        };
+        
+        const platforms = ['instagram', 'tiktok', 'youtube'];
+        const values = platforms.map(p => platformData[p] || 0);
+        const nonZeroIndices = values.map((v, i) => v > 0 ? i : -1).filter(i => i >= 0);
+        
+        if (nonZeroIndices.length === 0) return;
+        
+        const labels = nonZeroIndices.map(i => {
+          const platform = platforms[i];
+          const value = values[i];
+          const percentage = totalValue > 0 ? (value / totalValue * 100).toFixed(1) : 0;
+          return `${platform.charAt(0).toUpperCase() + platform.slice(1)}: ${this.formatNumber(value)} (${percentage}%)`;
+        });
+        
+        const filteredValues = nonZeroIndices.map(i => values[i]);
+        const filteredColors = nonZeroIndices.map(i => platformColors[platforms[i]]);
+        
+        this.chartInstances[chartId] = new Chart(ctx, {
+          type: this.currentLayoutStyle === 'minimal' ? 'doughnut' : 'pie',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: filteredValues,
+              backgroundColor: filteredColors,
+              borderColor: '#000',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 1.5,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 11 },
+                  padding: 10
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1
+              }
+            }
+          }
+        });
+      },
+      
+      // Create simple stat card (no pie chart)
+      createSimpleStatCard(container, metricName, value) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'simple-stat-card';
+        cardDiv.style.cssText = 'border: 1px solid #0f0; padding: 1.5em; margin: 1em 0; text-align: center; background: rgba(0, 255, 0, 0.02);';
+        cardDiv.innerHTML = `
+          <h3 style="color: #0f0; font-family: monospace; margin: 0; font-size: 1.2em;">${metricName.toUpperCase()}</h3>
+          <div style="color: #0f0; font-family: monospace; font-size: 2em; margin: 0.5em 0;">${this.formatNumber(value)}</div>
+        `;
+        container.appendChild(cardDiv);
+      },
+      
       // Render Total Moon Media monthly view (aggregate all clients)
       renderTotalMoonMediaMonthlyView() {
         const statsContainer = document.getElementById('monthlyStatsSummary');
@@ -1200,6 +1321,8 @@
         let totalComments = 0;
         let totalShares = 0;
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
         
         clientStats.forEach(client => {
@@ -1215,6 +1338,9 @@
                   totalViews += video.views || 0;
                   totalComments += video.comments || 0;
                   totalShares += video.shares || 0;
+                  
+                  platformLikes[platform] += video.likes || 0;
+                  platformViews[platform] += video.views || 0;
                 });
               }
               
@@ -1226,75 +1352,40 @@
           });
         });
         
-        // Display summary statistics
-        statsContainer.innerHTML = `
-          <div class="stat-card">
-            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL LIKES</h4>
-            <div class="value">${this.formatNumber(totalLikes)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL VIEWS</h4>
-            <div class="value">${this.formatNumber(totalViews)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL COMMENTS</h4>
-            <div class="value">${this.formatNumber(totalComments)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL SHARES</h4>
-            <div class="value">${this.formatNumber(totalShares)}</div>
-          </div>
-        `;
+        // Clear containers
+        statsContainer.innerHTML = '';
+        chartsContainer.innerHTML = '';
         
-        // Calculate platform-specific engagement for Total Moon Media
-        const platformEngagement = { 
-          likes: { instagram: 0, tiktok: 0, youtube: 0 },
-          views: { instagram: 0, tiktok: 0, youtube: 0 },
-          comments: { instagram: 0, tiktok: 0, youtube: 0 }
-        };
-        
-        clientStats.forEach(client => {
-          ['instagram', 'tiktok', 'youtube'].forEach(platform => {
-            if (client[platform] && client[platform].monthVideos) {
-              client[platform].monthVideos.forEach(video => {
-                platformEngagement.likes[platform] += video.likes || 0;
-                platformEngagement.views[platform] += video.views || 0;
-                platformEngagement.comments[platform] += video.comments || 0;
-              });
-            }
-          });
-        });
-        
-        // Create pie/donut charts for platform breakdown
-        this.createPlatformBreakdownCharts(
-          chartsContainer,
-          {
-            followers: platformFollowers,
-            likes: platformEngagement.likes,
-            views: platformEngagement.views,
-            comments: platformEngagement.comments
-          },
-          'Total Moon Media',
-          true
+        // Create metric cards with pie charts based on layout style
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          'Total Followers',
+          totalFollowersEnd,
+          platformFollowers,
+          'total-followers-pie'
         );
         
-        // Create normalized follower growth chart
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          'Total Likes',
+          totalLikes,
+          platformLikes,
+          'total-likes-pie'
+        );
+        
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          'Total Views',
+          totalViews,
+          platformViews,
+          'total-views-pie'
+        );
+        
+        // Create simple stat cards for Comments and Shares
+        this.createSimpleStatCard(statsContainer, 'Total Comments', totalComments);
+        this.createSimpleStatCard(statsContainer, 'Total Shares', totalShares);
+        
+        // Create normalized follower growth chart (below the metric cards)
         this.createNormalizedFollowerGrowthChart(
           chartsContainer,
           'Total Moon Media Follower Growth',
@@ -1327,8 +1418,6 @@
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
-        let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
-        let platformShares = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
         
         ['instagram', 'tiktok', 'youtube'].forEach(platform => {
@@ -1352,8 +1441,6 @@
                 
                 platformLikes[platform] += likes;
                 platformViews[platform] += views;
-                platformComments[platform] += comments;
-                platformShares[platform] += shares;
               });
             }
             
@@ -1364,85 +1451,40 @@
           }
         });
         
-        // Display summary statistics
-        let statsHTML = `
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
-          </div>
-        `;
+        // Clear containers
+        statsContainer.innerHTML = '';
+        chartsContainer.innerHTML = '';
         
-        // Add engagement metric cards
-        statsHTML += `
-          <div class="stat-card">
-            <h4>INSTAGRAM LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
-          </div>
-        `;
-        
-        if (totalShares > 0) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
-            </div>
-          `;
-        }
-        
-        statsContainer.innerHTML = statsHTML;
-        
-        // Create pie/donut charts for platform breakdown
-        this.createPlatformBreakdownCharts(
-          chartsContainer,
-          {
-            followers: platformFollowers,
-            likes: platformLikes,
-            views: platformViews,
-            comments: platformComments
-          },
-          clientName,
-          false // not total moon media
+        // Create metric cards with pie charts
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          `${clientName} Followers`,
+          totalFollowersEnd,
+          platformFollowers,
+          `${clientName}-followers-pie`
         );
+        
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          `${clientName} Likes`,
+          totalLikes,
+          platformLikes,
+          `${clientName}-likes-pie`
+        );
+        
+        this.createMetricCardWithPieChart(
+          statsContainer,
+          `${clientName} Views`,
+          totalViews,
+          platformViews,
+          `${clientName}-views-pie`
+        );
+        
+        // Create simple stat cards for Comments and Shares
+        this.createSimpleStatCard(statsContainer, `${clientName} Comments`, totalComments);
+        if (totalShares > 0) {
+          this.createSimpleStatCard(statsContainer, `${clientName} Shares`, totalShares);
+        }
         
         // Create normalized follower growth chart
         this.createNormalizedFollowerGrowthChart(
