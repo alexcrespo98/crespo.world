@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body {
@@ -1584,6 +1585,9 @@
         // Handle negative values by using absolute values for chart display
         const absData = data.map(v => Math.abs(v));
         
+        // Calculate total for center display
+        const total = absData.reduce((sum, val) => sum + val, 0);
+        
         // Platform colors
         const colors = {
           'Instagram': '#E1306C',
@@ -1592,6 +1596,26 @@
         };
         
         const backgroundColors = labels.map(label => colors[label] || '#0f0');
+        
+        // Center text plugin for total
+        const centerTextPlugin = {
+          id: 'centerText',
+          beforeDraw: (chart) => {
+            const { width, height, ctx } = chart;
+            ctx.restore();
+            const fontSize = (height / 114).toFixed(2);
+            ctx.font = `bold ${fontSize}em monospace`;
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#0f0';
+            
+            const text = this.formatNumber(total);
+            const textX = Math.round((width - ctx.measureText(text).width) / 2);
+            const textY = height / 2;
+            
+            ctx.fillText(text, textX, textY);
+            ctx.save();
+          }
+        };
         
         this.chartInstances[chartId] = new Chart(ctx, {
           type: 'doughnut',
@@ -1632,9 +1656,36 @@
                     return `${label}: ${this.formatNumber(value)} (${percentage}%)`;
                   }
                 }
+              },
+              datalabels: {
+                color: (context) => {
+                  // Use original data value to determine color
+                  const originalValue = data[context.dataIndex];
+                  return originalValue >= 0 ? '#00ff00' : '#ff0000';
+                },
+                font: {
+                  weight: 'bold',
+                  size: 14,
+                  family: 'monospace'
+                },
+                formatter: (value, context) => {
+                  const total = absData.reduce((sum, val) => sum + val, 0);
+                  const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                  return percentage + '%';
+                },
+                textShadowColor: (context) => {
+                  // Add text shadow to red labels for visibility
+                  const originalValue = data[context.dataIndex];
+                  return originalValue < 0 ? 'rgba(0, 0, 0, 0.8)' : 'transparent';
+                },
+                textShadowBlur: (context) => {
+                  const originalValue = data[context.dataIndex];
+                  return originalValue < 0 ? 4 : 0;
+                }
               }
             }
-          }
+          },
+          plugins: [centerTextPlugin]
         });
       },
       
