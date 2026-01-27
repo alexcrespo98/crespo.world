@@ -795,6 +795,9 @@
   </div>
 
   <script>
+    // Register Chart.js plugins
+    Chart.register(ChartDataLabels);
+    
     // Application state
     const app = {
       // Configuration
@@ -1426,10 +1429,6 @@
         // Display summary statistics
         statsContainer.innerHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
-          </div>
-          <div class="stat-card">
             <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
             <div class="value">
               ${this.formatNumber(totalFollowersEnd)}
@@ -1543,10 +1542,6 @@
         
         // Display summary statistics
         let statsHTML = `
-          <div class="stat-card">
-            <h4>TOTAL FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
-          </div>
           <div class="stat-card">
             <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
             <div class="value">
@@ -1712,15 +1707,6 @@
                   const total = absData.reduce((sum, val) => sum + val, 0);
                   const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                   return percentage + '%';
-                },
-                textShadowColor: (context) => {
-                  // Add text shadow to red labels for visibility
-                  const originalValue = data[context.dataIndex];
-                  return originalValue < 0 ? 'rgba(0, 0, 0, 0.8)' : 'transparent';
-                },
-                textShadowBlur: (context) => {
-                  const originalValue = data[context.dataIndex];
-                  return originalValue < 0 ? 4 : 0;
                 }
               }
             }
