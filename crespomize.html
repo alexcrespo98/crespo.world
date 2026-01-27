@@ -570,7 +570,7 @@
       grid-template-columns: repeat(2, 1fr);
     }
     .monthly-reports-style-4 .donut-charts-grid {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
     }
     .monthly-reports-style-2 .stat-card h4 {
       font-size: 1em;
@@ -1449,7 +1449,7 @@
               }
               
               // Collect follower history data for combined chart
-              // Sum follower counts across all clients for each date
+              // Track follower counts per client per date to avoid double-counting
               if (client[platform].dailyFollowerData && client[platform].dailyFollowerData.length > 0) {
                 client[platform].dailyFollowerData.forEach(dataPoint => {
                   const dateKey = dataPoint.date.toISOString().split('T')[0];
@@ -1459,13 +1459,23 @@
                   );
                   
                   if (existingIndex >= 0) {
-                    // Add to existing follower count for this date
-                    combinedFollowerData[platform][existingIndex].followers += dataPoint.followers;
+                    // Only add if this client hasn't contributed to this date yet
+                    // Store client tracking info if not exists
+                    if (!combinedFollowerData[platform][existingIndex].clientsAdded) {
+                      combinedFollowerData[platform][existingIndex].clientsAdded = new Set();
+                    }
+                    if (!combinedFollowerData[platform][existingIndex].clientsAdded.has(client.name)) {
+                      combinedFollowerData[platform][existingIndex].followers += dataPoint.followers;
+                      combinedFollowerData[platform][existingIndex].clientsAdded.add(client.name);
+                    }
                   } else {
                     // First entry for this date, create a new one
+                    const clientsAdded = new Set();
+                    clientsAdded.add(client.name);
                     combinedFollowerData[platform].push({
                       date: dataPoint.date,
-                      followers: dataPoint.followers
+                      followers: dataPoint.followers,
+                      clientsAdded: clientsAdded
                     });
                   }
                 });
