@@ -647,12 +647,10 @@
         LIKES_VIEWS_RATIO: 0.05,     // Reject if likes within 5% of views (extraction error)
         MIN_LIKES_RATIO: 0.001,       // Reject if likes < 0.1% of views (implausibly low)
         SIGNIFICANT_VIEWS: 5000,      // Views threshold for applying ratio checks
-        FOLLOWER_DROP_THRESHOLD: 0.5, // Flag drops > 50% as potential outliers
-        FOLLOWER_SPIKE_THRESHOLD: 3.0, // Flag increases > 300% as potential outliers
+        FOLLOWER_SPIKE_THRESHOLD: 3.0, // Only flag spikes >300% if unsustained (drops >50% next day)
         Z_SCORE_THRESHOLD: 3.0,       // Standard deviations for statistical outlier detection
         MAX_GAP_DAYS: 14,             // Maximum gap (days) before special handling
         LARGE_GAP_DAYS: 7,            // Gap size (days) that triggers conservative interpolation
-        TREND_CONTINUATION_THRESHOLD: 0.7, // 70% of spike value confirms trend continuation
         LIKES_FALLBACK_RATIO: 0.1     // Cap likes at 10% of views if validation fails
       },
       
@@ -2497,22 +2495,11 @@
             }
           }
           
-          // Validate: end should not be less than start (follower counts don't decrease naturally)
-          if (followersEnd < followersStart && followersStart > 0) {
-            // This might be bad data - use start value as end
-            followersEnd = followersStart;
-          }
-          
           // Get daily follower progression throughout the month
           const monthData = validFollowersHistory.filter(h => h.date >= startDate && h.date <= endDate);
           
-          // Apply smoothing to daily data if we have enough points
-          if (monthData.length > 3) {
-            // Simple moving average smoothing for display
-            const smoothed = this.applySmoothingToFollowerData(monthData);
-            dailyFollowerData.push(...smoothed.map(h => ({ date: h.date, followers: h.value })));
-          } else {
-            dailyFollowerData.push(...monthData.map(h => ({ date: h.date, followers: h.value })));
+          // Keep data as-is to show real trends including viral spikes and drops
+          dailyFollowerData.push(...monthData.map(h => ({ date: h.date, followers: h.value })));
           }
         }
         
@@ -5095,41 +5082,36 @@
             }
             
             if (prevValidValue !== null) {
-              // Check for abnormal drops (followers shouldn't drop >50% suddenly)
-              if (item.value < prevValidValue * this.ANOMALY_THRESHOLDS.FOLLOWER_DROP_THRESHOLD) {
-                needsInterp = true;
-                reason = 'abnormal_drop';
-              }
+              // Check for abnormal drops (>50% drop could be legitimate, like bot purges)
+              // Only flag if it's a data error (exact zero after having followers)
+              // Don't interpolate natural decreases - they're valid
               
-              // Check for abnormal spikes (followers growing >300% overnight is suspicious)
+              // Check for abnormal spikes (followers growing >300% overnight)
+              // Only flag if it's clearly a data error, not viral growth
               if (item.value > prevValidValue * this.ANOMALY_THRESHOLDS.FOLLOWER_SPIKE_THRESHOLD) {
-                // Check if this is a statistical outlier
+                // Check if this is a statistical outlier AND the spike is unsustained
                 if (validValues.length >= 10 && this.isStatisticalOutlier(item.value, mean, stdDev)) {
-                  needsInterp = true;
-                  reason = 'abnormal_spike';
+                  // Look ahead to see if growth is sustained (viral) or just an error
+                  let nextValidValue = null;
+                  for (let j = idx + 1; j < arr.length && j < idx + 3; j++) {
+                    if (arr[j].value > 0 && arr[j].value !== null) {
+                      nextValidValue = arr[j].value;
+                      break;
+                    }
+                  }
+                  
+                  // If spike drops back down quickly, it's likely a data error
+                  // If it stays high (>50% of spike), it's likely viral growth - keep it
+                  if (nextValidValue !== null && nextValidValue < item.value * 0.5) {
+                    needsInterp = true;
+                    reason = 'unsustained_spike';
+                  }
                 }
               }
             }
             
-            // Statistical outlier detection (for datasets with enough data)
-            if (!needsInterp && validValues.length >= 10) {
-              if (this.isStatisticalOutlier(item.value, mean, stdDev)) {
-                // Double-check: is this a consistent trend or isolated spike?
-                let nextValidValue = null;
-                for (let j = idx + 1; j < arr.length && j < idx + 3; j++) {
-                  if (arr[j].value > 0 && arr[j].value !== null) {
-                    nextValidValue = arr[j].value;
-                    break;
-                  }
-                }
-                
-                // If next value is also high, it's likely a real trend, not an outlier
-                if (nextValidValue === null || nextValidValue < item.value * this.ANOMALY_THRESHOLDS.TREND_CONTINUATION_THRESHOLD) {
-                  needsInterp = true;
-                  reason = 'statistical_outlier';
-                }
-              }
-            }
+            // Note: We removed general statistical outlier detection to preserve viral spikes
+            // Only specific patterns (unsustained spikes) are flagged above
           }
           
           return {
