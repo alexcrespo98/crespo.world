@@ -802,6 +802,27 @@
     <div id="charts" class="hidden">
       <div class="question">analytics for <span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
+      <!-- Custom Analytics Date Selection (above tabs) -->
+      <div id="customDateSelection" class="custom-date-selection hidden">
+        <h3 style="color: #0f0; margin-bottom: 1em;">Select Time Range:</h3>
+        <div class="time-range-buttons" style="margin-bottom: 1em;">
+          <button id="custom-btn-365" onclick="app.selectPresetTimeRange(365)">1 Year</button>
+          <button id="custom-btn-180" onclick="app.selectPresetTimeRange(180)">6 Months</button>
+          <button id="custom-btn-30" onclick="app.selectPresetTimeRange(30)">1 Month</button>
+        </div>
+        <div style="display: flex; gap: 1em; align-items: center; justify-content: center; margin-bottom: 1.5em;">
+          <div>
+            <label style="color: #0f0; margin-right: 0.5em;">Start Date:</label>
+            <input type="date" id="customStartDateInput" style="background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em; font-family: monospace;">
+          </div>
+          <div>
+            <label style="color: #0f0; margin-right: 0.5em;">End Date:</label>
+            <input type="date" id="customEndDateInput" style="background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em; font-family: monospace;">
+          </div>
+          <button onclick="app.applyCustomDateInputs()" style="background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em 1em; cursor: pointer; font-family: monospace;">Apply</button>
+        </div>
+      </div>
+      
       <!-- Custom Analytics Account Tabs -->
       <div id="customAccountTabs" class="custom-tabs-container hidden">
         <div class="custom-tabs" id="customAccountTabsButtons"></div>
@@ -1080,15 +1101,25 @@
       
       // Select preset time range (from button click)
       selectPresetTimeRange(days) {
-        // Update active button state
+        // Update active button state in step2 (if visible)
         document.querySelectorAll('#timeRangeButtons button').forEach(btn => {
           btn.classList.remove('active');
         });
         
         const btnId = days === 'all' ? 'btn-all' : `btn-${days}`;
-        document.getElementById(btnId).classList.add('active');
+        const stepBtn = document.getElementById(btnId);
+        if (stepBtn) stepBtn.classList.add('active');
         
-        // Update slider to match preset
+        // Also update custom analytics buttons (if in charts view)
+        ['custom-btn-365', 'custom-btn-180', 'custom-btn-30'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn) btn.classList.remove('active');
+        });
+        const customBtnId = `custom-btn-${days}`;
+        const customBtn = document.getElementById(customBtnId);
+        if (customBtn) customBtn.classList.add('active');
+        
+        // Update slider to match preset (only if in step2)
         if (this.dataDateRange.min && this.dataDateRange.max) {
           const now = new Date();
           let startDate;
@@ -1110,22 +1141,63 @@
           const minPercent = totalDays > 0 ? Math.round((startDays / totalDays) * 100) : 0;
           const maxPercent = 100;
           
-          document.getElementById('rangeMin').value = minPercent;
-          document.getElementById('rangeMax').value = maxPercent;
+          const rangeMin = document.getElementById('rangeMin');
+          const rangeMax = document.getElementById('rangeMax');
+          if (rangeMin && rangeMax) {
+            rangeMin.value = minPercent;
+            rangeMax.value = maxPercent;
+          }
           
           this.customDateRange.start = startDate;
           this.customDateRange.end = now;
           
-          document.getElementById('selectedStartDate').textContent = this.formatDate(startDate);
-          document.getElementById('selectedEndDate').textContent = this.formatDate(now);
+          const startDateSpan = document.getElementById('selectedStartDate');
+          const endDateSpan = document.getElementById('selectedEndDate');
+          if (startDateSpan) startDateSpan.textContent = this.formatDate(startDate);
+          if (endDateSpan) endDateSpan.textContent = this.formatDate(now);
           
           const sliderRange = document.getElementById('sliderRange');
-          sliderRange.style.left = minPercent + '%';
-          sliderRange.style.width = (maxPercent - minPercent) + '%';
+          if (sliderRange) {
+            sliderRange.style.left = minPercent + '%';
+            sliderRange.style.width = (maxPercent - minPercent) + '%';
+          }
         }
         
-        // Apply the selection
-        this.selectTimeRange(days);
+        // If already in charts view (Custom Analytics), reload data directly
+        const chartsDiv = document.getElementById('charts');
+        if (chartsDiv && !chartsDiv.classList.contains('hidden')) {
+          this.reloadWithTimeRange(days);
+        } else {
+          // Apply the selection (original flow for step2)
+          this.selectTimeRange(days);
+        }
+      },
+      
+      // Reload data with new time range (for Custom Analytics date changes)
+      async reloadWithTimeRange(days) {
+        this.selectedTimeRange = days;
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (this.isAllPlatforms) {
+          await this.loadAllPlatformsData(days);
+          this.renderAllPlatformsDashboard();
+        } else {
+          this.processData(days);
+          this.renderDashboard();
+        }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        
+        // Update time range label
+        let rangeText = '';
+        if (days === 'all') rangeText = '(All Time)';
+        else if (days === 365) rangeText = '(Last 1 Year)';
+        else if (days === 180) rangeText = '(Last 6 Months)';
+        else if (days === 30) rangeText = '(Last 1 Month)';
+        document.getElementById('timeRangeLabel').textContent = rangeText;
       },
       
       // Apply custom date range
@@ -1153,6 +1225,55 @@
             this.finalizeDataDisplay('custom');
           }, 1000);
         }
+      },
+      
+      // Apply custom date inputs from text fields
+      async applyCustomDateInputs() {
+        const startInput = document.getElementById('customStartDateInput');
+        const endInput = document.getElementById('customEndDateInput');
+        
+        if (!startInput.value || !endInput.value) {
+          alert('Please select both start and end dates');
+          return;
+        }
+        
+        const startDate = new Date(startInput.value);
+        const endDate = new Date(endInput.value);
+        
+        if (startDate >= endDate) {
+          alert('Start date must be before end date');
+          return;
+        }
+        
+        // Store custom range
+        this.selectedTimeRange = 'custom';
+        this.customStartDate = startDate;
+        this.customEndDate = endDate;
+        
+        // Reload data with custom range
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (this.isAllPlatforms) {
+          await this.loadAllPlatformsData('custom');
+          this.renderAllPlatformsDashboard();
+        } else {
+          this.processData('custom');
+          this.renderDashboard();
+        }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        
+        // Update time range label
+        const rangeText = `(${this.formatDate(startDate)} - ${this.formatDate(endDate)})`;
+        document.getElementById('timeRangeLabel').textContent = rangeText;
+        
+        // Clear active state from preset buttons
+        ['custom-btn-365', 'custom-btn-180', 'custom-btn-30'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn) btn.classList.remove('active');
+        });
       },
       
       // Setup all event listeners
@@ -4546,6 +4667,18 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
         
+        // Show custom date selection for Custom Analytics
+        document.getElementById('customDateSelection').classList.remove('hidden');
+        
+        // Update active button
+        ['custom-btn-365', 'custom-btn-180', 'custom-btn-30'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn) btn.classList.remove('active');
+        });
+        if (days === 365) document.getElementById('custom-btn-365')?.classList.add('active');
+        else if (days === 180) document.getElementById('custom-btn-180')?.classList.add('active');
+        else if (days === 30) document.getElementById('custom-btn-30')?.classList.add('active');
+        
         let rangeText = '';
         if (days === 'all') rangeText = '(All Time)';
         else if (days === 365) rangeText = '(Last 1 Year)';
@@ -6476,6 +6609,9 @@
                     return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
                   }
                 }
+              },
+              datalabels: {
+                display: false  // Disable grey text labels on data points
               }
             },
             scales: {
