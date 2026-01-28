@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <title>recipeasy - crespo.world</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="version" content="1.1">
   <style>
+    /* Version 1.1 - Compact spacing update - 2026-01-26 */
     body {
       background: #000;
       color: #0f0;
@@ -39,70 +44,7 @@
       border-radius: 10px;
       text-align: left;
     }
-    .password-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .password-box {
-      background: #111;
-      border: 2px solid #0f0;
-      padding: 3em;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 400px;
-    }
-    .password-box h2 {
-      color: #0f0;
-      margin-bottom: 1em;
-    }
-    .password-box input {
-      width: 100%;
-      padding: 0.8em;
-      background: #000;
-      color: #0f0;
-      border: 2px solid #0f0;
-      font-family: monospace;
-      font-size: 1.2em;
-      text-align: center;
-      box-sizing: border-box;
-      margin-bottom: 1em;
-    }
-    .password-box input:focus {
-      outline: none;
-      box-shadow: 0 0 10px #0f0;
-    }
-    .password-box button {
-      width: 100%;
-      padding: 1em;
-      background: #000;
-      color: #0f0;
-      border: 2px solid #0f0;
-      font-family: monospace;
-      font-size: 1.2em;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .password-box button:hover {
-      background: #0f0;
-      color: #000;
-      box-shadow: 0 0 10px #0f0;
-    }
-    .password-error {
-      color: #f00;
-      margin-top: 0.5em;
-      display: none;
-    }
-    .main-content {
-      display: none;
-    }
+
     .input-group {
       margin: 2em 0;
     }
@@ -180,7 +122,7 @@
     }
     .recipe-section h3 {
       color: #0f0;
-      margin-bottom: 0.5em;
+      margin-bottom: 0.2em;
       font-size: 1.3em;
     }
     .multiplier-section {
@@ -210,9 +152,9 @@
       box-shadow: 0 0 10px #0f0;
     }
     .ingredient-item {
-      margin: 0.1em 0;
-      padding: 0.05em 0;
-      line-height: 1.3;
+      margin: 0;
+      padding: 0;
+      line-height: 1.0;
       font-size: 0.9em;
       cursor: pointer;
       transition: opacity 0.2s;
@@ -231,8 +173,8 @@
     .instruction-item {
       display: flex;
       align-items: flex-start;
-      margin: 0.5em 0;
-      padding: 0.3em 0;
+      margin: 0.2em 0;
+      padding: 0.1em 0;
     }
     .instruction-item input[type="checkbox"] {
       min-width: 24px;
@@ -295,24 +237,7 @@
   </style>
 </head>
 <body>
-  <!-- Password Protection Overlay -->
-  <div id="passwordOverlay" class="password-overlay">
-    <div class="password-box">
-      <h2>recipeasy</h2>
-      <p>Enter password to continue</p>
-      <input 
-        type="password" 
-        id="passwordInput" 
-        placeholder="Password"
-        onkeypress="if(event.key === 'Enter') checkPassword()"
-      />
-      <button onclick="checkPassword()">Submit</button>
-      <p class="password-error" id="passwordError">Incorrect password</p>
-    </div>
-  </div>
 
-  <!-- Main Content -->
-  <div class="main-content" id="mainContent">
     <nav>
       <a href="index.html">home</a>
       <a href="officecam.html">officecam</a>
@@ -381,27 +306,9 @@
         <button onclick="downloadRecipe()">Download as Text</button>
       </div>
     </div>
-  </div>
 
   <script>
-    // Password protection
-    const CORRECT_PASSWORD = '0990';
     const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
-
-    function checkPassword() {
-      const passwordInput = document.getElementById('passwordInput');
-      const passwordError = document.getElementById('passwordError');
-      
-      if (passwordInput.value === CORRECT_PASSWORD) {
-        document.getElementById('passwordOverlay').style.display = 'none';
-        document.getElementById('mainContent').style.display = 'block';
-        passwordInput.value = '';
-      } else {
-        passwordError.style.display = 'block';
-        passwordInput.value = '';
-        passwordInput.focus();
-      }
-    }
 
     async function simplifyRecipe() {
       const input = document.getElementById('recipeInput').value.trim();
@@ -511,19 +418,151 @@
     }
     
     function findIngredientInStep(ingredient, stepText) {
-      // Extract key words from ingredient (ignore measurements)
-      const ingredientWords = ingredient.toLowerCase()
+      // Clean the ingredient text - remove measurements and parenthetical descriptions
+      let cleanIngredient = ingredient
+        .replace(/\(.*?\)/g, '') // Remove parenthetical descriptions like "(about 3/4 cup)"
         .replace(/\d+\/\d+/g, '') // Remove fractions
         .replace(/\d+\.\d+/g, '')  // Remove decimals
         .replace(/\d+/g, '')       // Remove numbers
-        .replace(/cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|ml|l/gi, '')
-        .split(/[\s,()]+/)
-        .filter(word => word.length > 2);
+        .trim();
+      
+      // Remove measurement units
+      cleanIngredient = cleanIngredient.replace(
+        /\b(cup|cups|tablespoon|tablespoons|teaspoon|teaspoons|tbsp|tsp|oz|ounce|ounces|pound|pounds|lb|lbs|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|°f|°c|degrees?|clove|cloves)\b/gi,
+        ''
+      ).trim();
+      
+      // Remove common descriptors/adjectives but keep the core ingredient
+      const descriptors = /\b(fresh|dried|frozen|canned|chopped|diced|minced|sliced|shredded|grated|ground|crushed|whole|halved|quartered|unsalted|salted|large|small|medium|extra|virgin|pure|raw|cooked|boneless|skinless|fine|coarse|all-purpose|self-rising|heavy|light|sour|sweet)\b/gi;
+      cleanIngredient = cleanIngredient.replace(descriptors, '').trim();
+      
+      // Clean up multiple spaces and commas
+      cleanIngredient = cleanIngredient.replace(/[,;]/g, ' ').replace(/\s+/g, ' ').trim();
+      
+      if (!cleanIngredient || cleanIngredient.length < 3) {
+        return false;
+      }
       
       const stepLower = stepText.toLowerCase();
+      const ingredientLower = cleanIngredient.toLowerCase();
       
-      // Check if any significant word from ingredient appears in step
-      return ingredientWords.some(word => stepLower.includes(word));
+      // Split into words
+      const words = ingredientLower.split(/\s+/).filter(w => w.length >= 3);
+      
+      // Define compound ingredient patterns that should always stay together
+      // These prevent false matches (e.g., "baking powder" vs "baking sheet")
+      const compoundPatterns = [
+        // Baking ingredients
+        'baking powder', 'baking soda', 'baking sheet',
+        'cocoa powder', 'chili powder', 'curry powder', 'garlic powder', 'onion powder',
+        
+        // Oils
+        'olive oil', 'vegetable oil', 'coconut oil', 'canola oil', 'sesame oil',
+        
+        // Sugars
+        'brown sugar', 'white sugar', 'powdered sugar', 'granulated sugar',
+        
+        // Creams
+        'heavy cream', 'sour cream', 'whipped cream', 'light cream',
+        
+        // Broths
+        'chicken broth', 'beef broth', 'vegetable broth',
+        
+        // Extracts
+        'vanilla extract', 'almond extract', 'lemon extract',
+        
+        // Sauces
+        'soy sauce', 'worcestershire sauce', 'hot sauce', 'fish sauce',
+        
+        // Cheeses
+        'cream cheese', 'cheddar cheese', 'parmesan cheese', 'mozzarella cheese'
+      ];
+      
+      // Define common shortening mappings (ingredient → how it appears in steps)
+      const shortenings = {
+        'heavy cream': 'cream',
+        'vanilla extract': 'vanilla',
+        'almond extract': 'almond',
+        'all-purpose flour': 'flour',
+        'self-rising flour': 'flour'
+      };
+      
+      // Check if this is a known compound ingredient
+      let isCompound = false;
+      for (const pattern of compoundPatterns) {
+        if (ingredientLower.includes(pattern) || pattern.includes(ingredientLower)) {
+          isCompound = true;
+          break;
+        }
+      }
+      
+      // Generate variations to check
+      const variations = new Set();
+      
+      // Always check the full cleaned ingredient
+      variations.add(ingredientLower);
+      
+      // Check if there's a common shortening for this ingredient
+      for (const [full, short] of Object.entries(shortenings)) {
+        if (ingredientLower.includes(full)) {
+          variations.add(short);
+        }
+      }
+      
+      if (isCompound || words.length > 1) {
+        // For compound ingredients, be strict - require full phrase match
+        // But also check for reasonable shortened forms
+        if (words.length === 2) {
+          // For 2-word ingredients, also check each word individually ONLY if not a known compound
+          if (!isCompound) {
+            words.forEach(w => variations.add(w));
+          }
+        } else if (words.length >= 3) {
+          // For 3+ word ingredients, check various combinations
+          variations.add(words.slice(-2).join(' ')); // last 2 words
+          variations.add(words.slice(0, 2).join(' ')); // first 2 words
+          // Add individual words for very long ingredient names
+          words.forEach(w => {
+            if (w.length >= 4) { // Only longer words
+              variations.add(w);
+            }
+          });
+        }
+      } else {
+        // Single word ingredient - just use it as is
+        variations.add(ingredientLower);
+      }
+      
+      // Check each variation with word boundaries
+      for (const variant of variations) {
+        if (variant.length < 3) continue;
+        
+        // Escape special regex characters
+        const escapedVariant = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Create regex with word boundaries
+        const regex = new RegExp('\\b' + escapedVariant + '\\b', 'i');
+        
+        if (regex.test(stepLower)) {
+          // If we matched a single word from a multi-word ingredient, verify it's correct
+          if (words.length > 1 && !variant.includes(' ')) {
+            // Single word match from multi-word ingredient - need additional verification
+            // Check if the full phrase also exists in the step
+            const fullRegex = new RegExp('\\b' + ingredientLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+            if (fullRegex.test(stepLower)) {
+              return true; // Full phrase found, definitely correct
+            }
+            
+            // Otherwise, this might be a false positive - skip it
+            continue;
+          } else {
+            // Full phrase match or single-word ingredient matched
+            return true;
+          }
+        }
+      }
+      
+      return false;
     }
     
     
@@ -550,27 +589,20 @@
         // Parse ingredient to highlight the amount
         const parsed_ing = parseIngredientMeasurement(ingredient);
         let displayText = ingredient;
+        
         if (parsed_ing.amount) {
+          // Normal ingredient
           displayText = `<span class="ingredient-amount">${parsed_ing.amount}${parsed_ing.unit ? ' ' + parsed_ing.unit : ''}</span> ${parsed_ing.item}`;
         }
         
-        html += `
-          <div class="ingredient-item" data-ingredient-idx="${idx}" data-original="${ingredient}" onclick="toggleIngredient(${idx})">
-            ${displayText}
-          </div>
-        `;
+        html += `<div class="ingredient-item" data-ingredient-idx="${idx}" data-original="${ingredient}" onclick="toggleIngredient(${idx})">${displayText}</div>`;
       });
       
       html += '</div><div class="recipe-section">';
       html += '<h3>INSTRUCTIONS:</h3>';
       
       parsed.instructions.forEach((instruction, idx) => {
-        html += `
-          <div class="instruction-item" data-step-number="${instruction.number}">
-            <input type="checkbox" id="instruction-${idx}" onchange="toggleInstruction(${instruction.number})">
-            <label for="instruction-${idx}">${instruction.number}. ${instruction.text}</label>
-          </div>
-        `;
+        html += `<div class="instruction-item" data-step-number="${instruction.number}"><input type="checkbox" id="instruction-${idx}" onchange="toggleInstruction(${instruction.number})"><label for="instruction-${idx}">${instruction.number}. ${instruction.text}</label></div>`;
       });
       
       html += '</div>';

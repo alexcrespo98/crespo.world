@@ -90,16 +90,18 @@ def is_recipe_url(url):
 def search_recipe(query):
     """Search for a recipe using multiple strategies and return the first valid URL"""
     
+    search_query = query
+    
     # Strategy 1: Try popular recipe sites directly
     recipe_sites = [
-        f"https://www.allrecipes.com/search?q={query.replace(' ', '+')}",
-        f"https://www.foodnetwork.com/search/{query.replace(' ', '-')}-",
-        f"https://www.bonappetit.com/search?q={query.replace(' ', '+')}",
-        f"https://www.epicurious.com/search/{query.replace(' ', '%20')}",
-        f"https://www.seriouseats.com/search?q={query.replace(' ', '+')}",
+        f"https://www.allrecipes.com/search?q={search_query.replace(' ', '+')}",
+        f"https://www.foodnetwork.com/search/{search_query.replace(' ', '-')}-",
+        f"https://www.bonappetit.com/search?q={search_query.replace(' ', '+')}",
+        f"https://www.epicurious.com/search/{search_query.replace(' ', '%20')}",
+        f"https://www.seriouseats.com/search?q={search_query.replace(' ', '+')}",
     ]
     
-    print(f"Trying direct recipe site searches for: {query}")
+    print(f"Trying direct recipe site searches for: {search_query}")
     for site_url in recipe_sites[:2]:  # Try first 2 sites
         try:
             headers = {
@@ -121,8 +123,8 @@ def search_recipe(query):
     
     # Strategy 2: Try Google search with improved parsing
     try:
-        print(f"Trying Google search for: {query}")
-        search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}+recipe"
+        print(f"Trying Google search for: {search_query}")
+        search_url = f"https://www.google.com/search?q={search_query.replace(' ', '+')}+recipe"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -157,8 +159,8 @@ def search_recipe(query):
     
     # Strategy 3: Try DuckDuckGo as a fallback
     try:
-        print(f"Trying DuckDuckGo search for: {query}")
-        search_url = f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}+recipe"
+        print(f"Trying DuckDuckGo search for: {search_query}")
+        search_url = f"https://duckduckgo.com/html/?q={search_query.replace(' ', '+')}+recipe"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
