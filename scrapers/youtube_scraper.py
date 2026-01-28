@@ -43,7 +43,8 @@ ACCOUNTS_TO_TRACK = [
     "playbattlegolf",
     "FlingGolf",
     "GolfPongGames",
-    "DiscGOGames"
+    "DiscGOGames",
+    "moonmediagames"
 ]
 
 # YouTube API Key

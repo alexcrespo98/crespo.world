@@ -40,7 +40,8 @@ ACCOUNTS_TO_TRACK = [
     "flinggolf",
     "golfponggames",  # Changed from "golfpong.games" - scrapes this account
     "discgogames",
-    "low_tide_golf"
+    "low_tide_golf",
+    "moonmediagames"
 ]
 
 # Mapping of actual Instagram handles to Excel sheet names
