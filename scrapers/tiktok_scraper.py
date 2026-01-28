@@ -155,7 +155,8 @@ class TikTokScraper:
                 "playbattlegolf",
                 "flinggolf",
                 "golfponggames",
-                "discgogames"
+                "discgogames",
+                "moonmediagames"
             ]
         
         try:
