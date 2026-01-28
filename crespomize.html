@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body {
@@ -455,6 +456,198 @@
     #monthlyTabContent {
       padding-top: 1em;
     }
+    
+    /* Custom Analytics Tabs */
+    .custom-tabs-container {
+      margin: 2em 0 1em 0;
+      border-bottom: 2px solid #0f0;
+    }
+    .custom-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      margin-bottom: -2px;
+    }
+    .custom-tab {
+      background: #000;
+      color: #0f0;
+      border: 2px solid #0f0;
+      border-bottom: none;
+      padding: 0.8em 1.5em;
+      margin: 0;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.9em;
+      transition: all 0.3s;
+      border-radius: 5px 5px 0 0;
+    }
+    .custom-tab:hover {
+      background: #0a3a0a;
+    }
+    .custom-tab.active {
+      background: #0f0;
+      color: #000;
+      font-weight: bold;
+    }
+    
+    /* Style Selector */
+    .style-selector {
+      position: absolute;
+      top: 1em;
+      right: 1em;
+      z-index: 100;
+      background: #0a0a0a;
+      border: 1px solid #0f0;
+      border-radius: 5px;
+      padding: 0.5em;
+    }
+    .style-selector label {
+      color: #0f0;
+      font-size: 0.8em;
+      margin-right: 0.5em;
+    }
+    .style-selector label.secondary {
+      margin-left: 1em;
+    }
+    .style-selector select {
+      background: #000;
+      color: #0f0;
+      border: 1px solid #0f0;
+      padding: 0.3em;
+      font-family: monospace;
+      font-size: 0.8em;
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+    
+    /* Donut Chart Containers */
+    .donut-charts-section {
+      margin: 2em 0;
+      padding: 1.5em;
+      border: 2px solid #0f0;
+      border-radius: 5px;
+      background: #0a0a0a;
+    }
+    .donut-charts-section h3 {
+      color: #0f0;
+      margin: 0 0 1em 0;
+      text-align: center;
+    }
+    .donut-charts-grid {
+      display: grid;
+      gap: 2em;
+      margin-bottom: 2em;
+    }
+    .donut-chart-container {
+      background: #000;
+      border: 1px solid #0f0;
+      border-radius: 5px;
+      padding: 1em;
+      text-align: center;
+    }
+    .donut-chart-container h4 {
+      color: #0f0;
+      margin: 0 0 0.5em 0;
+      font-size: 0.9em;
+    }
+    .donut-chart-wrapper {
+      max-width: 500px;
+      margin: 0 auto;
+      position: relative;
+    }
+    
+    /* Style variations */
+    .monthly-reports-style-1 .donut-charts-grid {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+    .monthly-reports-style-2 .donut-charts-grid {
+      grid-template-columns: 1fr;
+      max-width: 600px;
+      margin: 0 auto 2em auto;
+    }
+    .monthly-reports-style-3 .donut-charts-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .monthly-reports-style-4 .donut-charts-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .monthly-reports-style-2 .stat-card h4 {
+      font-size: 1em;
+    }
+    .monthly-reports-style-2 .stat-card .value {
+      font-size: 2em;
+    }
+    .monthly-reports-style-3 .stat-card h4 {
+      font-size: 0.85em;
+    }
+    .monthly-reports-style-3 .stat-card .value {
+      font-size: 1.6em;
+    }
+    .monthly-reports-style-4 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    
+    /* Style 5: Dark Mode Enhanced - Similar to compact but with different color scheme */
+    .monthly-reports-style-5 .donut-charts-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .monthly-reports-style-5 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .monthly-reports-style-5 .stat-card {
+      background: #0a0a0a;
+      border-color: #00aa00;
+    }
+    .monthly-reports-style-5 .stat-card h4 {
+      color: #00ff88;
+    }
+    .monthly-reports-style-5 .donut-chart-container h4 {
+      color: #00ff88;
+    }
+    
+    /* Style 6: Minimal - Extra spacing, cleaner look */
+    .monthly-reports-style-6 .donut-charts-grid {
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 3em;
+    }
+    .monthly-reports-style-6 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2em;
+      margin-bottom: 3em;
+    }
+    .monthly-reports-style-6 .stat-card {
+      padding: 2em;
+    }
+    .monthly-reports-style-6 .donut-chart-container {
+      padding: 2em;
+    }
+    
+    /* Style 7: Dense - Even more compact than compact */
+    .monthly-reports-style-7 .donut-charts-grid {
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5em;
+    }
+    .monthly-reports-style-7 .stats-summary {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.5em;
+    }
+    .monthly-reports-style-7 .stat-card {
+      padding: 0.5em;
+    }
+    .monthly-reports-style-7 .stat-card h4 {
+      font-size: 0.7em;
+      margin-bottom: 0.3em;
+    }
+    .monthly-reports-style-7 .stat-card .value {
+      font-size: 1.2em;
+    }
+    .monthly-reports-style-7 .donut-chart-container {
+      padding: 0.5em;
+    }
+    .monthly-reports-style-7 .donut-chart-container h4 {
+      font-size: 0.9em;
+    }
   </style>
 </head>
 <body>
@@ -473,8 +666,8 @@
       <div class="question">what type of analytics?</div>
       <select id="analyticsTypeSelect">
         <option value="" disabled selected>-- select analytics type --</option>
-        <option value="easy">Weekly Analytics (this week's progress)</option>
-        <option value="monthly">Monthly Analytics (monthly reports)</option>
+        <option value="easy" disabled style="display: none;">Weekly Analytics (this week's progress)</option>
+        <option value="monthly">Monthly Reports</option>
         <option value="custom">Custom Analytics</option>
       </select>
     </div>
@@ -516,7 +709,8 @@
       <select id="monthlyMonthSelect">
         <option value="" disabled selected>-- select month --</option>
       </select>
-      <div id="monthlyGraphsContainer" class="hidden">
+      <div id="monthlyGraphsContainer" class="hidden monthly-reports-style-4">
+        
         <div class="question" id="monthlyGraphsTitle"></div>
         
         <!-- Tab Navigation -->
@@ -539,13 +733,6 @@
           <div id="monthlyChartsList"></div>
         </div>
         
-        <div class="export-section" style="text-align: center; margin-top: 2em;">
-          <div style="margin-bottom: 1em;">
-            <button id="monthlyExportBtn" class="looks-good-btn" onclick="app.exportMonthlyReport()">
-              Export Monthly Report PDF
-            </button>
-          </div>
-        </div>
         <br>
         <button onclick="location.reload()">start over</button>
       </div>
@@ -608,6 +795,37 @@
     <div id="charts" class="hidden">
       <div class="question">analytics for <span id="accountName"></span> <span id="timeRangeLabel"></span></div>
       
+      <!-- Custom Analytics Date Selection (above tabs) -->
+      <div id="customDateSelection" class="custom-date-selection hidden">
+        <h3 style="color: #0f0; margin-bottom: 1em;">Select Time Range:</h3>
+        <div class="time-range-buttons" style="margin-bottom: 1em;">
+          <button id="custom-btn-365" onclick="app.selectPresetTimeRange(365)">1 Year</button>
+          <button id="custom-btn-180" onclick="app.selectPresetTimeRange(180)">6 Months</button>
+          <button id="custom-btn-30" onclick="app.selectPresetTimeRange(30)">1 Month</button>
+        </div>
+        <div style="display: flex; gap: 1em; align-items: center; justify-content: center; margin-bottom: 1.5em;">
+          <div>
+            <label style="color: #0f0; margin-right: 0.5em;">Start Date:</label>
+            <input type="date" id="customStartDateInput" style="background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em; font-family: monospace;">
+          </div>
+          <div>
+            <label style="color: #0f0; margin-right: 0.5em;">End Date:</label>
+            <input type="date" id="customEndDateInput" style="background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em; font-family: monospace;">
+          </div>
+          <button onclick="app.applyCustomDateInputs()" style="background: #000; color: #0f0; border: 2px solid #0f0; padding: 0.5em 1em; cursor: pointer; font-family: monospace;">Apply</button>
+        </div>
+      </div>
+      
+      <!-- Custom Analytics Account Tabs -->
+      <div id="customAccountTabs" class="custom-tabs-container hidden">
+        <div class="custom-tabs" id="customAccountTabsButtons"></div>
+      </div>
+      
+      <!-- Custom Analytics Platform Tabs -->
+      <div id="customPlatformTabs" class="custom-tabs-container hidden">
+        <div class="custom-tabs" id="customPlatformTabsButtons"></div>
+      </div>
+      
       <!-- Summary stats -->
       <div class="stats-summary" id="statsSummary"></div>
       
@@ -624,6 +842,9 @@
   </div>
 
   <script>
+    // Register Chart.js plugins
+    Chart.register(ChartDataLabels);
+    
     // Application state
     const app = {
       // Configuration
@@ -688,6 +909,7 @@
       accountData: {},
       isMoonMediaTotal: false,
       isAllPlatforms: false,
+      selectedCustomAccount: 'all',  // For Custom Analytics: 'all' or specific account name
       selectedTimeRange: 'all',
       chartInstances: {},
       trendlineStates: {},
@@ -709,6 +931,7 @@
       currentMonthlyStartDate: null,
       currentMonthlyEndDate: null,
       currentMonthlyAccountStats: [],
+      donutLabelStyle: 'background', // Fixed to background style
       
       // Custom date range slider state
       dataDateRange: { min: null, max: null },
@@ -871,15 +1094,25 @@
       
       // Select preset time range (from button click)
       selectPresetTimeRange(days) {
-        // Update active button state
+        // Update active button state in step2 (if visible)
         document.querySelectorAll('#timeRangeButtons button').forEach(btn => {
           btn.classList.remove('active');
         });
         
         const btnId = days === 'all' ? 'btn-all' : `btn-${days}`;
-        document.getElementById(btnId).classList.add('active');
+        const stepBtn = document.getElementById(btnId);
+        if (stepBtn) stepBtn.classList.add('active');
         
-        // Update slider to match preset
+        // Also update custom analytics buttons (if in charts view)
+        ['custom-btn-365', 'custom-btn-180', 'custom-btn-30'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn) btn.classList.remove('active');
+        });
+        const customBtnId = `custom-btn-${days}`;
+        const customBtn = document.getElementById(customBtnId);
+        if (customBtn) customBtn.classList.add('active');
+        
+        // Update slider to match preset (only if in step2)
         if (this.dataDateRange.min && this.dataDateRange.max) {
           const now = new Date();
           let startDate;
@@ -901,22 +1134,63 @@
           const minPercent = totalDays > 0 ? Math.round((startDays / totalDays) * 100) : 0;
           const maxPercent = 100;
           
-          document.getElementById('rangeMin').value = minPercent;
-          document.getElementById('rangeMax').value = maxPercent;
+          const rangeMin = document.getElementById('rangeMin');
+          const rangeMax = document.getElementById('rangeMax');
+          if (rangeMin && rangeMax) {
+            rangeMin.value = minPercent;
+            rangeMax.value = maxPercent;
+          }
           
           this.customDateRange.start = startDate;
           this.customDateRange.end = now;
           
-          document.getElementById('selectedStartDate').textContent = this.formatDate(startDate);
-          document.getElementById('selectedEndDate').textContent = this.formatDate(now);
+          const startDateSpan = document.getElementById('selectedStartDate');
+          const endDateSpan = document.getElementById('selectedEndDate');
+          if (startDateSpan) startDateSpan.textContent = this.formatDate(startDate);
+          if (endDateSpan) endDateSpan.textContent = this.formatDate(now);
           
           const sliderRange = document.getElementById('sliderRange');
-          sliderRange.style.left = minPercent + '%';
-          sliderRange.style.width = (maxPercent - minPercent) + '%';
+          if (sliderRange) {
+            sliderRange.style.left = minPercent + '%';
+            sliderRange.style.width = (maxPercent - minPercent) + '%';
+          }
         }
         
-        // Apply the selection
-        this.selectTimeRange(days);
+        // If already in charts view (Custom Analytics), reload data directly
+        const chartsDiv = document.getElementById('charts');
+        if (chartsDiv && !chartsDiv.classList.contains('hidden')) {
+          this.reloadWithTimeRange(days);
+        } else {
+          // Apply the selection (original flow for step2)
+          this.selectTimeRange(days);
+        }
+      },
+      
+      // Reload data with new time range (for Custom Analytics date changes)
+      async reloadWithTimeRange(days) {
+        this.selectedTimeRange = days;
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (this.isAllPlatforms) {
+          await this.loadAllPlatformsData(days);
+          this.renderAllPlatformsDashboard();
+        } else {
+          this.processData(days);
+          this.renderDashboard();
+        }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        
+        // Update time range label
+        let rangeText = '';
+        if (days === 'all') rangeText = '(All Time)';
+        else if (days === 365) rangeText = '(Last 1 Year)';
+        else if (days === 180) rangeText = '(Last 6 Months)';
+        else if (days === 30) rangeText = '(Last 1 Month)';
+        document.getElementById('timeRangeLabel').textContent = rangeText;
       },
       
       // Apply custom date range
@@ -944,6 +1218,55 @@
             this.finalizeDataDisplay('custom');
           }, 1000);
         }
+      },
+      
+      // Apply custom date inputs from text fields
+      async applyCustomDateInputs() {
+        const startInput = document.getElementById('customStartDateInput');
+        const endInput = document.getElementById('customEndDateInput');
+        
+        if (!startInput.value || !endInput.value) {
+          alert('Please select both start and end dates');
+          return;
+        }
+        
+        const startDate = new Date(startInput.value);
+        const endDate = new Date(endInput.value);
+        
+        if (startDate >= endDate) {
+          alert('Start date must be before end date');
+          return;
+        }
+        
+        // Store custom range
+        this.selectedTimeRange = 'custom';
+        this.customStartDate = startDate;
+        this.customEndDate = endDate;
+        
+        // Reload data with custom range
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (this.isAllPlatforms) {
+          await this.loadAllPlatformsData('custom');
+          this.renderAllPlatformsDashboard();
+        } else {
+          this.processData('custom');
+          this.renderDashboard();
+        }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        
+        // Update time range label
+        const rangeText = `(${this.formatDate(startDate)} - ${this.formatDate(endDate)})`;
+        document.getElementById('timeRangeLabel').textContent = rangeText;
+        
+        // Clear active state from preset buttons
+        ['custom-btn-365', 'custom-btn-180', 'custom-btn-30'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn) btn.classList.remove('active');
+        });
       },
       
       // Setup all event listeners
@@ -992,7 +1315,8 @@
         } else if (type === 'monthly') {
           this.initializeMonthlyGraphsMode();
         } else if (type === 'custom') {
-          document.getElementById('step0Custom').classList.remove('hidden');
+          // Auto-select "All Platforms" and go directly to timeframe selection
+          this.selectPlatform('all');
         }
       },
       
@@ -1146,7 +1470,12 @@
         
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('monthlyGraphsContainer').classList.remove('hidden');
-        document.getElementById('monthlyGraphsTitle').textContent = `Monthly Analytics: ${monthLabel}`;
+        document.getElementById('monthlyGraphsTitle').textContent = `Monthly Reports: ${monthLabel}`;
+        
+        // Set fixed compact style with background labels
+        const container = document.getElementById('monthlyGraphsContainer');
+        container.classList.add('monthly-reports-style-4');
+        this.donutLabelStyle = 'background';
         
         // Switch to default tab (Total Moon Media)
         this.switchMonthlyTab('total');
@@ -1193,83 +1522,132 @@
         );
         
         // Aggregate metrics across all clients and platforms
+        let totalFollowersStart = 0;
         let totalFollowersEnd = 0;
         let totalLikes = 0;
         let totalViews = 0;
         let totalComments = 0;
         let totalShares = 0;
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersStart = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersChange = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformPosts = { instagram: 0, tiktok: 0, youtube: 0 };  // Track posts per platform
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
+        let totalVideoDuration = 0; // For average views/second calculation
         
         clientStats.forEach(client => {
           ['instagram', 'tiktok', 'youtube'].forEach(platform => {
             if (client[platform]) {
-              totalFollowersEnd += client[platform].followersEnd || 0;
-              platformFollowers[platform] += client[platform].followersEnd || 0;
+              const followersStart = client[platform].followersStart || 0;
+              const followersEnd = client[platform].followersEnd || 0;
+              totalFollowersStart += followersStart;
+              totalFollowersEnd += followersEnd;
+              platformFollowers[platform] += followersEnd;
+              platformFollowersStart[platform] += followersStart;
+              platformFollowersChange[platform] += (followersEnd - followersStart);
               
               // Aggregate engagement metrics from month videos
               if (client[platform].monthVideos) {
+                platformPosts[platform] += client[platform].monthVideos.length;  // Count posts
                 client[platform].monthVideos.forEach(video => {
-                  totalLikes += video.likes || 0;
-                  totalViews += video.views || 0;
-                  totalComments += video.comments || 0;
-                  totalShares += video.shares || 0;
+                  const likes = video.likes || 0;
+                  const views = video.views || 0;
+                  const comments = video.comments || 0;
+                  const shares = video.shares || 0;
+                  const duration = video.duration || 0;
+                  
+                  totalLikes += likes;
+                  totalViews += views;
+                  totalComments += comments;
+                  totalShares += shares;
+                  totalVideoDuration += duration;
+                  
+                  platformLikes[platform] += likes;
+                  platformViews[platform] += views;
                 });
               }
               
               // Collect follower history data for combined chart
+              // Track follower counts per client per date to avoid double-counting
               if (client[platform].dailyFollowerData && client[platform].dailyFollowerData.length > 0) {
-                combinedFollowerData[platform].push(...client[platform].dailyFollowerData);
+                client[platform].dailyFollowerData.forEach(dataPoint => {
+                  const dateKey = dataPoint.date.toISOString().split('T')[0];
+                  // Find if we already have data for this date
+                  const existingIndex = combinedFollowerData[platform].findIndex(
+                    d => d.date.toISOString().split('T')[0] === dateKey
+                  );
+                  
+                  if (existingIndex >= 0) {
+                    // Only add if this client hasn't contributed to this date yet
+                    // Store client tracking info if not exists
+                    if (!combinedFollowerData[platform][existingIndex].clientsAdded) {
+                      combinedFollowerData[platform][existingIndex].clientsAdded = new Set();
+                    }
+                    if (!combinedFollowerData[platform][existingIndex].clientsAdded.has(client.name)) {
+                      combinedFollowerData[platform][existingIndex].followers += dataPoint.followers;
+                      combinedFollowerData[platform][existingIndex].clientsAdded.add(client.name);
+                    }
+                  } else {
+                    // First entry for this date, create a new one
+                    const clientsAdded = new Set();
+                    clientsAdded.add(client.name);
+                    combinedFollowerData[platform].push({
+                      date: dataPoint.date,
+                      followers: dataPoint.followers,
+                      clientsAdded: clientsAdded
+                    });
+                  }
+                });
               }
             }
           });
         });
         
-        // Display summary statistics
+        // Sort the combined follower data by date for each platform
+        ['instagram', 'tiktok', 'youtube'].forEach(platform => {
+          if (combinedFollowerData[platform].length > 0) {
+            combinedFollowerData[platform].sort((a, b) => a.date - b.date);
+          }
+        });
+        
+        // Calculate follower change and average views/second
+        const followerChange = totalFollowersEnd - totalFollowersStart;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
+        // Add report label instead of stats (stats are now in donut charts function)
+        const monthName = this.currentMonthlyMonth || 'Report';
         statsContainer.innerHTML = `
-          <div class="stat-card">
-            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
-            <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${this.formatNumber(platformFollowers.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL LIKES</h4>
-            <div class="value">${this.formatNumber(totalLikes)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL VIEWS</h4>
-            <div class="value">${this.formatNumber(totalViews)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL COMMENTS</h4>
-            <div class="value">${this.formatNumber(totalComments)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TOTAL SHARES</h4>
-            <div class="value">${this.formatNumber(totalShares)}</div>
-          </div>
+          <h2 style="color: #0f0; text-align: center; margin: 1.5em 0;">Total Moon Media ${monthName} Report</h2>
         `;
         
+        // Create donut charts for Total Moon Media (includes stats boxes now)
+        this.createTotalDonutCharts(chartsContainer, {
+          platformFollowers,
+          platformFollowersChange,
+          platformLikes,
+          platformViews,
+          platformPosts,
+          totalComments,
+          totalShares,
+          followerChange
+        });
+        
         // Create normalized follower growth chart
-        this.createNormalizedFollowerGrowthChart(
-          chartsContainer,
-          'Total Moon Media Follower Growth',
-          combinedFollowerData,
-          this.currentMonthlyStartDate,
-          this.currentMonthlyEndDate,
-          'total-follower-growth'
-        );
+        // Don't create normalized follower growth chart for Total Moon Media
+        // (keeping individual client charts only)
+        // this.createNormalizedFollowerGrowthChart(
+        //   chartsContainer,
+        //   'Total Moon Media Follower Growth',
+        //   combinedFollowerData,
+        //   this.currentMonthlyStartDate,
+        //   this.currentMonthlyEndDate,
+        //   'total-follower-growth'
+        // );
       },
       
       // Render individual client monthly view
@@ -1286,36 +1664,48 @@
         }
         
         // Aggregate metrics for this client
+        let totalFollowersStart = 0;
         let totalFollowersEnd = 0;
         let totalLikes = 0;
         let totalViews = 0;
         let totalComments = 0;
         let totalShares = 0;
         let platformFollowers = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersStart = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformFollowersChange = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformLikes = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformViews = { instagram: 0, tiktok: 0, youtube: 0 };
+        let platformPosts = { instagram: 0, tiktok: 0, youtube: 0 };  // Track posts per platform
         let platformComments = { instagram: 0, tiktok: 0, youtube: 0 };
         let platformShares = { instagram: 0, tiktok: 0, youtube: 0 };
         let combinedFollowerData = { instagram: [], tiktok: [], youtube: [] };
+        let totalVideoDuration = 0; // For average views/second calculation
         
         ['instagram', 'tiktok', 'youtube'].forEach(platform => {
           if (clientStats[platform]) {
-            const followers = clientStats[platform].followersEnd || 0;
-            totalFollowersEnd += followers;
-            platformFollowers[platform] = followers;
+            const followersStart = clientStats[platform].followersStart || 0;
+            const followersEnd = clientStats[platform].followersEnd || 0;
+            totalFollowersStart += followersStart;
+            totalFollowersEnd += followersEnd;
+            platformFollowers[platform] = followersEnd;
+            platformFollowersStart[platform] = followersStart;
+            platformFollowersChange[platform] = followersEnd - followersStart;
             
             // Aggregate engagement metrics from month videos
             if (clientStats[platform].monthVideos) {
+              platformPosts[platform] = clientStats[platform].monthVideos.length;  // Count posts
               clientStats[platform].monthVideos.forEach(video => {
                 const likes = video.likes || 0;
                 const views = video.views || 0;
                 const comments = video.comments || 0;
                 const shares = video.shares || 0;
+                const duration = video.duration || 0;
                 
                 totalLikes += likes;
                 totalViews += views;
                 totalComments += comments;
                 totalShares += shares;
+                totalVideoDuration += duration;
                 
                 platformLikes[platform] += likes;
                 platformViews[platform] += views;
@@ -1331,72 +1721,30 @@
           }
         });
         
-        // Display summary statistics
-        let statsHTML = `
-          <div class="stat-card">
-            <h4>INSTAGRAM FOLLOWERS</h4>
-            <div class="value">${clientStats.instagram ? this.formatNumber(platformFollowers.instagram) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK FOLLOWERS</h4>
-            <div class="value">${clientStats.tiktok ? this.formatNumber(platformFollowers.tiktok) : 'N/A'}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE SUBSCRIBERS</h4>
-            <div class="value">${clientStats.youtube ? this.formatNumber(platformFollowers.youtube) : 'N/A'}</div>
-          </div>
+        // Calculate follower change and average views/second
+        const followerChange = totalFollowersEnd - totalFollowersStart;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
+        // Add report label instead of stats (stats are now in donut charts function)
+        const monthName = this.currentMonthlyMonth || 'Report';
+        statsContainer.innerHTML = `
+          <h2 style="color: #0f0; text-align: center; margin: 1.5em 0;">${clientName} ${monthName} Report</h2>
         `;
         
-        // Add engagement metric cards
-        statsHTML += `
-          <div class="stat-card">
-            <h4>INSTAGRAM LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE LIKES</h4>
-            <div class="value">${this.formatNumber(platformLikes.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE VIEWS</h4>
-            <div class="value">${this.formatNumber(platformViews.youtube)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>INSTAGRAM COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.instagram)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>TIKTOK COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.tiktok)}</div>
-          </div>
-          <div class="stat-card">
-            <h4>YOUTUBE COMMENTS</h4>
-            <div class="value">${this.formatNumber(platformComments.youtube)}</div>
-          </div>
-        `;
-        
-        if (totalShares > 0) {
-          statsHTML += `
-            <div class="stat-card">
-              <h4>TOTAL SHARES</h4>
-              <div class="value">${this.formatNumber(totalShares)}</div>
-            </div>
-          `;
-        }
-        
-        statsContainer.innerHTML = statsHTML;
+        // Create donut charts for the client (includes stats boxes now)
+        this.createClientDonutCharts(chartsContainer, {
+          platformFollowers,
+          platformFollowersChange,
+          platformLikes,
+          platformViews,
+          platformPosts,
+          totalComments,
+          totalShares,
+          followerChange
+        });
         
         // Create normalized follower growth chart
         this.createNormalizedFollowerGrowthChart(
@@ -1407,6 +1755,440 @@
           this.currentMonthlyEndDate,
           `${clientName}-follower-growth`
         );
+      },
+      
+      // Change monthly reports style
+      changeMonthlyStyle(style) {
+        const container = document.getElementById('monthlyGraphsContainer');
+        // Remove all style classes
+        container.classList.remove('monthly-reports-style-1', 'monthly-reports-style-2', 'monthly-reports-style-3', 'monthly-reports-style-4', 'monthly-reports-style-5', 'monthly-reports-style-6', 'monthly-reports-style-7');
+        // Add selected style class
+        container.classList.add(`monthly-reports-${style}`);
+        // Store in session storage
+        sessionStorage.setItem('monthlyReportsStyle', style);
+      },
+      
+      // Change donut label style
+      changeDonutLabelStyle(style) {
+        this.donutLabelStyle = style;
+        sessionStorage.setItem('donutLabelStyle', style);
+        // Re-render current tab to apply new style
+        const activeTab = document.querySelector('.monthly-tab.active');
+        if (activeTab) {
+          const tabName = activeTab.getAttribute('data-tab');
+          this.switchMonthlyTab(tabName);
+        }
+      },
+      
+      // Create donut chart
+      createDonutChart(container, title, data, labels, chartId, centerValue = null) {
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'donut-chart-container';
+        
+        const header = document.createElement('h4');
+        header.textContent = title;
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'donut-chart-wrapper';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = chartId;
+        
+        chartDiv.appendChild(header);
+        wrapper.appendChild(canvas);
+        chartDiv.appendChild(wrapper);
+        container.appendChild(chartDiv);
+        
+        const ctx = canvas.getContext('2d');
+        
+        // Filter out zero values from data and corresponding labels
+        const filteredData = [];
+        const filteredLabels = [];
+        const filteredOriginalData = [];
+        
+        data.forEach((value, index) => {
+          if (value !== 0 && value !== 0.0) {
+            filteredData.push(value);
+            filteredLabels.push(labels[index]);
+            filteredOriginalData.push(value);
+          }
+        });
+        
+        // If all values are zero, show a message or keep one entry
+        if (filteredData.length === 0) {
+          filteredData.push(0);
+          filteredLabels.push('No Data');
+          filteredOriginalData.push(0);
+        }
+        
+        // Handle negative values by using absolute values for chart display
+        const absData = filteredData.map(v => Math.abs(v));
+        
+        // Calculate total for center display
+        const total = centerValue !== null ? centerValue : absData.reduce((sum, val) => sum + val, 0);
+        
+        // Platform colors
+        const colors = {
+          'Instagram': '#E1306C',
+          'TikTok': '#00f2ea',
+          'YouTube': '#FF0000',
+          'No Data': '#666666'
+        };
+        
+        const backgroundColors = filteredLabels.map(label => colors[label] || '#0f0');
+        
+        // Center text plugin for total
+        const centerTextPlugin = {
+          id: 'centerText',
+          afterDraw: (chart) => {
+            const { width, height, ctx, chartArea } = chart;
+            if (!chartArea) return;
+            
+            ctx.save();
+            const fontSize = (height / 114).toFixed(2);
+            ctx.font = `bold ${fontSize}em monospace`;
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#0f0';
+            
+            const text = this.formatNumber(total);
+            const textX = Math.round((width - ctx.measureText(text).width) / 2);
+            // Use chartArea to properly center in the donut
+            const textY = (chartArea.top + chartArea.bottom) / 2;
+            
+            ctx.fillText(text, textX, textY);
+            ctx.restore();
+          }
+        };
+        
+        this.chartInstances[chartId] = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: filteredLabels,
+            datasets: [{
+              data: absData,
+              backgroundColor: backgroundColors,
+              borderColor: '#000',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  color: '#0f0',
+                  font: { family: 'monospace', size: 9 },
+                  padding: 8,
+                  boxWidth: 12,
+                  boxHeight: 12
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#0f0',
+                bodyColor: '#0f0',
+                borderColor: '#0f0',
+                borderWidth: 1,
+                callbacks: {
+                  label: (context) => {
+                    const label = context.label || '';
+                    const value = filteredOriginalData[context.dataIndex]; // Use filtered original value
+                    const total = filteredOriginalData.reduce((sum, val) => sum + Math.abs(val), 0);
+                    const percentage = total > 0 ? ((Math.abs(value) / total) * 100).toFixed(1) : 0;
+                    return `${label}: ${this.formatNumber(value)} (${percentage}%)`;
+                  }
+                }
+              },
+              datalabels: {
+                color: (context) => {
+                  // Use filtered data value to determine color
+                  const originalValue = filteredOriginalData[context.dataIndex];
+                  return originalValue >= 0 ? '#00ff00' : '#ff0000';
+                },
+                backgroundColor: (context) => {
+                  if (this.donutLabelStyle === 'background') {
+                    return 'rgba(0, 0, 0, 0.7)';
+                  } else if (this.donutLabelStyle === 'box') {
+                    return 'rgba(0, 0, 0, 0.8)';
+                  }
+                  return null;
+                },
+                borderColor: (context) => {
+                  if (this.donutLabelStyle === 'box') {
+                    const originalValue = data[context.dataIndex];
+                    return originalValue >= 0 ? '#00ff00' : '#ff0000';
+                  }
+                  return null;
+                },
+                borderWidth: (context) => {
+                  return this.donutLabelStyle === 'box' ? 2 : 0;
+                },
+                borderRadius: (context) => {
+                  return (this.donutLabelStyle === 'background' || this.donutLabelStyle === 'box') ? 4 : 0;
+                },
+                padding: (context) => {
+                  return (this.donutLabelStyle === 'background' || this.donutLabelStyle === 'box') ? 4 : 0;
+                },
+                font: {
+                  weight: 'bold',
+                  size: 14,
+                  family: 'monospace'
+                },
+                textShadowBlur: (context) => {
+                  return this.donutLabelStyle === 'shadow' ? 10 : 0;
+                },
+                textShadowColor: (context) => {
+                  return this.donutLabelStyle === 'shadow' ? '#000000' : null;
+                },
+                formatter: (value, context) => {
+                  const total = absData.reduce((sum, val) => sum + val, 0);
+                  const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                  // Hide 0.0 values
+                  if (+percentage === 0) {
+                    return '';
+                  }
+                  return percentage + '%';
+                }
+              }
+            }
+          },
+          plugins: [centerTextPlugin]
+        });
+      },
+      
+      // Create donut charts for Total Moon Media view
+      createTotalDonutCharts(container, data) {
+        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, platformPosts, totalComments, totalShares, followerChange } = data;
+        
+        // Create wrapper for stats and donuts with single export button
+        const statsDonutWrapper = document.createElement('div');
+        statsDonutWrapper.style.position = 'relative';
+        statsDonutWrapper.style.marginBottom = '2em';
+        
+        // Create stats grid with all 4 boxes (2x2 layout)
+        const statsGrid = document.createElement('div');
+        statsGrid.className = 'stats-summary';
+        statsGrid.style.marginBottom = '2em';
+        statsGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        
+        // Calculate values
+        const totalFollowersEnd = platformFollowers.instagram + platformFollowers.tiktok + platformFollowers.youtube;
+        const totalFollowersStart = (platformFollowers.instagram - platformFollowersChange.instagram) + 
+                                    (platformFollowers.tiktok - platformFollowersChange.tiktok) + 
+                                    (platformFollowers.youtube - platformFollowersChange.youtube);
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
+        // Total Followers box (top left)
+        const followersCard = document.createElement('div');
+        followersCard.className = 'stat-card';
+        followersCard.innerHTML = `
+          <h4>TOTAL FOLLOWERS</h4>
+          <div class="value">
+            ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
+          </div>
+        `;
+        statsGrid.appendChild(followersCard);
+        
+        // Average Views/Second box (top right)
+        const avgViewsCard = document.createElement('div');
+        avgViewsCard.className = 'stat-card';
+        const totalViews = platformViews.instagram + platformViews.tiktok + platformViews.youtube;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
+        avgViewsCard.innerHTML = `
+          <h4>AVERAGE VIEWS/SECOND</h4>
+          <div class="value">${avgViewsPerSecond}</div>
+        `;
+        statsGrid.appendChild(avgViewsCard);
+        
+        // Total Comments box (bottom left)
+        if (totalComments > 0) {
+          const commentsCard = document.createElement('div');
+          commentsCard.className = 'stat-card';
+          commentsCard.innerHTML = `
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          `;
+          statsGrid.appendChild(commentsCard);
+        }
+        
+        // Total Shares box (bottom right)
+        if (totalShares > 0) {
+          const sharesCard = document.createElement('div');
+          sharesCard.className = 'stat-card';
+          sharesCard.innerHTML = `
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
+          `;
+          statsGrid.appendChild(sharesCard);
+        }
+        
+        statsDonutWrapper.appendChild(statsGrid);
+        
+        // Create donut charts section (without title, just the charts)
+        const donutGrid = document.createElement('div');
+        donutGrid.className = 'donut-charts-grid';
+        
+        const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
+        
+        // Followers donut chart
+        const followerData = [
+          platformFollowers.instagram,
+          platformFollowers.tiktok,
+          platformFollowers.youtube
+        ];
+        this.createDonutChart(donutGrid, 'Total Followers by Platform', followerData, followerLabels, 'total-followers-donut', followerChange);
+        
+        // Views donut chart
+        const viewData = [
+          platformViews.instagram,
+          platformViews.tiktok,
+          platformViews.youtube
+        ];
+        this.createDonutChart(donutGrid, 'Total Views by Platform', viewData, followerLabels, 'total-views-donut');
+        
+        // Likes donut chart
+        const likeData = [
+          platformLikes.instagram,
+          platformLikes.tiktok,
+          platformLikes.youtube
+        ];
+        this.createDonutChart(donutGrid, 'Total Likes by Platform', likeData, followerLabels, 'total-likes-donut');
+        
+        // Posts donut chart
+        const postsData = [
+          platformPosts.instagram,
+          platformPosts.tiktok,
+          platformPosts.youtube
+        ];
+        this.createDonutChart(donutGrid, 'Total Posts by Platform', postsData, followerLabels, 'total-posts-donut');
+        
+        statsDonutWrapper.appendChild(donutGrid);
+        container.appendChild(statsDonutWrapper);
+      },
+      
+      // Create donut charts for individual client view
+      createClientDonutCharts(container, data) {
+        const { platformFollowers, platformFollowersChange, platformLikes, platformViews, platformPosts, totalComments, totalShares, followerChange } = data;
+        
+        // Create wrapper for stats and donuts
+        const statsDonutWrapper = document.createElement('div');
+        statsDonutWrapper.style.position = 'relative';
+        statsDonutWrapper.style.marginBottom = '2em';
+        
+        // Create stats grid with all 4 boxes (2x2 layout)
+        const statsGrid = document.createElement('div');
+        statsGrid.className = 'stats-summary';
+        statsGrid.style.marginBottom = '2em';
+        statsGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        
+        // Calculate values
+        const totalFollowersEnd = platformFollowers.instagram + platformFollowers.tiktok + platformFollowers.youtube;
+        const totalFollowersStart = (platformFollowers.instagram - platformFollowersChange.instagram) + 
+                                    (platformFollowers.tiktok - platformFollowersChange.tiktok) + 
+                                    (platformFollowers.youtube - platformFollowersChange.youtube);
+        const changePrefix = followerChange >= 0 ? '+' : '';
+        const changeColor = followerChange >= 0 ? '#00ff00' : '#ff0000';
+        
+        // Total Followers box (top left)
+        const followersCard = document.createElement('div');
+        followersCard.className = 'stat-card';
+        followersCard.innerHTML = `
+          <h4>TOTAL FOLLOWERS</h4>
+          <div class="value">
+            ${this.formatNumber(totalFollowersEnd)} <span style="color: ${changeColor}; font-size: 0.7em;">(${changePrefix}${this.formatNumber(followerChange)})</span>
+          </div>
+        `;
+        statsGrid.appendChild(followersCard);
+        
+        // Average Views/Second box (top right)
+        const avgViewsCard = document.createElement('div');
+        avgViewsCard.className = 'stat-card';
+        const totalViews = platformViews.instagram + platformViews.tiktok + platformViews.youtube;
+        const secondsInMonth = (this.currentMonthlyEndDate - this.currentMonthlyStartDate) / 1000;
+        const avgViewsPerSecond = secondsInMonth > 0 ? (totalViews / secondsInMonth).toFixed(2) : 0;
+        avgViewsCard.innerHTML = `
+          <h4>AVERAGE VIEWS/SECOND</h4>
+          <div class="value">${avgViewsPerSecond}</div>
+        `;
+        statsGrid.appendChild(avgViewsCard);
+        
+        // Total Comments box (bottom left)
+        if (totalComments > 0) {
+          const commentsCard = document.createElement('div');
+          commentsCard.className = 'stat-card';
+          commentsCard.innerHTML = `
+            <h4>TOTAL COMMENTS</h4>
+            <div class="value">${this.formatNumber(totalComments)}</div>
+          `;
+          statsGrid.appendChild(commentsCard);
+        }
+        
+        // Total Shares box (bottom right)
+        if (totalShares > 0) {
+          const sharesCard = document.createElement('div');
+          sharesCard.className = 'stat-card';
+          sharesCard.innerHTML = `
+            <h4>TOTAL SHARES</h4>
+            <div class="value">${this.formatNumber(totalShares)}</div>
+          `;
+          statsGrid.appendChild(sharesCard);
+        }
+        
+        statsDonutWrapper.appendChild(statsGrid);
+        
+        // Create donut charts section (without title, just the charts)
+        const donutGrid = document.createElement('div');
+        donutGrid.className = 'donut-charts-grid';
+        
+        const followerLabels = ['Instagram', 'TikTok', 'YouTube'];
+        
+        // Followers donut chart
+        const followerData = [
+          platformFollowers.instagram,
+          platformFollowers.tiktok,
+          platformFollowers.youtube
+        ];
+        if (followerData.some(v => v !== 0)) {
+          this.createDonutChart(donutGrid, 'Followers by Platform', followerData, followerLabels, 'client-followers-donut', followerChange);
+        }
+        
+        // Views donut chart
+        const viewData = [
+          platformViews.instagram,
+          platformViews.tiktok,
+          platformViews.youtube
+        ];
+        if (viewData.some(v => v !== 0)) {
+          this.createDonutChart(donutGrid, 'Views by Platform', viewData, followerLabels, 'client-views-donut');
+        }
+        
+        // Likes donut chart
+        const likeData = [
+          platformLikes.instagram,
+          platformLikes.tiktok,
+          platformLikes.youtube
+        ];
+        if (likeData.some(v => v !== 0)) {
+          this.createDonutChart(donutGrid, 'Likes by Platform', likeData, followerLabels, 'client-likes-donut');
+        }
+        
+        // Posts donut chart
+        const postsData = [
+          platformPosts.instagram,
+          platformPosts.tiktok,
+          platformPosts.youtube
+        ];
+        if (postsData.some(v => v !== 0)) {
+          this.createDonutChart(donutGrid, 'Posts by Platform', postsData, followerLabels, 'client-posts-donut');
+        }
+        
+        statsDonutWrapper.appendChild(donutGrid);
+        container.appendChild(statsDonutWrapper);
       },
       
       // Create normalized follower growth chart (starts at 0)
@@ -1456,22 +2238,81 @@
           if (dateKeys.length === 0) return;
           
           // Get initial value (baseline for normalization)
-          const initialValue = data[dateKeys[0]];
+          // Use the value at the start of the month range to ensure consistent baseline
+          const startDateKey = startDate.toISOString().split('T')[0];
+          let initialValue = data[startDateKey];
           
-          // Create normalized data points for all days in month
+          // If no data for exact start date, find the closest date at or after start
+          if (initialValue === undefined) {
+            for (const dateKey of dateKeys) {
+              if (dateKey >= startDateKey) {
+                initialValue = data[dateKey];
+                break;
+              }
+            }
+            // If still no value found, fall back to first available
+            if (initialValue === undefined) {
+              initialValue = data[dateKeys[0]];
+            }
+          }
+          
+          // Create normalized data points for all days in month with linear interpolation
           const chartData = [];
           let lastKnownValue = initialValue;
           
-          monthDates.forEach(date => {
+          monthDates.forEach((date, index) => {
             const dateKey = date.toISOString().split('T')[0];
             
             if (data[dateKey] !== undefined) {
+              // We have data for this date
               lastKnownValue = data[dateKey];
+              const normalizedValue = lastKnownValue - initialValue;
+              chartData.push({ x: date, y: normalizedValue });
+            } else {
+              // No data for this date - need to interpolate
+              // Find previous known value
+              let prevIndex = -1;
+              let prevValue = null;
+              for (let i = index - 1; i >= 0; i--) {
+                const prevDateKey = monthDates[i].toISOString().split('T')[0];
+                if (data[prevDateKey] !== undefined) {
+                  prevIndex = i;
+                  prevValue = data[prevDateKey];
+                  break;
+                }
+              }
+              
+              // Find next known value
+              let nextIndex = -1;
+              let nextValue = null;
+              for (let i = index + 1; i < monthDates.length; i++) {
+                const nextDateKey = monthDates[i].toISOString().split('T')[0];
+                if (data[nextDateKey] !== undefined) {
+                  nextIndex = i;
+                  nextValue = data[nextDateKey];
+                  break;
+                }
+              }
+              
+              let interpolatedValue;
+              if (prevValue !== null && nextValue !== null) {
+                // Linear interpolation between prev and next
+                const ratio = (index - prevIndex) / (nextIndex - prevIndex);
+                interpolatedValue = prevValue + (nextValue - prevValue) * ratio;
+              } else if (prevValue !== null) {
+                // No next value, use previous value
+                interpolatedValue = prevValue;
+              } else if (nextValue !== null) {
+                // No previous value, use next value
+                interpolatedValue = nextValue;
+              } else {
+                // No values at all, use initial
+                interpolatedValue = initialValue;
+              }
+              
+              const normalizedValue = interpolatedValue - initialValue;
+              chartData.push({ x: date, y: normalizedValue });
             }
-            
-            // Normalize: subtract initial value so chart starts at 0
-            const normalizedValue = lastKnownValue - initialValue;
-            chartData.push({ x: date, y: normalizedValue });
           });
           
           const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
@@ -1484,9 +2325,14 @@
             pointRadius: 3,
             pointHoverRadius: 5,
             tension: 0.4,
-            fill: false
+            fill: true
           });
         });
+        
+        // If no datasets were created, skip chart
+        if (datasets.length === 0) {
+          return;
+        }
         
         // Create the chart
         const chartDiv = document.createElement('div');
@@ -1498,13 +2344,7 @@
         const header = document.createElement('h3');
         header.textContent = title;
         
-        const exportBtn = document.createElement('button');
-        exportBtn.className = 'export-btn';
-        exportBtn.textContent = 'Export';
-        exportBtn.onclick = () => this.exportChart(chartId, title);
-        
         chartDiv.appendChild(header);
-        chartDiv.appendChild(exportBtn);
         chartDiv.appendChild(canvas);
         container.appendChild(chartDiv);
         
@@ -1540,6 +2380,9 @@
                     return context.dataset.label + ': +' + this.formatNumber(context.parsed.y);
                   }
                 }
+              },
+              datalabels: {
+                display: false
               }
             },
             scales: {
@@ -2349,7 +3192,7 @@
         this.chartInstances = {};
         
         document.getElementById('monthlyGraphsTitle').textContent = 
-          `Monthly Analytics: ${monthLabel}`;
+          `Monthly Reports: ${monthLabel}`;
         
         // Match accounts across platforms
         const matchedAccounts = this.matchAccountsAcrossPlatforms();
@@ -2396,7 +3239,7 @@
         const statsContainer = document.getElementById('monthlyStatsSummary');
         statsContainer.innerHTML = `
           <div class="stat-card">
-            <h4>TOTAL FOLLOWERS (END OF MONTH)</h4>
+            <h4>TOTAL FOLLOWERS</h4>
             <div class="value">${this.formatNumber(totalFollowersEnd)}</div>
           </div>
           <div class="stat-card">
@@ -3826,17 +4669,17 @@
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('charts').classList.remove('hidden');
         
-        // Update UI labels
-        let accountText = '';
-        if (this.isAllPlatforms) {
-          accountText = 'All MoonMedia Platforms';
-        } else if (this.isMoonMediaTotal) {
-          accountText = 'All MoonMedia';
-        } else {
-          accountText = '@' + this.selectedAccount;
-        }
+        // Show custom date selection for Custom Analytics
+        document.getElementById('customDateSelection').classList.remove('hidden');
         
-        document.getElementById('accountName').textContent = accountText;
+        // Update active button
+        ['custom-btn-365', 'custom-btn-180', 'custom-btn-30'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn) btn.classList.remove('active');
+        });
+        if (days === 365) document.getElementById('custom-btn-365')?.classList.add('active');
+        else if (days === 180) document.getElementById('custom-btn-180')?.classList.add('active');
+        else if (days === 30) document.getElementById('custom-btn-30')?.classList.add('active');
         
         let rangeText = '';
         if (days === 'all') rangeText = '(All Time)';
@@ -3848,11 +4691,212 @@
         }
         document.getElementById('timeRangeLabel').textContent = rangeText;
         
+        // Create tabs for easy switching between platforms/accounts
+        this.createCustomAnalyticsTabs();
+        
+        // Update account name display
+        this.updateAccountNameDisplay();
+        
         if (this.isAllPlatforms) {
           this.renderAllPlatformsDashboard();
         } else {
           this.renderDashboard();
         }
+      },
+      
+      // Create tabs for Custom Analytics after initial selection
+      createCustomAnalyticsTabs() {
+        const accountTabsContainer = document.getElementById('customAccountTabs');
+        const accountTabsButtons = document.getElementById('customAccountTabsButtons');
+        const platformTabsContainer = document.getElementById('customPlatformTabs');
+        const platformTabsButtons = document.getElementById('customPlatformTabsButtons');
+        
+        // Always show both tab rows for Custom Analytics
+        accountTabsContainer.classList.remove('hidden');
+        platformTabsContainer.classList.remove('hidden');
+        
+        // Create Account Tabs (first row)
+        accountTabsButtons.innerHTML = '';
+        
+        // Add "All Moon Media" tab
+        const allAccountTab = document.createElement('button');
+        allAccountTab.className = 'custom-tab';
+        if (this.selectedCustomAccount === 'all') {
+          allAccountTab.classList.add('active');
+        }
+        allAccountTab.textContent = 'All Moon Media';
+        allAccountTab.onclick = () => this.switchCustomAccount('all');
+        accountTabsButtons.appendChild(allAccountTab);
+        
+        // Add individual account tabs from ACCOUNT_MAPPING
+        Object.keys(this.ACCOUNT_MAPPING).forEach(accountKey => {
+          const tab = document.createElement('button');
+          tab.className = 'custom-tab';
+          if (accountKey === this.selectedCustomAccount) {
+            tab.classList.add('active');
+          }
+          tab.textContent = '@' + accountKey;
+          tab.onclick = () => this.switchCustomAccount(accountKey);
+          accountTabsButtons.appendChild(tab);
+        });
+        
+        // Create Platform Tabs (second row)
+        platformTabsButtons.innerHTML = '';
+        
+        const platforms = [
+          { key: 'all', label: 'All Platforms' },
+          { key: 'tiktok', label: 'TikTok' },
+          { key: 'instagram', label: 'Instagram' },
+          { key: 'youtube', label: 'YouTube' }
+        ];
+        
+        platforms.forEach(platform => {
+          const tab = document.createElement('button');
+          tab.className = 'custom-tab';
+          if ((this.isAllPlatforms && platform.key === 'all') || 
+              (!this.isAllPlatforms && this.selectedPlatform === platform.key)) {
+            tab.classList.add('active');
+          }
+          tab.textContent = platform.label;
+          tab.onclick = () => this.switchCustomPlatform(platform.key);
+          platformTabsButtons.appendChild(tab);
+        });
+      },
+      
+      // Switch account in Custom Analytics
+      async switchCustomAccount(accountKey) {
+        this.selectedCustomAccount = accountKey;
+        
+        // Update account tabs
+        const accountTabs = document.querySelectorAll('#customAccountTabsButtons .custom-tab');
+        accountTabs.forEach(tab => {
+          if ((accountKey === 'all' && tab.textContent === 'All Moon Media') ||
+              tab.textContent === '@' + accountKey) {
+            tab.classList.add('active');
+          } else {
+            tab.classList.remove('active');
+          }
+        });
+        
+        // Reload data for the selected account and current platform
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (accountKey === 'all') {
+          // Load all platforms data for all accounts
+          if (this.isAllPlatforms) {
+            await this.loadAllPlatformsData(this.selectedTimeRange);
+            this.renderAllPlatformsDashboard();
+          } else {
+            // Load single platform data for all accounts
+            await this.loadSheetData();
+            this.selectedAccount = 'MOONMEDIA_TOTAL';
+            this.isMoonMediaTotal = true;
+            this.processData(this.selectedTimeRange);
+            this.renderDashboard();
+          }
+        } else {
+          // Load specific account data for current platform
+          if (this.isAllPlatforms) {
+            // Need to switch to showing just this account across all platforms
+            // For now, we'll load all platforms and filter in rendering
+            await this.loadAllPlatformsData(this.selectedTimeRange);
+            this.renderSpecificAccountAllPlatforms(accountKey);
+          } else {
+            // Load single platform data for this specific account
+            await this.loadSheetData();
+            // Find the actual account name for this platform
+            const platformAccountName = this.ACCOUNT_MAPPING[accountKey][this.selectedPlatform];
+            if (platformAccountName) {
+              this.selectedAccount = platformAccountName;
+              this.isMoonMediaTotal = false;
+              this.processData(this.selectedTimeRange);
+              this.renderDashboard();
+            }
+          }
+        }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        this.updateAccountNameDisplay();
+      },
+      
+      // Switch platform in Custom Analytics
+      async switchCustomPlatform(platformKey) {
+        // Update platform tabs
+        const platformTabs = document.querySelectorAll('#customPlatformTabsButtons .custom-tab');
+        platformTabs.forEach(tab => {
+          if ((platformKey === 'all' && tab.textContent === 'All Platforms') ||
+              tab.textContent === platformKey.charAt(0).toUpperCase() + platformKey.slice(1)) {
+            tab.classList.add('active');
+          } else {
+            tab.classList.remove('active');
+          }
+        });
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('charts').classList.add('hidden');
+        
+        if (platformKey === 'all') {
+          this.isAllPlatforms = true;
+          this.selectedPlatform = 'all';
+          await this.loadAllPlatformsData(this.selectedTimeRange);
+          
+          if (this.selectedCustomAccount === 'all') {
+            this.renderAllPlatformsDashboard();
+          } else {
+            this.renderSpecificAccountAllPlatforms(this.selectedCustomAccount);
+          }
+        } else {
+          this.isAllPlatforms = false;
+          this.selectedPlatform = platformKey;
+          await this.loadSheetData();
+          
+          if (this.selectedCustomAccount === 'all') {
+            this.selectedAccount = 'MOONMEDIA_TOTAL';
+            this.isMoonMediaTotal = true;
+          } else {
+            const platformAccountName = this.ACCOUNT_MAPPING[this.selectedCustomAccount][platformKey];
+            if (platformAccountName) {
+              this.selectedAccount = platformAccountName;
+              this.isMoonMediaTotal = false;
+            }
+          }
+          
+          this.processData(this.selectedTimeRange);
+          this.renderDashboard();
+        }
+        
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('charts').classList.remove('hidden');
+        this.updateAccountNameDisplay();
+      },
+      
+      // Helper to update account name display
+      updateAccountNameDisplay() {
+        let accountText = '';
+        if (this.selectedCustomAccount === 'all') {
+          if (this.isAllPlatforms) {
+            accountText = 'All Moon Media - All Platforms';
+          } else {
+            accountText = 'All Moon Media - ' + this.selectedPlatform.charAt(0).toUpperCase() + this.selectedPlatform.slice(1);
+          }
+        } else {
+          if (this.isAllPlatforms) {
+            accountText = '@' + this.selectedCustomAccount + ' - All Platforms';
+          } else {
+            accountText = '@' + this.selectedCustomAccount + ' - ' + this.selectedPlatform.charAt(0).toUpperCase() + this.selectedPlatform.slice(1);
+          }
+        }
+        document.getElementById('accountName').textContent = accountText;
+      },
+      
+      // Render specific account across all platforms
+      renderSpecificAccountAllPlatforms(accountKey) {
+        // This is a simplified version - filters allPlatformsData to show only this account
+        // For now, just render the all platforms dashboard
+        // TODO: Implement filtering by specific account
+        this.renderAllPlatformsDashboard();
       },
       
       // Load all platforms data
@@ -5487,6 +6531,25 @@
         link.href = tempCanvas.toDataURL('image/png');
         link.click();
       },
+      
+      // Export donut charts
+      exportDonutCharts() {
+        alert('Exporting donut charts...');
+        // TODO: Implement donut charts export
+      },
+      
+      // Export stats boxes
+      exportStats() {
+        alert('Exporting stats...');
+        // TODO: Implement stats export
+      },
+      
+      // Export stats and donut charts together
+      exportStatsAndDonuts() {
+        alert('Exporting stats and donut charts...');
+        // TODO: Implement combined export
+      },
+      
       // Chart creation functions continued
       createLineChart(container, title, historyData, datasets, useLog, chartId) {
         const chartDiv = document.createElement('div');
@@ -5554,6 +6617,9 @@
                     return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
                   }
                 }
+              },
+              datalabels: {
+                display: false  // Disable grey text labels on data points
               }
             },
             scales: {
@@ -5772,6 +6838,9 @@
                     return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
                   }
                 }
+              },
+              datalabels: {
+                display: false  // Disable grey text labels on data points
               }
             },
             scales: scales
@@ -5859,6 +6928,9 @@
                            ', Likes: ' + this.formatNumber(context.parsed.y);
                   }
                 }
+              },
+              datalabels: {
+                display: false  // Disable grey text labels on data points
               }
             },
             scales: {
@@ -6271,6 +7343,9 @@
                     return context.dataset.label + ': ' + this.formatNumber(context.parsed.y);
                   }
                 }
+              },
+              datalabels: {
+                display: false  // Disable grey text labels on data points
               }
             },
             scales: {
@@ -6555,6 +7630,9 @@
         }
       }
     };
+    
+    // Expose app to global scope for inline event handlers
+    window.app = app;
     
     // Initialize the app when the page loads
     window.addEventListener('DOMContentLoaded', () => {
