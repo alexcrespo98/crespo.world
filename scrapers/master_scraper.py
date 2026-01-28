@@ -56,78 +56,62 @@ class MasterScraper:
         print("\n" + "="*70)
         print("🎯 MASTER SCRAPER - SELECT MODE")
         print("="*70)
-        print("\n1. Custom scrape (default: 100 posts per platform)")
-        print("2. Deep scrape (2 years back, with option for 'deep deep')")
-        print("3. Test mode (15 posts on @popdartsgame)")
+        print("\n1. Default mode (100 Instagram, 100 TikTok, ALL YouTube)")
+        print("2. Custom mode (specify posts per platform)")
+        print("3. Test mode (30 posts per account, terminal display only)")
         print()
         
         while True:
             choice = input("Enter your choice (1, 2, or 3): ").strip()
             
             if choice == '1' or choice == '':
-                num_input = input("\nHow many posts per account? (default 100): ").strip()
-                try:
-                    num_posts = int(num_input) if num_input else 100
-                    if num_posts > 0:
-                        return {
-                            'mode': 'custom',
-                            'max_posts': num_posts,
-                            'deep_scrape': False,
-                            'deep_deep': False,
-                            'test_mode': False
-                        }
-                    else:
-                        print("Please enter a positive number.")
-                except ValueError:
-                    print("Invalid input. Using default: 100")
-                    return {
-                        'mode': 'custom',
-                        'max_posts': 100,
-                        'deep_scrape': False,
-                        'deep_deep': False,
-                        'test_mode': False
-                    }
+                return {
+                    'mode': 'default',
+                    'instagram_posts': 100,
+                    'tiktok_posts': 100,
+                    'youtube_posts': None,  # None means all videos
+                    'test_mode': False,
+                    'test_account': None
+                }
                     
             elif choice == '2':
-                print("\n⚠️  Deep scrape options:")
-                print("   a) 2 years back (default)")
-                print("   b) All the way back (DEEP DEEP - takes significantly longer)")
-                deep_choice = input("\nEnter 'a' for 2 years or 'b' for all the way back (default=a): ").strip().lower()
+                # Ask for posts per platform
+                print("\n📊 Custom Mode - Specify posts per platform")
+                print("(Press Enter for default values)")
                 
-                if deep_choice == 'b':
-                    confirm = input("\n🔥 DEEP DEEP mode will scrape ALL available posts. This takes significantly longer. Continue? (y/n): ").strip().lower()
-                    if confirm == 'y':
-                        print("  ✅ Deep deep mode selected - will scrape ALL available posts!")
-                        return {
-                            'mode': 'deep',
-                            'max_posts': None,
-                            'deep_scrape': True,
-                            'deep_deep': True,
-                            'test_mode': False
-                        }
-                    else:
-                        continue
+                instagram_input = input("\nInstagram posts per account [100]: ").strip()
+                instagram_posts = int(instagram_input) if instagram_input else 100
+                
+                tiktok_input = input("TikTok posts per account [100]: ").strip()
+                tiktok_posts = int(tiktok_input) if tiktok_input else 100
+                
+                youtube_input = input("YouTube videos per channel (Enter 'all' for all videos) [all]: ").strip().lower()
+                if youtube_input == '' or youtube_input == 'all':
+                    youtube_posts = None  # All videos
                 else:
-                    confirm = input("\n⚠️  Deep scrape will go back 2 years. Continue? (y/n): ").strip().lower()
-                    if confirm == 'y':
-                        print("  ✅ Deep mode selected - will scrape back 2 years")
-                        return {
-                            'mode': 'deep',
-                            'max_posts': None,
-                            'deep_scrape': True,
-                            'deep_deep': False,
-                            'test_mode': False
-                        }
-                    else:
-                        continue
+                    try:
+                        youtube_posts = int(youtube_input)
+                    except ValueError:
+                        print("Invalid input, using 'all'")
+                        youtube_posts = None
+                
+                return {
+                    'mode': 'custom',
+                    'instagram_posts': instagram_posts,
+                    'tiktok_posts': tiktok_posts,
+                    'youtube_posts': youtube_posts,
+                    'test_mode': False,
+                    'test_account': None
+                }
                         
             elif choice == '3':
                 return {
                     'mode': 'test',
-                    'max_posts': 15,
-                    'deep_scrape': False,
-                    'deep_deep': False,
-                    'test_mode': True
+                    'instagram_posts': 30,
+                    'tiktok_posts': 30,
+                    'youtube_posts': 30,
+                    'test_mode': True,
+                    'test_account': 'popdartsgame'  # Only test this account
                 }
                 
             else:
@@ -179,18 +163,29 @@ class MasterScraper:
         try:
             scraper = InstagramScraper()
             
-            if config['test_mode']:
-                print(f"\n🧪 TEST MODE: Scraping 15 reels from @{self.DEFAULT_TEST_ACCOUNT}")
-            elif config['deep_scrape']:
-                if config['deep_deep']:
-                    print("\n🔥 DEEP DEEP MODE: Scraping ALL available reels")
-                else:
-                    print("\n🔍 DEEP MODE: Scraping back 2 years")
-            else:
-                print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} reels per account")
+            # For test mode, we'll just use a smaller number and not save
+            # The scraper already has auto_mode which skips prompts and saves to files
+            # So we'll just run it normally and let it work
+            max_posts = config['instagram_posts']
             
-            # Pass parameters to scraper
-            scraper.run(max_posts=config['max_posts'], auto_mode=auto_mode, auto_retry=auto_retry)
+            if config['test_mode']:
+                print(f"\n🧪 TEST MODE: Scraping {max_posts} posts from @{config['test_account']}")
+                # Temporarily replace ACCOUNTS_TO_TRACK with just the test account
+                import instagram_scraper
+                original_accounts = instagram_scraper.ACCOUNTS_TO_TRACK[:]
+                instagram_scraper.ACCOUNTS_TO_TRACK = [config['test_account']]
+                try:
+                    scraper.run(max_posts=max_posts, auto_mode=True, auto_retry=auto_retry)
+                finally:
+                    # Restore original accounts
+                    instagram_scraper.ACCOUNTS_TO_TRACK = original_accounts
+            else:
+                if max_posts:
+                    print(f"\n📊 Scraping {max_posts} posts per account")
+                else:
+                    print(f"\n📊 Scraping all available posts per account")
+                # Pass parameters to scraper - it will handle everything
+                scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -208,15 +203,26 @@ class MasterScraper:
         try:
             scraper = YoutubeScraper()
             
-            if config['test_mode']:
-                print(f"\n🧪 TEST MODE: Scraping 10 videos from @{YOUTUBE_ACCOUNTS[0]}")
-            elif config['deep_scrape']:
-                print("\n🔥 DEEP MODE: Scraping ALL available videos")
-            else:
-                print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} videos per channel")
+            max_posts = config['youtube_posts']
             
-            # Pass parameters to scraper
-            scraper.run(max_posts=config['max_posts'], auto_mode=auto_mode, auto_retry=auto_retry)
+            if config['test_mode']:
+                print(f"\n🧪 TEST MODE: Scraping {max_posts} videos from @{config['test_account']}")
+                # Temporarily replace ACCOUNTS_TO_TRACK with just the test account
+                import youtube_scraper
+                original_accounts = youtube_scraper.ACCOUNTS_TO_TRACK[:]
+                youtube_scraper.ACCOUNTS_TO_TRACK = [config['test_account']]
+                try:
+                    scraper.run(max_posts=max_posts, auto_mode=True, auto_retry=auto_retry)
+                finally:
+                    # Restore original accounts
+                    youtube_scraper.ACCOUNTS_TO_TRACK = original_accounts
+            else:
+                if max_posts is None:
+                    print("\n📊 Scraping ALL videos from each channel")
+                else:
+                    print(f"\n📊 Scraping {max_posts} videos per channel")
+                # Pass parameters to scraper - it will handle everything
+                scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -234,15 +240,18 @@ class MasterScraper:
         try:
             scraper = TikTokScraper()
             
-            if config['test_mode']:
-                print(f"\n🧪 TEST MODE: Scraping 15 videos from @{self.DEFAULT_TEST_ACCOUNT}")
-            elif config['deep_scrape']:
-                print("\n🔥 DEEP MODE: Scraping ALL available videos")
-            else:
-                print(f"\n📊 CUSTOM MODE: Scraping {config['max_posts']} videos per account")
+            max_posts = config['tiktok_posts']
             
-            # Pass parameters to scraper
-            scraper.run(max_posts=config['max_posts'], auto_mode=auto_mode, auto_retry=auto_retry)
+            if config['test_mode']:
+                print(f"\n🧪 TEST MODE: Scraping {max_posts} posts from @{config['test_account']}")
+                # For TikTok, the scraper auto-detects accounts from Excel
+                # In test mode, it already has built-in test mode that scrapes popdartsgame
+                # We can pass max_posts directly
+                scraper.run(max_posts=max_posts, auto_mode=True, auto_retry=auto_retry)
+            else:
+                print(f"\n📊 Scraping {max_posts} posts per account")
+                # Pass parameters to scraper - it will handle everything
+                scraper.run(max_posts=max_posts, auto_mode=auto_mode, auto_retry=auto_retry)
             
             return True
             
@@ -290,13 +299,17 @@ class MasterScraper:
         print("\n" + "="*70)
         print("📋 CONFIGURATION SUMMARY")
         print("="*70)
-        mode_name = {
-            'custom': f"Custom ({config['max_posts']} posts)",
-            'deep': "Deep (2 years)" if not config['deep_deep'] else "Deep Deep (ALL posts)",
-            'test': "Test (15 posts)"
+        mode_desc = {
+            'default': f"Default (Instagram: 100, TikTok: 100, YouTube: ALL)",
+            'custom': f"Custom (Instagram: {config['instagram_posts']}, TikTok: {config['tiktok_posts']}, YouTube: {config['youtube_posts'] or 'ALL'})",
+            'test': f"Test (30 posts per account - for quick verification)"
         }
-        print(f"   Mode: {mode_name[config['mode']]}")
+        print(f"   Mode: {mode_desc[config['mode']]}")
         print(f"   Platforms: {', '.join([p.capitalize() for p, enabled in platforms.items() if enabled])}")
+        
+        if config['test_mode']:
+            print("\n⚠️  TEST MODE: Scraping smaller samples. Files WILL be updated.")
+            print("   Tip: You can interrupt (Ctrl+C) after seeing initial results.")
         
         input("\n▶️  Press ENTER to start scraping...")
         
@@ -304,17 +317,17 @@ class MasterScraper:
         
         # Run each selected platform's scraper
         if platforms.get('instagram'):
-            results['instagram'] = self.run_instagram_scraper(config)
+            results['instagram'] = self.run_instagram_scraper(config, auto_mode=False, auto_retry=False)
             if self.interrupted:
                 return
         
         if platforms.get('youtube'):
-            results['youtube'] = self.run_youtube_scraper(config)
+            results['youtube'] = self.run_youtube_scraper(config, auto_mode=False, auto_retry=False)
             if self.interrupted:
                 return
         
         if platforms.get('tiktok'):
-            results['tiktok'] = self.run_tiktok_scraper(config)
+            results['tiktok'] = self.run_tiktok_scraper(config, auto_mode=False, auto_retry=False)
             if self.interrupted:
                 return
         
@@ -331,19 +344,24 @@ def main():
     )
     parser.add_argument(
         '--mode',
-        choices=['custom', 'deep', 'test'],
-        help='Scraping mode: custom (default 100 posts), deep (2 years/all), or test (15 posts)'
+        choices=['default', 'custom', 'test'],
+        help='Scraping mode: default (100/100/all), custom (specify per platform), or test (30 posts, terminal only)'
     )
     parser.add_argument(
-        '--posts',
+        '--instagram-posts',
         type=int,
         default=100,
-        help='Number of posts to scrape per account (only for custom mode)'
+        help='Number of Instagram posts to scrape per account (only for custom mode)'
     )
     parser.add_argument(
-        '--deep-deep',
-        action='store_true',
-        help='For deep mode: scrape ALL posts instead of 2 years'
+        '--tiktok-posts',
+        type=int,
+        default=100,
+        help='Number of TikTok posts to scrape per account (only for custom mode)'
+    )
+    parser.add_argument(
+        '--youtube-posts',
+        help='Number of YouTube videos to scrape per channel, or "all" for all videos (only for custom mode)'
     )
     parser.add_argument(
         '--platform',
@@ -357,9 +375,9 @@ def main():
         help='Run in non-interactive mode (no prompts, use defaults)'
     )
     parser.add_argument(
-        '--auto-retry-followers',
+        '--auto-retry-once',
         action='store_true',
-        help='Automatically retry failed follower scrapes once'
+        help='Automatically retry failed scrapes once'
     )
     
     args = parser.parse_args()
@@ -368,62 +386,103 @@ def main():
     scraper = MasterScraper()
     
     try:
-        # If command line args provided or non-interactive mode, use them; otherwise use interactive mode
-        if args.mode or args.non_interactive:
+        # Use command-line mode if any CLI args provided
+        use_cli_mode = (args.mode is not None) or args.non_interactive
+        
+        if use_cli_mode:
             # Build config from command line args
-            if args.mode:
+            if args.mode == 'default':
                 config = {
-                    'mode': args.mode,
-                    'max_posts': args.posts if args.mode == 'custom' else (15 if args.mode == 'test' else None),
-                    'deep_scrape': args.mode == 'deep',
-                    'deep_deep': args.deep_deep and args.mode == 'deep',
-                    'test_mode': args.mode == 'test'
+                    'mode': 'default',
+                    'instagram_posts': 100,
+                    'tiktok_posts': 100,
+                    'youtube_posts': None,  # All videos
+                    'test_mode': False,
+                    'test_account': None
                 }
-            else:
-                # Default config for non-interactive mode
+            elif args.mode == 'test':
+                config = {
+                    'mode': 'test',
+                    'instagram_posts': 30,
+                    'tiktok_posts': 30,
+                    'youtube_posts': 30,
+                    'test_mode': True,
+                    'test_account': 'popdartsgame'  # Only test this account
+                }
+            elif args.mode == 'custom' or args.non_interactive:
+                # Parse youtube_posts argument
+                if args.youtube_posts:
+                    if args.youtube_posts.lower() == 'all':
+                        youtube_posts = None
+                    else:
+                        try:
+                            youtube_posts = int(args.youtube_posts)
+                        except ValueError:
+                            print(f"Warning: Invalid youtube-posts value '{args.youtube_posts}', using 'all'")
+                            youtube_posts = None
+                else:
+                    youtube_posts = None  # Default to all for custom mode
+                
                 config = {
                     'mode': 'custom',
-                    'max_posts': args.posts,
-                    'deep_scrape': False,
-                    'deep_deep': False,
-                    'test_mode': False
+                    'instagram_posts': args.instagram_posts,
+                    'tiktok_posts': args.tiktok_posts,
+                    'youtube_posts': youtube_posts,
+                    'test_mode': False,
+                    'test_account': None
                 }
             
-            platforms = {
-                'instagram': args.platform in ['all', 'instagram'],
-                'youtube': args.platform in ['all', 'youtube'],
-                'tiktok': args.platform in ['all', 'tiktok']
-            }
+            # For test mode, always test all platforms
+            if config['mode'] == 'test':
+                platforms = {
+                    'instagram': True,
+                    'youtube': True,
+                    'tiktok': True
+                }
+            else:
+                platforms = {
+                    'instagram': args.platform in ['all', 'instagram'],
+                    'youtube': args.platform in ['all', 'youtube'],
+                    'tiktok': args.platform in ['all', 'tiktok']
+                }
             
             print("\n" + "="*70)
             print("🚀 MASTER SOCIAL MEDIA SCRAPER v2.0")
             print("="*70)
             print(f"\nMode: {config['mode']}")
-            print(f"Platform: {args.platform}")
-            print(f"Posts: {config['max_posts']}")
+            if config['mode'] == 'test':
+                print(f"Testing account: @{config['test_account']}")
+                print(f"Posts per platform: 30")
+                print(f"Platforms: All (Instagram, YouTube, TikTok)")
+            else:
+                print(f"Platform: {args.platform}")
+                print(f"Instagram: {config['instagram_posts']} posts")
+                print(f"TikTok: {config['tiktok_posts']} posts")
+                print(f"YouTube: {config['youtube_posts'] if config['youtube_posts'] else 'ALL'} videos")
             if args.non_interactive:
                 print("Non-interactive: Yes")
-            if args.auto_retry_followers:
-                print("Auto-retry followers: Yes")
+            if args.auto_retry_once:
+                print("Auto-retry: Yes")
             
             results = {}
             
             if platforms.get('instagram'):
                 results['instagram'] = scraper.run_instagram_scraper(
-                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_followers
+                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_once
                 )
             
             if platforms.get('youtube'):
                 results['youtube'] = scraper.run_youtube_scraper(
-                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_followers
+                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_once
                 )
             
             if platforms.get('tiktok'):
                 results['tiktok'] = scraper.run_tiktok_scraper(
-                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_followers
+                    config, auto_mode=args.non_interactive, auto_retry=args.auto_retry_once
                 )
             
-            scraper.display_summary(platforms, results)
+            if not config['test_mode']:
+                scraper.display_summary(platforms, results)
         else:
             # Interactive mode
             scraper.run()
