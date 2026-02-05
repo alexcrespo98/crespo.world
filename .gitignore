@@ -36,3 +36,7 @@ auto_scraper.pid
 .env
 .env
 .env
+
+# Temporary Chrome user data directories
+chrome_user_data_*
+chrome_incognito_user_data_*
