@@ -409,6 +409,7 @@
     
     // Configuration constants
     const MAX_RECIPE_CONTENT_LENGTH = 8000;  // Limit content to avoid OpenAI token limits
+    const MIN_VALID_CONTENT_LENGTH = 100;    // Minimum content length to validate successful fetch
     
     // ========================================================================
     // HOW IT WORKS:
@@ -449,6 +450,36 @@
       } catch {
         return false;
       }
+    }
+
+    // Helper function to classify fetch errors for better user feedback
+    function classifyFetchError(error, failedProxies) {
+      let errorMessage = '';
+      
+      // Check for network/CORS errors
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorMessage += 'Network error detected - this is likely caused by:\n\n';
+        errorMessage += '• Ad blockers or content blockers preventing proxy access\n';
+        errorMessage += '• Browser extensions blocking requests\n';
+        errorMessage += '• Network connectivity issues\n\n';
+        errorMessage += 'Try: Disable ad blockers, use a direct recipe URL, or try a different browser.';
+      }
+      // Check for timeout errors
+      else if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+        errorMessage += 'Request timed out. The recipe site may be slow or unavailable.\n\n';
+        errorMessage += 'Try: Use a different recipe URL or try again later.';
+      }
+      // Generic proxy failure
+      else {
+        errorMessage += `All proxy services failed (${failedProxies.join(', ')}).\n\n`;
+        errorMessage += 'This could be due to:\n';
+        errorMessage += '• The recipe site blocking automated access\n';
+        errorMessage += '• Content blockers preventing proxy access\n';
+        errorMessage += '• Temporary proxy service issues\n\n';
+        errorMessage += 'Try: Disable ad blockers or paste a direct recipe URL from a popular site like AllRecipes.com.';
+      }
+      
+      return errorMessage;
     }
 
     // Helper function to retry with exponential backoff
@@ -530,7 +561,7 @@
           text = text.replace(/\s+/g, ' ').trim();
           
           // Validate we got meaningful content
-          if (text.length < 100) {
+          if (text.length < MIN_VALID_CONTENT_LENGTH) {
             throw new Error('Retrieved content too short, likely not a valid recipe page');
           }
           
@@ -548,27 +579,7 @@
       // All proxies failed - provide detailed error message
       console.error('All CORS proxies failed. Last error:', lastError);
       
-      let errorMessage = 'Failed to fetch recipe. ';
-      
-      // Determine error type
-      if (lastError.name === 'TypeError' && lastError.message.includes('Failed to fetch')) {
-        errorMessage += 'Network error detected - this is likely caused by:\n\n';
-        errorMessage += '• Ad blockers or content blockers preventing proxy access\n';
-        errorMessage += '• Browser extensions blocking requests\n';
-        errorMessage += '• Network connectivity issues\n\n';
-        errorMessage += 'Try: Disable ad blockers, use a direct recipe URL, or try a different browser.';
-      } else if (lastError.message.includes('timeout')) {
-        errorMessage += 'Request timed out. The recipe site may be slow or unavailable.\n\n';
-        errorMessage += 'Try: Use a different recipe URL or try again later.';
-      } else {
-        errorMessage += `All proxy services failed (${failedProxies.join(', ')}).\n\n`;
-        errorMessage += 'This could be due to:\n';
-        errorMessage += '• The recipe site blocking automated access\n';
-        errorMessage += '• Content blockers preventing proxy access\n';
-        errorMessage += '• Temporary proxy service issues\n\n';
-        errorMessage += 'Try: Disable ad blockers or paste a direct recipe URL from a popular site like AllRecipes.com.';
-      }
-      
+      const errorMessage = 'Failed to fetch recipe. ' + classifyFetchError(lastError, failedProxies);
       throw new Error(errorMessage);
     }
 
@@ -639,16 +650,7 @@
         if (!html) {
           console.error('All search proxies failed. Last error:', lastError);
           
-          let errorMessage = 'Could not search for recipes. ';
-          
-          if (lastError.name === 'TypeError' && lastError.message.includes('Failed to fetch')) {
-            errorMessage += 'Network error - likely caused by ad blockers or content blockers.\n\n';
-            errorMessage += 'Try: Disable ad blockers or paste a direct recipe URL instead.';
-          } else {
-            errorMessage += `All search proxies failed (${failedProxies.join(', ')}).\n\n`;
-            errorMessage += 'Try: Disable ad blockers or paste a direct recipe URL from AllRecipes, Food Network, etc.';
-          }
-          
+          const errorMessage = 'Could not search for recipes. ' + classifyFetchError(lastError, failedProxies);
           throw new Error(errorMessage);
         }
         
