@@ -38,15 +38,34 @@ pip install -r recipeasy_requirements.txt
 
 # Set your OpenAI API key (choose one method):
 
-# Method A: Environment variable (temporary - only for current session)
-export OPENAI_API_KEY="sk-your-key-here"
+# Method A: Edit the API file directly (easiest)
+nano recipeasy_api.py
+# Find line ~43 that says: OPENAI_API_KEY = "PASTE_YOUR_OPENAI_API_KEY_HERE"
+# Replace with: OPENAI_API_KEY = "sk-your-key-here"
+# Save and exit (Ctrl+X, Y, Enter)
 
-# Method B: .env file (recommended - persists)
+# Method B: .env file (recommended for security)
 echo "OPENAI_API_KEY=sk-your-key-here" > .env
 
-# Method C: Add to your shell profile (permanent)
-echo 'export OPENAI_API_KEY="sk-your-key-here"' >> ~/.bashrc
-source ~/.bashrc
+# Method C: Environment variable (temporary - only for current session)
+export OPENAI_API_KEY="sk-your-key-here"
+
+# Set your API protection key (choose one method):
+
+# Method A: Edit the API file directly (easiest)
+nano recipeasy_api.py
+# Find line ~37 that says: API_KEY = "PASTE_YOUR_API_KEY_HERE"
+# Replace with a secure random string (generate with password manager)
+# Example: API_KEY = "secure-random-key-abc123xyz789"
+# Save and exit (Ctrl+X, Y, Enter)
+
+# Method B: .env file (add to existing or create new)
+echo "RECIPEASY_API_KEY=secure-random-key-abc123xyz789" >> .env
+
+# Method C: Environment variable
+export RECIPEASY_API_KEY="secure-random-key-abc123xyz789"
+
+# IMPORTANT: Remember this API key - you'll need it for the frontend!
 ```
 
 ### 3. Run the API Server
@@ -75,24 +94,51 @@ tailscale ip -4
 
 ### 5. Configure the Frontend
 
-1. Go to https://crespo.world/recipeasy.html (once deployed)
-2. In the "API Configuration" section:
-   - Enter your API endpoint URL:
-     - Format: `http://[your-tailscale-ip]:5000/simplify`
-     - Example: `http://100.64.1.2:5000/simplify`
-     - Or use Tailscale hostname: `http://homeserver.tailnet.ts.net:5000/simplify`
-3. Click "Save Configuration"
-4. Click "Test Connection" to verify it works
+**IMPORTANT: The frontend now requires an API key for authentication!**
+
+1. Open `recipeasy.html` in a text editor
+2. Find the configuration section at the top of the `<script>` tag (around line 390)
+3. Update these values:
+   ```javascript
+   // Update the API endpoint URL
+   const API_ENDPOINT = 'http://[your-tailscale-ip]:5000/simplify';
+   // Example: 'http://100.64.1.2:5000/simplify'
+   
+   // Update the API key (MUST match the one you set in recipeasy_api.py!)
+   const API_KEY = 'secure-random-key-abc123xyz789';
+   ```
+4. Save the file
+
+**Security Note**: The API key will be visible in the HTML source code. This is acceptable 
+for personal use since:
+- The HTML file is already password-protected (password: 0990)
+- Only you have access to your Tailscale network
+- Only you can view the HTML source
+
+For public deployments, you would need a proper server-side authentication system.
 
 ### 6. Test It Out
 
-1. Enter this URL in the recipe input:
+1. Open https://crespo.world/recipeasy.html in your browser
+2. Enter the password: 0990
+3. Try one of these options:
+   
+   **Option A: Enter a direct recipe URL:**
    ```
    https://joyfoodsunshine.com/the-most-amazing-chocolate-chip-cookies/
    ```
-2. Click "Simplify Recipe"
-3. Wait 5-10 seconds for the AI to process
-4. You should see ingredients first, then numbered instructions!
+   
+   **Option B: Enter a search query (the API will find a recipe for you!):**
+   ```
+   chocolate chip cookies
+   ```
+   
+4. Click "Simplify Recipe"
+5. Wait 5-10 seconds for the AI to process
+6. You should see ingredients first, then numbered instructions!
+
+**NEW FEATURE**: You can now enter either a recipe URL OR just search for a recipe by name. 
+The API will automatically search popular recipe sites and simplify the first result!
 
 ## Running the API Permanently
 
@@ -125,6 +171,7 @@ Type=simple
 User=your-username
 WorkingDirectory=/home/your-username/recipeasy-api
 Environment="OPENAI_API_KEY=sk-your-key-here"
+Environment="RECIPEASY_API_KEY=your-secure-api-key-here"
 ExecStart=/usr/bin/python3 /home/your-username/recipeasy-api/recipeasy_api.py
 Restart=always
 
@@ -170,10 +217,27 @@ nohup python recipeasy_api.py > recipeasy.log 2>&1 &
 
 ## Security Notes
 
+### Authentication & Access Control
+✅ **Protected**: `/simplify` endpoint requires API key authentication
+✅ **Protected**: Frontend has password protection (password: 0990)
 ✅ **Safe**: API only accessible via Tailscale (private network)
 ✅ **Safe**: No public internet exposure needed
-✅ **Safe**: API key stored on your homeserver only
-⚠️ **Note**: API has no authentication - only you and people on your Tailscale network can access it
+✅ **Safe**: OpenAI API key stored on your homeserver only
+
+### API Key Security
+⚠️ **Important**: 
+- The API key in the HTML file is visible to anyone who can access the file
+- This is acceptable for personal use on a Tailscale network
+- Change the default API key to something unique and secure
+- Use a password manager to generate a strong random key
+- Do NOT share your API key publicly
+
+### Recommendations
+- Keep your Tailscale network private
+- Don't expose port 5000 to the public internet
+- Use the `.env` file method to store sensitive keys
+- Regularly rotate your API keys
+- Monitor your OpenAI API usage and costs
 
 ## Architecture Overview
 
