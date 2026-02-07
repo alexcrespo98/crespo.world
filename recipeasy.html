@@ -402,7 +402,13 @@
     const CORRECT_PASSWORD = '0990';
     
     // OpenAI API Key - embedded directly in browser-only version
+    // WARNING: This key is visible to anyone who can view the HTML source!
+    // The problem statement explicitly requires embedding the API key for browser-only operation.
+    // This is acceptable ONLY for password-protected personal use with billing limits set in OpenAI.
     const OPENAI_API_KEY = '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';
+    
+    // Configuration constants
+    const MAX_RECIPE_CONTENT_LENGTH = 8000;  // Limit content to avoid OpenAI token limits
     
     // ========================================================================
     // HOW IT WORKS:
@@ -482,8 +488,8 @@
           // Clean up whitespace
           text = text.replace(/\s+/g, ' ').trim();
           
-          // Limit to 8000 characters to avoid token limits
-          return text.substring(0, 8000);
+          // Limit to avoid OpenAI token limits
+          return text.substring(0, MAX_RECIPE_CONTENT_LENGTH);
         } catch (error) {
           console.error(`CORS proxy failed:`, error);
           lastError = error;
@@ -492,7 +498,8 @@
       }
       
       // All proxies failed
-      throw new Error(`Failed to fetch recipe. CORS proxies may be blocked by your browser's content blocker. Try disabling ad blockers or use a direct recipe URL. Error: ${lastError.message}`);
+      console.error('All CORS proxies failed. Last error:', lastError);
+      throw new Error(`Failed to fetch recipe. Content blockers may be preventing access. Try disabling ad blockers or use a direct recipe URL.`);
     }
 
     // Search for a recipe and return the first valid URL
@@ -528,7 +535,8 @@
         }
         
         if (!html) {
-          throw new Error(`Could not search for recipes. CORS proxies may be blocked by your browser's content blocker. Try disabling ad blockers or paste a direct recipe URL instead.`);
+          console.error('All search proxies failed. Last error:', lastError);
+          throw new Error(`Could not search for recipes. Content blockers may be preventing access. Try disabling ad blockers or paste a direct recipe URL instead.`);
         }
         
         // Parse the search results
