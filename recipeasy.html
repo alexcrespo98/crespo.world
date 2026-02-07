@@ -410,6 +410,11 @@
     // - You can enter EITHER a recipe URL or a search query (like "chocolate chip cookies")
     // - The browser uses a CORS proxy to fetch recipes from the web
     // - OpenAI API is called directly from the browser to simplify recipes
+    //
+    // IMPORTANT NOTES:
+    // - CORS proxies may be blocked by ad blockers or content blockers
+    // - If search doesn't work, try disabling ad blockers or use a direct recipe URL
+    // - Direct recipe URLs (from AllRecipes, Food Network, etc.) are more reliable
     // ========================================================================
     // END CONFIGURATION
     // ========================================================================
@@ -442,50 +447,89 @@
 
     // Fetch recipe content from a URL using CORS proxy
     async function fetchRecipeContent(url) {
-      try {
-        // Use AllOrigins CORS proxy to bypass CORS restrictions
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-        const response = await fetch(proxyUrl);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch recipe: ${response.statusText}`);
+      // List of CORS proxies to try (in order of preference)
+      const corsProxies = [
+        (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+      ];
+      
+      let lastError;
+      
+      // Try each CORS proxy
+      for (const proxyFn of corsProxies) {
+        try {
+          const proxyUrl = proxyFn(url);
+          const response = await fetch(proxyUrl);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch recipe: ${response.statusText}`);
+          }
+          
+          const html = await response.text();
+          
+          // Parse HTML to extract text content
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          // Remove unwanted elements
+          const unwanted = doc.querySelectorAll('script, style, nav, header, footer, iframe, noscript');
+          unwanted.forEach(el => el.remove());
+          
+          // Get text content
+          let text = doc.body.textContent || '';
+          
+          // Clean up whitespace
+          text = text.replace(/\s+/g, ' ').trim();
+          
+          // Limit to 8000 characters to avoid token limits
+          return text.substring(0, 8000);
+        } catch (error) {
+          console.error(`CORS proxy failed:`, error);
+          lastError = error;
+          continue; // Try next proxy
         }
-        
-        const html = await response.text();
-        
-        // Parse HTML to extract text content
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        
-        // Remove unwanted elements
-        const unwanted = doc.querySelectorAll('script, style, nav, header, footer, iframe, noscript');
-        unwanted.forEach(el => el.remove());
-        
-        // Get text content
-        let text = doc.body.textContent || '';
-        
-        // Clean up whitespace
-        text = text.replace(/\s+/g, ' ').trim();
-        
-        // Limit to 8000 characters to avoid token limits
-        return text.substring(0, 8000);
-      } catch (error) {
-        console.error('Error fetching recipe content:', error);
-        throw new Error(`Failed to fetch recipe: ${error.message}`);
       }
+      
+      // All proxies failed
+      throw new Error(`Failed to fetch recipe. CORS proxies may be blocked by your browser's content blocker. Try disabling ad blockers or use a direct recipe URL. Error: ${lastError.message}`);
     }
 
     // Search for a recipe and return the first valid URL
     async function searchRecipe(query) {
+      // List of CORS proxies to try
+      const corsProxies = [
+        (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+      ];
+      
       try {
         showStatus(`Searching for "${query}"... <span class="spinner"></span>`, 'loading');
         
         // Use Google search with CORS proxy
         const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query + ' recipe')}`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(searchUrl)}`;
         
-        const response = await fetch(proxyUrl);
-        const html = await response.text();
+        let html;
+        let lastError;
+        
+        // Try each CORS proxy
+        for (const proxyFn of corsProxies) {
+          try {
+            const proxyUrl = proxyFn(searchUrl);
+            const response = await fetch(proxyUrl);
+            html = await response.text();
+            break; // Success, exit loop
+          } catch (error) {
+            console.error(`Search proxy failed:`, error);
+            lastError = error;
+            continue; // Try next proxy
+          }
+        }
+        
+        if (!html) {
+          throw new Error(`Could not search for recipes. CORS proxies may be blocked by your browser's content blocker. Try disabling ad blockers or paste a direct recipe URL instead.`);
+        }
         
         // Parse the search results
         const parser = new DOMParser();
