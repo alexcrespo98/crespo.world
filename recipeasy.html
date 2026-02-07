@@ -451,28 +451,69 @@
       }
     }
 
+    // Helper function to retry with exponential backoff
+    async function retryWithBackoff(fn, maxRetries = 2) {
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          return await fn();
+        } catch (error) {
+          if (attempt === maxRetries) {
+            throw error;
+          }
+          // Exponential backoff: 1s, 2s
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`Retry attempt ${attempt + 1} after ${delay}ms delay`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
     // Fetch recipe content from a URL using CORS proxy
     async function fetchRecipeContent(url) {
       // List of CORS proxies to try (in order of preference)
       const corsProxies = [
-        (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-        (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-        (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+        {
+          name: 'allorigins.win',
+          url: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+          extract: (response) => response.json().then(data => data.contents)
+        },
+        {
+          name: 'thingproxy.freeboard.io',
+          url: (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+          extract: (response) => response.text()
+        },
+        {
+          name: 'corsproxy.io',
+          url: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+          extract: (response) => response.text()
+        },
+        {
+          name: 'codetabs.com',
+          url: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+          extract: (response) => response.text()
+        }
       ];
       
       let lastError;
+      let failedProxies = [];
       
-      // Try each CORS proxy
-      for (const proxyFn of corsProxies) {
+      // Try each CORS proxy with retry logic
+      for (const proxy of corsProxies) {
         try {
-          const proxyUrl = proxyFn(url);
-          const response = await fetch(proxyUrl);
+          console.log(`Trying CORS proxy: ${proxy.name}`);
           
-          if (!response.ok) {
-            throw new Error(`Failed to fetch recipe: ${response.statusText}`);
-          }
-          
-          const html = await response.text();
+          const html = await retryWithBackoff(async () => {
+            const proxyUrl = proxy.url(url);
+            const response = await fetch(proxyUrl, {
+              signal: AbortSignal.timeout(15000) // 15 second timeout
+            });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await proxy.extract(response);
+          });
           
           // Parse HTML to extract text content
           const parser = new DOMParser();
@@ -488,27 +529,73 @@
           // Clean up whitespace
           text = text.replace(/\s+/g, ' ').trim();
           
+          // Validate we got meaningful content
+          if (text.length < 100) {
+            throw new Error('Retrieved content too short, likely not a valid recipe page');
+          }
+          
+          console.log(`Success with ${proxy.name}`);
           // Limit to avoid OpenAI token limits
           return text.substring(0, MAX_RECIPE_CONTENT_LENGTH);
         } catch (error) {
-          console.error(`CORS proxy failed:`, error);
+          console.error(`${proxy.name} failed:`, error.message);
+          failedProxies.push(proxy.name);
           lastError = error;
           continue; // Try next proxy
         }
       }
       
-      // All proxies failed
+      // All proxies failed - provide detailed error message
       console.error('All CORS proxies failed. Last error:', lastError);
-      throw new Error(`Failed to fetch recipe. Content blockers may be preventing access. Try disabling ad blockers or use a direct recipe URL.`);
+      
+      let errorMessage = 'Failed to fetch recipe. ';
+      
+      // Determine error type
+      if (lastError.name === 'TypeError' && lastError.message.includes('Failed to fetch')) {
+        errorMessage += 'Network error detected - this is likely caused by:\n\n';
+        errorMessage += '• Ad blockers or content blockers preventing proxy access\n';
+        errorMessage += '• Browser extensions blocking requests\n';
+        errorMessage += '• Network connectivity issues\n\n';
+        errorMessage += 'Try: Disable ad blockers, use a direct recipe URL, or try a different browser.';
+      } else if (lastError.message.includes('timeout')) {
+        errorMessage += 'Request timed out. The recipe site may be slow or unavailable.\n\n';
+        errorMessage += 'Try: Use a different recipe URL or try again later.';
+      } else {
+        errorMessage += `All proxy services failed (${failedProxies.join(', ')}).\n\n`;
+        errorMessage += 'This could be due to:\n';
+        errorMessage += '• The recipe site blocking automated access\n';
+        errorMessage += '• Content blockers preventing proxy access\n';
+        errorMessage += '• Temporary proxy service issues\n\n';
+        errorMessage += 'Try: Disable ad blockers or paste a direct recipe URL from a popular site like AllRecipes.com.';
+      }
+      
+      throw new Error(errorMessage);
     }
 
     // Search for a recipe and return the first valid URL
     async function searchRecipe(query) {
       // List of CORS proxies to try
       const corsProxies = [
-        (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-        (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-        (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+        {
+          name: 'allorigins.win',
+          url: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+          extract: (response) => response.json().then(data => data.contents)
+        },
+        {
+          name: 'thingproxy.freeboard.io',
+          url: (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+          extract: (response) => response.text()
+        },
+        {
+          name: 'corsproxy.io',
+          url: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+          extract: (response) => response.text()
+        },
+        {
+          name: 'codetabs.com',
+          url: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+          extract: (response) => response.text()
+        }
       ];
       
       try {
@@ -519,16 +606,31 @@
         
         let html;
         let lastError;
+        let failedProxies = [];
         
-        // Try each CORS proxy
-        for (const proxyFn of corsProxies) {
+        // Try each CORS proxy with retry logic
+        for (const proxy of corsProxies) {
           try {
-            const proxyUrl = proxyFn(searchUrl);
-            const response = await fetch(proxyUrl);
-            html = await response.text();
+            console.log(`Trying search with proxy: ${proxy.name}`);
+            
+            html = await retryWithBackoff(async () => {
+              const proxyUrl = proxy.url(searchUrl);
+              const response = await fetch(proxyUrl, {
+                signal: AbortSignal.timeout(15000) // 15 second timeout
+              });
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
+              return await proxy.extract(response);
+            });
+            
+            console.log(`Search successful with ${proxy.name}`);
             break; // Success, exit loop
           } catch (error) {
-            console.error(`Search proxy failed:`, error);
+            console.error(`Search with ${proxy.name} failed:`, error.message);
+            failedProxies.push(proxy.name);
             lastError = error;
             continue; // Try next proxy
           }
@@ -536,7 +638,18 @@
         
         if (!html) {
           console.error('All search proxies failed. Last error:', lastError);
-          throw new Error(`Could not search for recipes. Content blockers may be preventing access. Try disabling ad blockers or paste a direct recipe URL instead.`);
+          
+          let errorMessage = 'Could not search for recipes. ';
+          
+          if (lastError.name === 'TypeError' && lastError.message.includes('Failed to fetch')) {
+            errorMessage += 'Network error - likely caused by ad blockers or content blockers.\n\n';
+            errorMessage += 'Try: Disable ad blockers or paste a direct recipe URL instead.';
+          } else {
+            errorMessage += `All search proxies failed (${failedProxies.join(', ')}).\n\n`;
+            errorMessage += 'Try: Disable ad blockers or paste a direct recipe URL from AllRecipes, Food Network, etc.';
+          }
+          
+          throw new Error(errorMessage);
         }
         
         // Parse the search results
