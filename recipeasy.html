@@ -351,7 +351,7 @@
         <input 
           type="text" 
           id="recipeInput" 
-          placeholder=""
+          placeholder="Try: 'chocolate chip cookies' or paste a recipe URL"
         />
       </div>
 
@@ -384,9 +384,51 @@
   </div>
 
   <script>
-    // Password protection
+    // ========================================================================
+    // CONFIGURATION - UPDATE THESE VALUES
+    // ========================================================================
+    
+    // SECURITY NOTE:
+    // This HTML file stores the API key in client-side JavaScript, which means
+    // anyone who can access this HTML file can see the API key in the page source.
+    // This is acceptable ONLY if:
+    // 1. You're running this on a personal device/server
+    // 2. You trust all users who have access to this HTML file
+    // 3. You're already using the password protection below
+    // 
+    // For public-facing deployments, consider implementing proper server-side
+    // authentication with user login and session tokens instead.
+    
+    // Password for accessing the recipeasy web interface
     const CORRECT_PASSWORD = '0990';
-    const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
+    
+    // API Configuration
+    // IMPORTANT: Update these values to match your server setup
+    
+    // 1. API_ENDPOINT: The URL of your recipeasy API server
+    //    - If running locally: 'http://localhost:5000/simplify'
+    //    - If running on a server: 'http://YOUR_SERVER_IP:5000/simplify'
+    //    - If using Tailscale: 'http://YOUR_TAILSCALE_IP:5000/simplify'
+    const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';  // TODO: Update to your server URL
+    
+    // 2. API_KEY: Authentication key for the /simplify endpoint
+    //    - This MUST match the API_KEY set in recipeasy_api.py
+    //    - Use a secure random string (generate one with a password manager)
+    //    - This key will be sent in the Authorization header as: "Bearer YOUR_API_KEY"
+    //    - WARNING: This will be visible in the page source to anyone who can access this HTML file
+    const API_KEY = 'PASTE_YOUR_API_KEY_HERE';  // TODO: Replace with your API key (must match server)
+    
+    // ========================================================================
+    // HOW IT WORKS:
+    // - You can enter EITHER a recipe URL or a search query (like "chocolate chip cookies")
+    // - If you enter a search query, the API will automatically find a recipe for you
+    // - The API searches popular sites like AllRecipes, Food Network, etc.
+    // - Then it parses and simplifies the recipe using AI
+    // ========================================================================
+    // END CONFIGURATION
+    // ========================================================================
+
+    // Password protection
 
     function checkPassword() {
       const passwordInput = document.getElementById('passwordInput');
@@ -429,6 +471,7 @@
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'Authorization': `Bearer ${API_KEY}`,  // Include API key for authentication
           },
           body: JSON.stringify({
             input: input,

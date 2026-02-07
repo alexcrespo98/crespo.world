@@ -5,10 +5,9 @@ Runs on your homeserver and simplifies recipes from any website.
 
 Usage:
     1. Install dependencies: pip install flask openai requests beautifulsoup4 flask-cors python-dotenv
-    2. Set your OpenAI API key: export OPENAI_API_KEY="your-key-here"
-       OR create a .env file with: OPENAI_API_KEY=your-key-here
+    2. Configure your API keys (see below)
     3. Run: python recipeasy_api.py
-    4. Access at: http://localhost:5000 (or via your Tailscale IP)
+    4. Access at: http://localhost:5000 (or via your server IP)
 """
 
 import os
@@ -16,30 +15,96 @@ import re
 import requests
 import subprocess
 from urllib.parse import unquote
+from functools import wraps
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
 from dotenv import load_dotenv
-import os
 
 # Load environment variables from .env file
 load_dotenv()
 
+# ============================================================================
+# CONFIGURATION - PASTE YOUR API KEYS HERE
+# ============================================================================
 
-# Try to load .env file if available
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+# API KEY FOR ENDPOINT PROTECTION
+# This key protects your /simplify endpoint from unauthorized access.
+# IMPORTANT: Change this to a secure random string!
+# Example: Use a password manager to generate a strong random key.
+# This key must match the API_KEY in your recipeasy.html file.
+API_KEY = "PASTE_YOUR_API_KEY_HERE"  # TODO: Replace with your secure API key
+
+# OPENAI API KEY
+# Get your OpenAI API key from: https://platform.openai.com/api-keys
+# Your key should start with: sk-proj-... or sk-...
+# You can set this here OR use environment variable OPENAI_API_KEY
+OPENAI_API_KEY = "PASTE_YOUR_OPENAI_API_KEY_HERE"  # TODO: Replace with your OpenAI API key (sk-...)
+
+# ============================================================================
 
 app = Flask(__name__)
 # Enable CORS for all routes, allowing requests from crespo.world and any origin
 CORS(app, origins=["*"])
 
+# Get OpenAI API key from hardcoded value or environment variable
+# Priority: 1) Environment variable, 2) Hardcoded value above
+openai_key = os.environ.get("OPENAI_API_KEY")
+if not openai_key or openai_key == "":
+    openai_key = OPENAI_API_KEY if OPENAI_API_KEY != "PASTE_YOUR_OPENAI_API_KEY_HERE" else None
+
 # Initialize OpenAI client
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+client = OpenAI(api_key=openai_key) if openai_key else None
+
+# Get API key for endpoint protection
+# Priority: 1) Environment variable, 2) Hardcoded value above
+api_protection_key = os.environ.get("RECIPEASY_API_KEY") or API_KEY
+
+
+def require_api_key(f):
+    """
+    Decorator to require API key authentication for endpoints.
+    
+    API key should be provided in the request headers as:
+    - Authorization: Bearer YOUR_API_KEY
+    - OR X-API-Key: YOUR_API_KEY
+    
+    Returns 401 Unauthorized if API key is missing or incorrect.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check if API key is configured
+        if api_protection_key == "PASTE_YOUR_API_KEY_HERE":
+            return jsonify({
+                'error': 'API key not configured on server. Please set API_KEY in recipeasy_api.py or RECIPEASY_API_KEY environment variable.'
+            }), 500
+        
+        # Get API key from request headers
+        auth_header = request.headers.get('Authorization', '')
+        api_key_header = request.headers.get('X-API-Key', '')
+        
+        # Extract key from Authorization: Bearer format
+        provided_key = None
+        if auth_header.startswith('Bearer '):
+            provided_key = auth_header[7:]  # Remove 'Bearer ' prefix
+        elif api_key_header:
+            provided_key = api_key_header
+        
+        # Validate API key
+        if not provided_key:
+            return jsonify({
+                'error': 'Missing API key. Include "Authorization: Bearer YOUR_API_KEY" or "X-API-Key: YOUR_API_KEY" in request headers.'
+            }), 401
+        
+        if provided_key != api_protection_key:
+            return jsonify({
+                'error': 'Invalid API key.'
+            }), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
 
 # Recipe site patterns for search and validation
 RECIPE_SITE_PATTERNS = [
@@ -299,8 +364,21 @@ def health():
     })
 
 @app.route('/simplify', methods=['POST'])
+@require_api_key
 def simplify():
-    """Main endpoint to simplify recipes"""
+    """
+    Main endpoint to simplify recipes (requires API key authentication).
+    
+    Accepts BOTH:
+    - Direct recipe URLs (e.g., "https://www.allrecipes.com/recipe/...")
+    - Search queries (e.g., "chocolate chip cookies", "butter chicken recipe")
+    
+    When a search query is provided, the API will:
+    1. Search popular recipe sites (AllRecipes, Food Network, etc.)
+    2. Find the first matching recipe URL
+    3. Fetch and parse that recipe
+    4. Return the simplified version
+    """
     try:
         data = request.json
         if not data or 'input' not in data:
@@ -315,10 +393,12 @@ def simplify():
         unit_preference = data.get('unit_preference', 'original')  # 'metric', 'imperial', or 'original'
         
         # Determine if input is URL or search query
+        # The API intelligently handles BOTH URLs and search queries!
         if is_url(user_input):
             recipe_url = user_input
             print(f"Processing URL: {recipe_url}")
         else:
+            # Not a URL - treat as search query and find a recipe
             print(f"Searching for recipe: {user_input}")
             recipe_url = search_recipe(user_input)
             if not recipe_url:
@@ -370,12 +450,26 @@ def index():
     })
 
 if __name__ == '__main__':
-    # Check for API key
-    if not os.environ.get("OPENAI_API_KEY"):
+    # Check for OpenAI API key
+    if not openai_key:
         print("=" * 60)
-        print("WARNING: OPENAI_API_KEY environment variable not set!")
-        print("Set it with: export OPENAI_API_KEY='your-key-here'")
-        print("Or create a .env file with: OPENAI_API_KEY=your-key-here")
+        print("WARNING: OPENAI_API_KEY not configured!")
+        print("Set it by:")
+        print("  1. Edit OPENAI_API_KEY in recipeasy_api.py (line ~42)")
+        print("  2. OR set environment variable: export OPENAI_API_KEY='sk-...'")
+        print("  3. OR create .env file with: OPENAI_API_KEY=sk-...")
+        print("Get your key from: https://platform.openai.com/api-keys")
+        print("=" * 60)
+    
+    # Check for API protection key
+    if api_protection_key == "PASTE_YOUR_API_KEY_HERE":
+        print("=" * 60)
+        print("WARNING: API_KEY not configured!")
+        print("Your /simplify endpoint will be protected but not functional")
+        print("until you set a secure API key.")
+        print("Set it by:")
+        print("  1. Edit API_KEY in recipeasy_api.py (line ~35)")
+        print("  2. OR set environment variable: export RECIPEASY_API_KEY='your-secure-key'")
         print("=" * 60)
     
     # Get Tailscale IP
@@ -392,11 +486,15 @@ if __name__ == '__main__':
         print(f"\nTailscale IP detected: {tailscale_ip}")
         print(f"API endpoint: http://{tailscale_ip}:5000/simplify")
     else:
-        print(f"  - http://[your-tailscale-ip]:5000")
+        print(f"  - http://[your-server-ip]:5000")
         print(f"\nNote: Tailscale IP could not be auto-detected")
     print("\nEndpoints:")
-    print("  GET  /health   - Health check")
-    print("  POST /simplify - Simplify recipe")
+    print("  GET  /health   - Health check (public, no auth required)")
+    print("  POST /simplify - Simplify recipe (requires API key)")
+    print("\nAuthentication:")
+    print("  The /simplify endpoint requires an API key in the request headers:")
+    print("  - Authorization: Bearer YOUR_API_KEY")
+    print("  - OR X-API-Key: YOUR_API_KEY")
     print("=" * 60 + "\n")
     
     # Run the server
