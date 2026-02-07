@@ -384,9 +384,33 @@
   </div>
 
   <script>
-    // Password protection
+    // ========================================================================
+    // CONFIGURATION - UPDATE THESE VALUES
+    // ========================================================================
+    
+    // Password for accessing the recipeasy web interface
     const CORRECT_PASSWORD = '0990';
-    const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';
+    
+    // API Configuration
+    // IMPORTANT: Update these values to match your server setup
+    
+    // 1. API_ENDPOINT: The URL of your recipeasy API server
+    //    - If running locally: 'http://localhost:5000/simplify'
+    //    - If running on a server: 'http://YOUR_SERVER_IP:5000/simplify'
+    //    - If using Tailscale: 'http://YOUR_TAILSCALE_IP:5000/simplify'
+    const API_ENDPOINT = 'http://100.88.148.108:5000/simplify';  // TODO: Update to your server URL
+    
+    // 2. API_KEY: Authentication key for the /simplify endpoint
+    //    - This MUST match the API_KEY set in recipeasy_api.py
+    //    - Use a secure random string (generate one with a password manager)
+    //    - This key will be sent in the Authorization header as: "Bearer YOUR_API_KEY"
+    const API_KEY = 'PASTE_YOUR_API_KEY_HERE';  // TODO: Replace with your API key (must match server)
+    
+    // ========================================================================
+    // END CONFIGURATION
+    // ========================================================================
+
+    // Password protection
 
     function checkPassword() {
       const passwordInput = document.getElementById('passwordInput');
@@ -429,6 +453,7 @@
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'Authorization': `Bearer ${API_KEY}`,  // Include API key for authentication
           },
           body: JSON.stringify({
             input: input,
