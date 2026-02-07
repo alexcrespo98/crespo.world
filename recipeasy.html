@@ -412,6 +412,7 @@
     const MIN_VALID_CONTENT_LENGTH = 100;    // Minimum content length to validate successful fetch
     const FETCH_TIMEOUT_MS = 15000;          // Timeout for fetch requests (15 seconds)
     const MAX_RETRIES_PER_PROXY = 2;         // Number of retry attempts per proxy
+    const BACKOFF_BASE_DELAY_MS = 1000;      // Base delay for exponential backoff (1 second)
     
     // CORS proxy configuration - shared between fetch and search functions
     const CORS_PROXIES = [
@@ -421,7 +422,7 @@
         extract: async (response) => {
           const data = await response.json();
           if (!data || !data.contents) {
-            throw new Error('Invalid response format from allorigins.win proxy');
+            throw new Error('Invalid response format from allorigins.win proxy: missing contents field');
           }
           return data.contents;
         }
@@ -516,6 +517,8 @@
 
     // Helper function to retry with exponential backoff
     async function retryWithBackoff(fn, maxRetries = MAX_RETRIES_PER_PROXY) {
+      // maxRetries is the number of retry attempts after the initial try
+      // Total attempts = 1 (initial) + maxRetries
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           return await fn();
@@ -523,8 +526,8 @@
           if (attempt === maxRetries) {
             throw error;
           }
-          // Exponential backoff: 1s, 2s
-          const delay = Math.pow(2, attempt) * 1000;
+          // Exponential backoff: base delay * 2^attempt (e.g., 1s, 2s, 4s...)
+          const delay = Math.pow(2, attempt) * BACKOFF_BASE_DELAY_MS;
           console.log(`Retry attempt ${attempt + 1} after ${delay}ms delay`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
