@@ -388,6 +388,17 @@
     // CONFIGURATION - UPDATE THESE VALUES
     // ========================================================================
     
+    // SECURITY NOTE:
+    // This HTML file stores the API key in client-side JavaScript, which means
+    // anyone who can access this HTML file can see the API key in the page source.
+    // This is acceptable ONLY if:
+    // 1. You're running this on a personal device/server
+    // 2. You trust all users who have access to this HTML file
+    // 3. You're already using the password protection below
+    // 
+    // For public-facing deployments, consider implementing proper server-side
+    // authentication with user login and session tokens instead.
+    
     // Password for accessing the recipeasy web interface
     const CORRECT_PASSWORD = '0990';
     
@@ -404,6 +415,7 @@
     //    - This MUST match the API_KEY set in recipeasy_api.py
     //    - Use a secure random string (generate one with a password manager)
     //    - This key will be sent in the Authorization header as: "Bearer YOUR_API_KEY"
+    //    - WARNING: This will be visible in the page source to anyone who can access this HTML file
     const API_KEY = 'PASTE_YOUR_API_KEY_HERE';  // TODO: Replace with your API key (must match server)
     
     // ========================================================================

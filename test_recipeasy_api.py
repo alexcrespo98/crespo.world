@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 Test script for recipeasy API authentication and functionality
+
+WARNING: This uses a test API key for demonstration purposes only.
+DO NOT use this key in production! Generate a secure random key for production use.
 """
 
 import requests
@@ -8,7 +11,7 @@ import json
 
 # Test configuration
 BASE_URL = "http://localhost:5000"
-TEST_API_KEY = "test-key-12345"  # Will use for testing
+TEST_API_KEY = "test-key-12345"  # FOR TESTING ONLY - Use secure random key in production!
 
 def test_health_endpoint():
     """Test that /health endpoint is publicly accessible"""
