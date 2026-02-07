@@ -410,6 +410,38 @@
     // Configuration constants
     const MAX_RECIPE_CONTENT_LENGTH = 8000;  // Limit content to avoid OpenAI token limits
     const MIN_VALID_CONTENT_LENGTH = 100;    // Minimum content length to validate successful fetch
+    const FETCH_TIMEOUT_MS = 15000;          // Timeout for fetch requests (15 seconds)
+    const MAX_RETRIES_PER_PROXY = 2;         // Number of retry attempts per proxy
+    
+    // CORS proxy configuration - shared between fetch and search functions
+    const CORS_PROXIES = [
+      {
+        name: 'allorigins.win',
+        url: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        extract: async (response) => {
+          const data = await response.json();
+          if (!data || !data.contents) {
+            throw new Error('Invalid response format from allorigins.win proxy');
+          }
+          return data.contents;
+        }
+      },
+      {
+        name: 'thingproxy.freeboard.io',
+        url: (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+        extract: (response) => response.text()
+      },
+      {
+        name: 'corsproxy.io',
+        url: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        extract: (response) => response.text()
+      },
+      {
+        name: 'codetabs.com',
+        url: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        extract: (response) => response.text()
+      }
+    ];
     
     // ========================================================================
     // HOW IT WORKS:
@@ -483,7 +515,7 @@
     }
 
     // Helper function to retry with exponential backoff
-    async function retryWithBackoff(fn, maxRetries = 2) {
+    async function retryWithBackoff(fn, maxRetries = MAX_RETRIES_PER_PROXY) {
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           return await fn();
@@ -501,42 +533,18 @@
 
     // Fetch recipe content from a URL using CORS proxy
     async function fetchRecipeContent(url) {
-      // List of CORS proxies to try (in order of preference)
-      const corsProxies = [
-        {
-          name: 'allorigins.win',
-          url: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-          extract: (response) => response.json().then(data => data.contents)
-        },
-        {
-          name: 'thingproxy.freeboard.io',
-          url: (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
-          extract: (response) => response.text()
-        },
-        {
-          name: 'corsproxy.io',
-          url: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-          extract: (response) => response.text()
-        },
-        {
-          name: 'codetabs.com',
-          url: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-          extract: (response) => response.text()
-        }
-      ];
-      
       let lastError;
       let failedProxies = [];
       
       // Try each CORS proxy with retry logic
-      for (const proxy of corsProxies) {
+      for (const proxy of CORS_PROXIES) {
         try {
           console.log(`Trying CORS proxy: ${proxy.name}`);
           
           const html = await retryWithBackoff(async () => {
             const proxyUrl = proxy.url(url);
             const response = await fetch(proxyUrl, {
-              signal: AbortSignal.timeout(15000) // 15 second timeout
+              signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
             });
             
             if (!response.ok) {
@@ -585,30 +593,6 @@
 
     // Search for a recipe and return the first valid URL
     async function searchRecipe(query) {
-      // List of CORS proxies to try
-      const corsProxies = [
-        {
-          name: 'allorigins.win',
-          url: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-          extract: (response) => response.json().then(data => data.contents)
-        },
-        {
-          name: 'thingproxy.freeboard.io',
-          url: (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
-          extract: (response) => response.text()
-        },
-        {
-          name: 'corsproxy.io',
-          url: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-          extract: (response) => response.text()
-        },
-        {
-          name: 'codetabs.com',
-          url: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-          extract: (response) => response.text()
-        }
-      ];
-      
       try {
         showStatus(`Searching for "${query}"... <span class="spinner"></span>`, 'loading');
         
@@ -620,14 +604,14 @@
         let failedProxies = [];
         
         // Try each CORS proxy with retry logic
-        for (const proxy of corsProxies) {
+        for (const proxy of CORS_PROXIES) {
           try {
             console.log(`Trying search with proxy: ${proxy.name}`);
             
             html = await retryWithBackoff(async () => {
               const proxyUrl = proxy.url(searchUrl);
               const response = await fetch(proxyUrl, {
-                signal: AbortSignal.timeout(15000) // 15 second timeout
+                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
               });
               
               if (!response.ok) {
