@@ -40,7 +40,7 @@ API_KEY = "PASTE_YOUR_API_KEY_HERE"  # TODO: Replace with your secure API key
 # Get your OpenAI API key from: https://platform.openai.com/api-keys
 # Your key should start with: sk-proj-... or sk-...
 # You can set this here OR use environment variable OPENAI_API_KEY
-OPENAI_API_KEY = "PASTE_YOUR_OPENAI_API_KEY_HERE"  # TODO: Replace with your OpenAI API key (sk-...)
+OPENAI_API_KEY = " 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"  # TODO: Replace with your OpenAI API key (sk-...)
 
 # ============================================================================
 
