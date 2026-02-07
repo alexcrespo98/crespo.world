@@ -366,7 +366,19 @@ def health():
 @app.route('/simplify', methods=['POST'])
 @require_api_key
 def simplify():
-    """Main endpoint to simplify recipes (requires API key authentication)"""
+    """
+    Main endpoint to simplify recipes (requires API key authentication).
+    
+    Accepts BOTH:
+    - Direct recipe URLs (e.g., "https://www.allrecipes.com/recipe/...")
+    - Search queries (e.g., "chocolate chip cookies", "butter chicken recipe")
+    
+    When a search query is provided, the API will:
+    1. Search popular recipe sites (AllRecipes, Food Network, etc.)
+    2. Find the first matching recipe URL
+    3. Fetch and parse that recipe
+    4. Return the simplified version
+    """
     try:
         data = request.json
         if not data or 'input' not in data:
@@ -381,10 +393,12 @@ def simplify():
         unit_preference = data.get('unit_preference', 'original')  # 'metric', 'imperial', or 'original'
         
         # Determine if input is URL or search query
+        # The API intelligently handles BOTH URLs and search queries!
         if is_url(user_input):
             recipe_url = user_input
             print(f"Processing URL: {recipe_url}")
         else:
+            # Not a URL - treat as search query and find a recipe
             print(f"Searching for recipe: {user_input}")
             recipe_url = search_recipe(user_input)
             if not recipe_url:

@@ -351,7 +351,7 @@
         <input 
           type="text" 
           id="recipeInput" 
-          placeholder=""
+          placeholder="Try: 'chocolate chip cookies' or paste a recipe URL"
         />
       </div>
 
@@ -406,6 +406,12 @@
     //    - This key will be sent in the Authorization header as: "Bearer YOUR_API_KEY"
     const API_KEY = 'PASTE_YOUR_API_KEY_HERE';  // TODO: Replace with your API key (must match server)
     
+    // ========================================================================
+    // HOW IT WORKS:
+    // - You can enter EITHER a recipe URL or a search query (like "chocolate chip cookies")
+    // - If you enter a search query, the API will automatically find a recipe for you
+    // - The API searches popular sites like AllRecipes, Food Network, etc.
+    // - Then it parses and simplifies the recipe using AI
     // ========================================================================
     // END CONFIGURATION
     // ========================================================================
