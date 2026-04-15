@@ -7,6 +7,7 @@
 // INPUT_PULLUP is enabled, so no external resistor is needed.
 
 const uint8_t BUTTON_PIN = 2;
+// 20ms keeps bounce suppression while preserving minimum press-to-keystroke latency.
 const unsigned long DEBOUNCE_MS = 20;
 
 bool buttonPressed = false;
@@ -25,6 +26,7 @@ void loop() {
   // Fast-path press detection: send space immediately on the first LOW edge.
   // Then lock out additional edges for DEBOUNCE_MS.
   if (!waitingForRelease && !buttonPressed && isPressed) {
+    // Keep explicit press/release to minimize and control key-down timing on the edge.
     Keyboard.press(' ');
     Keyboard.release(' ');
 

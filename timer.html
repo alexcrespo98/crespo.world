@@ -148,13 +148,16 @@
     const overlayEl = document.getElementById('overlay');
     const overlayValueEl = document.getElementById('overlay-value');
 
+    // Forward cycle by index: .00 -> .000 -> .0 -> back to .00.
     const precisionModes = [2, 3, 1];
+    // Forward cycle by index: 10s -> 30s -> 1m -> 5m -> 1s -> 5s -> back to 10s.
     const targets = [10000, 30000, 60000, 300000, 1000, 5000];
     const STYLE_BY_PRECISION = { 1: 'easy', 2: 'normal', 3: 'hard' };
 
     const HOLD_MS = 500;
     const DOUBLE_MS = 300;
     const TRIPLE_MS = 400;
+    const TOUCH_MOUSE_SUPPRESSION_MS = 700;
 
     let precisionIndex = 0;
     let targetIndex = 0;
@@ -190,7 +193,7 @@
 
     function formatTime(ms, digits = getPrecisionDigits()) {
       const factor = 10 ** digits;
-      const roundedTotal = Math.round((ms / 1000) * factor);
+      const roundedTotal = toRoundedUnits(ms, factor);
       const roundedMs = (roundedTotal / factor) * 1000;
 
       const totalSeconds = Math.floor(roundedMs / 1000);
@@ -199,6 +202,10 @@
       const sub = roundedTotal % factor;
 
       return `${minutes}:${String(seconds).padStart(2, '0')}.${String(sub).padStart(digits, '0')}`;
+    }
+
+    function toRoundedUnits(ms, factor) {
+      return Math.round((ms / 1000) * factor);
     }
 
     function currentElapsed(now) {
@@ -233,7 +240,7 @@
     function isWinningStop(ms) {
       const digits = getPrecisionDigits();
       const factor = 10 ** digits;
-      return Math.round((ms / 1000) * factor) === Math.round((targets[targetIndex] / 1000) * factor);
+      return toRoundedUnits(ms, factor) === toRoundedUnits(targets[targetIndex], factor);
     }
 
     function stop(now) {
@@ -364,7 +371,7 @@
     }
 
     function shouldIgnoreMouse() {
-      return performance.now() - lastTouchAt < 700;
+      return performance.now() - lastTouchAt < TOUCH_MOUSE_SUPPRESSION_MS;
     }
 
     function onTouchStart(event) {
