@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>timer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+
+    #timer {
+      font-size: clamp(2.75rem, 14vw, 8rem);
+      line-height: 1;
+      letter-spacing: 0.08em;
+      padding: 0.35em 0.45em;
+      border: 3px solid #0f0;
+      border-radius: 0.25em;
+      background: #030;
+      text-shadow: 0 0 8px #0f0;
+      box-shadow: inset 0 0 30px rgba(0, 255, 0, 0.15), 0 0 22px rgba(0, 255, 0, 0.3);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      transform: translateZ(0);
+    }
+
+    #timer.easy {
+      font-weight: 300;
+      letter-spacing: 0.1em;
+    }
+
+    #timer.normal {
+      font-weight: 500;
+      letter-spacing: 0.08em;
+    }
+
+    #timer.hard {
+      font-weight: 900;
+      letter-spacing: 0.03em;
+    }
+
+    #timer.win {
+      animation: shake 0.25s infinite, pulse 0.65s infinite;
+      box-shadow: inset 0 0 35px rgba(0, 255, 0, 0.25), 0 0 30px rgba(0, 255, 0, 0.7);
+    }
+
+    #good-job {
+      display: none;
+      margin-top: 1.1rem;
+      font-size: clamp(1rem, 4vw, 1.65rem);
+      letter-spacing: 0.2em;
+      text-transform: lowercase;
+      text-shadow: 0 0 10px #0f0;
+    }
+
+    #good-job.show {
+      display: block;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #overlay.show {
+      opacity: 1;
+    }
+
+    #overlay-value {
+      font-size: clamp(3rem, 16vw, 9rem);
+      line-height: 1;
+      padding: 0.25em 0.35em;
+      border: 3px solid #0f0;
+      border-radius: 0.25em;
+      background: #010;
+      text-shadow: 0 0 10px #0f0;
+      box-shadow: inset 0 0 30px rgba(0, 255, 0, 0.2), 0 0 25px rgba(0, 255, 0, 0.35);
+      white-space: nowrap;
+    }
+
+    #overlay-value.easy {
+      font-weight: 300;
+      letter-spacing: 0.1em;
+    }
+
+    #overlay-value.normal {
+      font-weight: 500;
+      letter-spacing: 0.08em;
+    }
+
+    #overlay-value.hard {
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      transform: scale(1.03);
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(-4px, 3px); }
+      50% { transform: translate(4px, -2px); }
+      75% { transform: translate(-3px, -3px); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { text-shadow: 0 0 8px #0f0; }
+      50% { text-shadow: 0 0 24px #0f0, 0 0 30px #0f0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="timer" class="normal">0:00.00</div>
+  <div id="good-job">good job</div>
+  <div id="overlay"><div id="overlay-value" class="normal">0:00.00</div></div>
+
+  <script>
+    const timerEl = document.getElementById('timer');
+    const goodJobEl = document.getElementById('good-job');
+    const overlayEl = document.getElementById('overlay');
+    const overlayValueEl = document.getElementById('overlay-value');
+
+    // Forward cycle by index: .00 -> .000 -> .0 -> back to .00.
+    const precisionModes = [2, 3, 1];
+    // Forward cycle by index: 10s -> 30s -> 1m -> 5m -> 1s -> 5s -> back to 10s.
+    const targets = [10000, 30000, 60000, 300000, 1000, 5000];
+    const STYLE_BY_PRECISION = { 1: 'easy', 2: 'normal', 3: 'hard' };
+
+    const HOLD_MS = 500;
+    const DOUBLE_MS = 300;
+    const TRIPLE_MS = 400;
+    const TOUCH_MOUSE_SUPPRESSION_MS = 700;
+
+    let precisionIndex = 0;
+    let targetIndex = 0;
+
+    let running = false;
+    let elapsedMs = 0;
+    let startedAt = 0;
+    let goodJob = false;
+
+    let pressing = false;
+    let holdTimer = null;
+    let holdTriggered = false;
+    let tapCount = 0;
+    let firstTapAt = 0;
+    let secondTapAt = 0;
+    let tapResolveTimer = null;
+    let overlayTimer = null;
+    let ignoreNextRelease = false;
+
+    let lastTouchAt = 0;
+
+    function getPrecisionDigits() {
+      return precisionModes[precisionIndex];
+    }
+
+    function applyStyle() {
+      const style = STYLE_BY_PRECISION[getPrecisionDigits()];
+      timerEl.classList.remove('easy', 'normal', 'hard');
+      timerEl.classList.add(style);
+      overlayValueEl.classList.remove('easy', 'normal', 'hard');
+      overlayValueEl.classList.add(style);
+    }
+
+    function formatTime(ms, digits = getPrecisionDigits()) {
+      const factor = 10 ** digits;
+      const roundedTotal = toRoundedUnits(ms, factor);
+      const roundedMs = (roundedTotal / factor) * 1000;
+
+      const totalSeconds = Math.floor(roundedMs / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      const sub = roundedTotal % factor;
+
+      return `${minutes}:${String(seconds).padStart(2, '0')}.${String(sub).padStart(digits, '0')}`;
+    }
+
+    function toRoundedUnits(ms, factor) {
+      return Math.round((ms / 1000) * factor);
+    }
+
+    function currentElapsed(now) {
+      return running ? elapsedMs + (now - startedAt) : elapsedMs;
+    }
+
+    function draw(now = performance.now()) {
+      timerEl.textContent = formatTime(currentElapsed(now));
+    }
+
+    function flashOverlay(value) {
+      overlayValueEl.textContent = value;
+      overlayEl.classList.add('show');
+      clearTimeout(overlayTimer);
+      overlayTimer = setTimeout(() => {
+        overlayEl.classList.remove('show');
+      }, 500);
+    }
+
+    function clearGoodJob() {
+      goodJob = false;
+      timerEl.classList.remove('win');
+      goodJobEl.classList.remove('show');
+    }
+
+    function start(now) {
+      clearGoodJob();
+      startedAt = now;
+      running = true;
+    }
+
+    function isWinningStop(ms) {
+      const digits = getPrecisionDigits();
+      const factor = 10 ** digits;
+      return toRoundedUnits(ms, factor) === toRoundedUnits(targets[targetIndex], factor);
+    }
+
+    function stop(now) {
+      if (!running) return;
+      elapsedMs += now - startedAt;
+      running = false;
+      draw(now);
+
+      if (isWinningStop(elapsedMs)) {
+        goodJob = true;
+        timerEl.classList.add('win');
+        goodJobEl.classList.add('show');
+      }
+    }
+
+    function reset() {
+      if (running) return;
+      elapsedMs = 0;
+      clearGoodJob();
+      draw();
+    }
+
+    function cycleDifficulty() {
+      if (running) return;
+      precisionIndex = (precisionIndex + 1) % precisionModes.length;
+      applyStyle();
+      draw();
+      flashOverlay(formatTime(0));
+    }
+
+    function cycleTarget() {
+      if (running) return;
+      targetIndex = (targetIndex + 1) % targets.length;
+      flashOverlay(formatTime(targets[targetIndex]));
+    }
+
+    function clearTapResolution() {
+      clearTimeout(tapResolveTimer);
+      tapResolveTimer = null;
+      tapCount = 0;
+      firstTapAt = 0;
+      secondTapAt = 0;
+    }
+
+    function resolveTaps() {
+      if (running) {
+        clearTapResolution();
+        return;
+      }
+
+      if (tapCount >= 3) {
+        cycleTarget();
+      } else if (tapCount === 2 && secondTapAt - firstTapAt <= DOUBLE_MS) {
+        reset();
+      } else if (tapCount === 1) {
+        start(performance.now());
+      }
+
+      clearTapResolution();
+    }
+
+    function queueTap() {
+      const now = performance.now();
+      if (!tapCount || now - firstTapAt > TRIPLE_MS) {
+        tapCount = 1;
+        firstTapAt = now;
+        secondTapAt = 0;
+      } else {
+        tapCount += 1;
+        if (tapCount === 2) {
+          secondTapAt = now;
+        }
+      }
+
+      if (tapCount >= 3) {
+        resolveTaps();
+        return;
+      }
+
+      clearTimeout(tapResolveTimer);
+      const wait = tapCount === 1
+        ? DOUBLE_MS
+        : Math.max(0, TRIPLE_MS - (now - firstTapAt));
+      tapResolveTimer = setTimeout(resolveTaps, wait);
+    }
+
+    function onPressStart(now) {
+      if (running) {
+        stop(now);
+        ignoreNextRelease = true;
+        return;
+      }
+
+      pressing = true;
+      holdTriggered = false;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        if (pressing && !running) {
+          holdTriggered = true;
+          clearTapResolution();
+          cycleDifficulty();
+        }
+      }, HOLD_MS);
+    }
+
+    function onPressEnd() {
+      if (running) return;
+      if (ignoreNextRelease) {
+        ignoreNextRelease = false;
+        return;
+      }
+      pressing = false;
+      clearTimeout(holdTimer);
+      if (holdTriggered) return;
+      queueTap();
+    }
+
+    function onKeyDown(event) {
+      if (event.code !== 'Space' || event.repeat) return;
+      event.preventDefault();
+      onPressStart(performance.now());
+    }
+
+    function onKeyUp(event) {
+      if (event.code !== 'Space') return;
+      event.preventDefault();
+      onPressEnd();
+    }
+
+    function shouldIgnoreMouse() {
+      return performance.now() - lastTouchAt < TOUCH_MOUSE_SUPPRESSION_MS;
+    }
+
+    function onTouchStart(event) {
+      event.preventDefault();
+      lastTouchAt = performance.now();
+      onPressStart(lastTouchAt);
+    }
+
+    function onTouchEnd(event) {
+      event.preventDefault();
+      lastTouchAt = performance.now();
+      onPressEnd();
+    }
+
+    function onMouseDown(event) {
+      if (shouldIgnoreMouse()) return;
+      event.preventDefault();
+      onPressStart(performance.now());
+    }
+
+    function onMouseUp(event) {
+      if (shouldIgnoreMouse()) return;
+      event.preventDefault();
+      onPressEnd();
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    document.addEventListener('touchstart', onTouchStart, { passive: false });
+    document.addEventListener('touchend', onTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+
+    applyStyle();
+    draw();
+
+    function tick(now) {
+      if (running) {
+        draw(now);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
