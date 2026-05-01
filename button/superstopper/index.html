@@ -24,6 +24,24 @@
     .controls { list-style: none; padding: 0; margin: 0 0 1.5em 0; }
     .controls li { font-size: 0.85rem; margin: 0.45em 0; }
     .controls li::before { content: '+ '; opacity: 0.5; }
+    .timer-box {
+      display: block;
+      border: 1px solid #0f0;
+      padding: 1em 1.2em;
+      margin: 1.8em 0 1.2em 0;
+      text-align: center;
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+    }
+    .timer-box:hover { background: #0f0; color: #000; }
+    .timer-box .hint {
+      display: block;
+      font-size: 0.7rem;
+      opacity: 0.55;
+      margin-top: 0.35em;
+      letter-spacing: 0;
+    }
+    .timer-box:hover .hint { opacity: 0.6; }
     .meta { font-size: 0.8rem; opacity: 0.55; margin-top: 1.8em; }
     .meta a { opacity: 1; }
     ul { list-style: none; padding: 0; margin: 1.5em 0 0 0; }
@@ -40,7 +58,7 @@
 
   <h1>superstopper</h1>
 
-  <p>plugs right into your phone or computer via usb-c (use a data cable). sub-10ms from press to response. the button lights up and flashes too.</p>
+  <p>plugs in via usb-c and controls the timer. sub-10ms from press to response. the button lights up and flashes too.</p>
 
   <ul class="controls">
     <li>tap to start</li>
@@ -50,17 +68,20 @@
     <li>hold to cycle precision</li>
   </ul>
 
+  <a href="/timer" class="timer-box">
+    open the timer
+    <span class="hint">save to your home screen for the full experience</span>
+  </a>
+
   <p class="meta">
     <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">see it here</a> &nbsp; &nbsp;
     <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">buy it here</a>
   </p>
 
-  <p class="meta"><a href="/timer">use it here</a> &mdash; save to your home screen for best use.</p>
-
   <ul>
     <li>powered by usb-c</li>
-    <li>works with iphone (use a data cable)</li>
-    <li>modify friendly</li>
+    <li>works on most devices &mdash; use a data cable</li>
+    <li>modifiable</li>
   </ul>
 
   <details>
