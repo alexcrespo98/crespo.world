@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>button keyboard</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 3em 2em;
+      max-width: 720px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    a {
+      color: #0f0;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .back {
+      display: block;
+      margin-bottom: 2.5em;
+      font-size: 0.9rem;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: normal;
+      margin: 0 0 1.5em 0;
+    }
+    p {
+      margin: 0 0 0.75em 0;
+      line-height: 1.6;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 1.5em 0 0 0;
+    }
+    li {
+      margin: 0.4em 0;
+    }
+    li::before {
+      content: '+ ';
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <a href="/" class="back">&larr; back</a>
+
+  <h1>button &nbsp; keyboard</h1>
+
+  <p>usb-c to usb-c. simulates a spacebar keystroke on press.</p>
+
+  <p>very low latency. no drivers. no software.</p>
+  <p>currently powers the timer at <a href="/timer">crespo.world/timer</a>.</p>
+  <p>can be remapped.</p>
+
+  <ul>
+    <li>led indicator (5v or 3.3v selectable)</li>
+  </ul>
+</body>
+</html>
