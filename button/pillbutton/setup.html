@@ -63,6 +63,14 @@
     }
     input:focus, select:focus { border-color: #5fffaa; }
     .hint { font-size: 0.72rem; opacity: 0.45; margin-top: -0.75em; margin-bottom: 0.9em; }
+    .placeholder-block {
+      border: 1px dashed #0f04;
+      padding: 0.8em 1em;
+      font-size: 0.75rem;
+      opacity: 0.45;
+      margin-bottom: 1.5em;
+      line-height: 1.6;
+    }
     .dose-row {
       display: flex;
       gap: 0.6em;
@@ -71,12 +79,6 @@
     }
     .dose-row label { margin: 0; min-width: 5ch; opacity: 0.6; font-size: 0.8rem; }
     .dose-row select, .dose-row input[type=time] { margin-bottom: 0; flex: 1; }
-    .img-preview {
-      display: none;
-      max-width: 100%;
-      margin: 0.5em 0 1em 0;
-      border: 1px solid #0f03;
-    }
     button[type=submit] {
       width: 100%;
       background: #0f0;
@@ -103,9 +105,9 @@
   <details class="first-time">
     <summary>first time? start here</summary>
     <ol>
-      <li>flash the firmware onto your ESP32-C6 — <a href="https://github.com/alexcrespo98/crespo.world" target="_blank">see the repo</a> for the sketch.</li>
-      <li>power it on. it will broadcast a wi-fi network called <strong>pillbutton-setup</strong>.</li>
-      <li>on your phone, go to wi-fi settings and connect to <strong>pillbutton-setup</strong>. no password.</li>
+      <li>flash the firmware onto your ESP32-C6 &mdash; <a href="https://github.com/alexcrespo98/crespo.world" target="_blank">see the repo</a> for the sketch.</li>
+      <li>power it on. it will broadcast a wi-fi network called <strong>pillbuttonsetup</strong>.</li>
+      <li>on your phone, go to wi-fi settings and connect to <strong>pillbuttonsetup</strong>. no password.</li>
       <li>come back here and fill out the form below.</li>
       <li>next time: hold the button for 5 seconds to re-enter setup mode.</li>
     </ol>
@@ -135,15 +137,11 @@
     </div>
 
     <div class="section">
-      <div class="section-label">reference <span style="opacity:0.4;font-size:0.85em">(optional)</span></div>
-      <label>purchase link</label>
-      <input type="url" id="purchaseLink" placeholder="https://amazon.com/..." autocorrect="off">
-      <p class="hint">where to reorder. stored on the button, shown on its status page.</p>
-      <label>image url</label>
-      <input type="url" id="imageUrl" placeholder="https://example.com/pill.jpg" autocorrect="off">
-      <img id="imgPreview" class="img-preview" alt="preview">
-      <label style="margin-top:-0.5em">or upload</label>
-      <input type="file" id="imageFile" accept="image/*">
+      <div class="section-label">reference</div>
+      <div class="placeholder-block">
+        placeholder for shopping link &mdash; add purchase url here when ready.<br>
+        placeholder for picture / video &mdash; add media here when ready.
+      </div>
     </div>
 
     <button type="submit">save to button &rarr;</button>
@@ -191,20 +189,6 @@
       buildDoseSlots(parseInt(this.value));
     });
 
-    // image preview from url
-    document.getElementById('imageUrl').addEventListener('input', (e) => {
-      const img = document.getElementById('imgPreview');
-      img.src = e.target.value;
-      img.style.display = e.target.value ? 'block' : 'none';
-    });
-    // image preview from file
-    document.getElementById('imageFile').addEventListener('change', (e) => {
-      const file = e.target.files[0]; if (!file) return;
-      const reader = new FileReader();
-      reader.onload = ev => { const img = document.getElementById('imgPreview'); img.src = ev.target.result; img.style.display = 'block'; };
-      reader.readAsDataURL(file);
-    });
-
     document.getElementById('setupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const status = document.getElementById('status');
@@ -219,11 +203,9 @@
       });
 
       const payload = {
-        ssid:          document.getElementById('ssid').value.trim(),
-        wifi_pass:     document.getElementById('wifiPass').value,
-        doses,
-        purchase_link: document.getElementById('purchaseLink').value.trim() || null,
-        image_url:     document.getElementById('imageUrl').value.trim() || null
+        ssid:      document.getElementById('ssid').value.trim(),
+        wifi_pass: document.getElementById('wifiPass').value,
+        doses
       };
 
       if (!payload.ssid) {
