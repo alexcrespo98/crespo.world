@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pillbutton setup</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 2.5em 1.5em;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    a { color: #0f0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: block; margin-bottom: 2em; font-size: 0.8rem; opacity: 0.6; }
+    h1 { font-size: 1rem; font-weight: normal; margin: 0 0 0.4em 0; }
+    .subtitle { font-size: 0.78rem; opacity: 0.5; margin: 0 0 2em 0; }
+    .section { margin-bottom: 2em; }
+    .section-label {
+      font-size: 0.7rem;
+      opacity: 0.5;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.8em;
+    }
+    label { display: block; font-size: 0.82rem; margin-bottom: 0.25em; }
+    input, select {
+      width: 100%;
+      background: #000;
+      color: #0f0;
+      border: 1px solid #0f0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding: 0.45em 0.6em;
+      margin-bottom: 1em;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      border-radius: 0;
+    }
+    input:focus, select:focus { border-color: #5fffaa; }
+    .hint { font-size: 0.72rem; opacity: 0.45; margin-top: -0.75em; margin-bottom: 0.9em; }
+    .add-row {
+      display: flex;
+      gap: 0.5em;
+      margin-bottom: 1em;
+    }
+    .add-row input { margin-bottom: 0; flex: 1; }
+    .add-btn {
+      background: none;
+      border: 1px solid #0f0;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 0.82rem;
+      padding: 0 0.8em;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .add-btn:hover { background: #0f0; color: #000; }
+    .added-list { list-style: none; padding: 0; margin: 0 0 1em 0; }
+    .added-list li {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin: 0.3em 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .added-list li button {
+      background: none;
+      border: none;
+      color: #f55;
+      font-family: monospace;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 0;
+      width: auto;
+    }
+    .img-preview {
+      display: none;
+      max-width: 100%;
+      margin: 0.5em 0 1em 0;
+      border: 1px solid #0f03;
+    }
+    button[type=submit] {
+      width: 100%;
+      background: #0f0;
+      color: #000;
+      border: none;
+      font-family: monospace;
+      font-size: 0.9rem;
+      padding: 0.65em;
+      cursor: pointer;
+      margin-top: 0.5em;
+    }
+    button[type=submit]:hover { background: #5fffaa; }
+    #status { margin-top: 1.2em; font-size: 0.8rem; min-height: 1.2em; text-align: center; }
+    .ok { color: #0f0; } .err { color: #f55; } .warn { opacity: 0.55; }
+    hr { border: none; border-top: 1px solid #0f0; opacity: 0.2; margin: 2em 0; }
+  </style>
+</head>
+<body>
+  <a href="/button/pillbutton/" class="back">&larr; pillbutton</a>
+
+  <h1>pillbutton setup</h1>
+  <p class="subtitle">connect your phone to the button's wi-fi first, then fill this out.</p>
+
+  <form id="setupForm">
+
+    <div class="section">
+      <div class="section-label">wi-fi</div>
+      <label>network name (ssid)</label>
+      <input type="text" id="ssid" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="your home wi-fi">
+      <label>password</label>
+      <input type="password" id="wifiPass" autocomplete="current-password" placeholder="••••••••">
+    </div>
+
+    <div class="section">
+      <div class="section-label">schedule</div>
+      <label>dose interval</label>
+      <select id="interval">
+        <option value="8">every 8 hours</option>
+        <option value="12">every 12 hours</option>
+        <option value="24" selected>every 24 hours</option>
+        <option value="custom">custom (hours)…</option>
+      </select>
+      <input type="number" id="customInterval" placeholder="hours" min="1" max="168" style="display:none">
+      <p class="hint">the led will complete one green → yellow → red cycle over this duration.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-label">links <span style="opacity:0.4;font-size:0.85em">(optional)</span></div>
+      <p class="hint" style="margin-top:0">add any links you want stored on the button, e.g. medication info or a refill page.</p>
+      <div class="add-row">
+        <input type="url" id="linkInput" placeholder="https://example.com" autocorrect="off">
+        <button type="button" class="add-btn" id="addLinkBtn">+ add link</button>
+      </div>
+      <ul class="added-list" id="linkList"></ul>
+    </div>
+
+    <div class="section">
+      <div class="section-label">image <span style="opacity:0.4;font-size:0.85em">(optional)</span></div>
+      <p class="hint" style="margin-top:0">add an image shown on the button's status page — a photo of the pill, packaging, etc.</p>
+      <label>image url</label>
+      <input type="url" id="imageUrl" placeholder="https://example.com/pill.jpg" autocorrect="off">
+      <img id="imgPreview" class="img-preview" alt="preview">
+      <label style="margin-top:-0.5em">or upload</label>
+      <input type="file" id="imageFile" accept="image/*">
+    </div>
+
+    <button type="submit">save to button &rarr;</button>
+    <div id="status"></div>
+  </form>
+
+  <hr>
+  <p style="font-size:0.72rem; opacity:0.4; text-align:center;">settings are sent directly to the button at 192.168.4.1 over its local wi-fi. nothing goes to crespo.world.</p>
+
+  <script>
+    // interval custom field
+    const intSel = document.getElementById('interval');
+    const customInt = document.getElementById('customInterval');
+    intSel.addEventListener('change', () => {
+      customInt.style.display = intSel.value === 'custom' ? 'block' : 'none';
+    });
+
+    // links
+    const links = [];
+    document.getElementById('addLinkBtn').addEventListener('click', () => {
+      const val = document.getElementById('linkInput').value.trim();
+      if (!val) return;
+      links.push(val);
+      const li = document.createElement('li');
+      li.innerHTML = '<span>' + val + '</span><button type="button">remove</button>';
+      li.querySelector('button').addEventListener('click', () => {
+        links.splice(links.indexOf(val), 1);
+        li.remove();
+      });
+      document.getElementById('linkList').appendChild(li);
+      document.getElementById('linkInput').value = '';
+    });
+
+    // image preview from url
+    document.getElementById('imageUrl').addEventListener('input', (e) => {
+      const img = document.getElementById('imgPreview');
+      if (e.target.value) { img.src = e.target.value; img.style.display = 'block'; }
+      else { img.style.display = 'none'; }
+    });
+
+    // image preview from file
+    document.getElementById('imageFile').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = document.getElementById('imgPreview');
+        img.src = ev.target.result;
+        img.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // submit
+    document.getElementById('setupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const status = document.getElementById('status');
+      status.textContent = 'sending…'; status.className = 'warn';
+
+      const interval = intSel.value === 'custom'
+        ? parseFloat(document.getElementById('customInterval').value) || 24
+        : parseFloat(intSel.value);
+
+      const imageUrl = document.getElementById('imageUrl').value.trim();
+
+      const payload = {
+        ssid:      document.getElementById('ssid').value.trim(),
+        wifi_pass: document.getElementById('wifiPass').value,
+        interval_hours: interval,
+        links:     links,
+        image_url: imageUrl || null
+      };
+
+      if (!payload.ssid) {
+        status.textContent = 'fill in your wi-fi name first.';
+        status.className = 'err'; return;
+      }
+
+      try {
+        const res = await fetch('http://192.168.4.1/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(8000)
+        });
+        if (res.ok) {
+          status.textContent = '✓ saved. the button will restart and connect to your wi-fi.';
+          status.className = 'ok';
+        } else {
+          status.textContent = 'button returned an error (' + res.status + '). try again.';
+          status.className = 'err';
+        }
+      } catch (err) {
+        status.textContent = err.name === 'TimeoutError' || err.name === 'AbortError'
+          ? "can't reach the button. are you connected to its wi-fi?"
+          : "connection failed. make sure you're on the button's wi-fi network.";
+        status.className = 'err';
+      }
+    });
+  </script>
+</body>
+</html>

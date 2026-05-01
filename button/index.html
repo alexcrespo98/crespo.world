@@ -19,24 +19,28 @@
     a { color: #0f0; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .back { display: block; margin-bottom: 2.5em; font-size: 0.85rem; opacity: 0.7; }
-    h1 { font-size: 1rem; font-weight: normal; margin: 0 0 2em 0; opacity: 0.7; letter-spacing: 0.06em; }
-    .btn-list { list-style: none; padding: 0; margin: 0; }
-    .btn-list li { margin: 1.4em 0; }
-    .btn-list a { font-size: 0.95rem; }
-    .btn-list .desc { font-size: 0.8rem; opacity: 0.55; margin-top: 0.25em; }
+    h1 { font-size: 1rem; font-weight: normal; margin: 0 0 2em 0; opacity: 0.65; letter-spacing: 0.06em; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { margin: 1.4em 0; }
+    li a { font-size: 0.9rem; }
+    .desc { font-size: 0.8rem; opacity: 0.5; margin-top: 0.2em; }
   </style>
 </head>
 <body>
   <a href="/" class="back">&larr; back</a>
   <h1>buttons</h1>
-  <ul class="btn-list">
+  <ul>
     <li>
-      <a href="/button/esp32c6/">party emergency</a>
-      <div class="desc">hijacks your sonos for happy birthday and hands control back when it's done</div>
+      <a href="/button/partyemergency/">partyemergency</a>
+      <div class="desc">plays a specific song or playlist when pressed</div>
     </li>
     <li>
-      <a href="/button/keyboard/">superstopper</a>
-      <div class="desc">physical usb-c stopwatch button with &lt;10ms latency for the timer</div>
+      <a href="/button/superstopper/">superstopper</a>
+      <div class="desc">controls a timer when pressed</div>
+    </li>
+    <li>
+      <a href="/button/pillbutton/">pillbutton</a>
+      <div class="desc">reminds you when to take your pills</div>
     </li>
   </ul>
 </body>
