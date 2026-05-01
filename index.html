@@ -2,101 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>crespo.world</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>crespo.world</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
+      margin: 0;
+      min-height: 100vh;
       background: #000;
       color: #0f0;
       font-family: monospace;
-      text-align: center;
-      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       padding: 2em;
     }
-    nav {
-      margin-bottom: 1em;
+    h1 {
+      font-size: clamp(2rem, 8vw, 4rem);
+      margin: 0 0 2em 0;
+      font-weight: normal;
+      letter-spacing: 0.05em;
     }
-    nav a {
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    li {
+      margin: 0.6em 0;
+    }
+    a {
       color: #0f0;
       text-decoration: none;
-      margin: 0 1em;
-      font-weight: bold;
+      font-size: 1.2rem;
     }
-    nav a:hover {
+    a:hover {
       text-decoration: underline;
     }
-    h1 { font-size: 2em; margin-bottom: 0.5em; }
-    canvas { background: #111; margin-top: 2em; border: 2px solid #0f0; }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="index.html">home</a>
-    <a href="officecam.html">officecam</a>
-    <a href="crespomize.html">crespomize</a>
-    <a href="recipeasy.html">recipeasy</a>
-    <a href="groatesque.html">groatesque</a>
-    <a href="wagon.html">wagon</a>
-    <a href="timer.html">timer</a>
-  </nav>
-
-  <h1>you better believe it!</h1>
-  <canvas id="game" width="400" height="400"></canvas>
-  
-  <script>
-    const c = document.getElementById("game");
-    const ctx = c.getContext("2d");
-    const grid = 20;
-    let snake = [{x: 160, y: 160}];
-    let dx = grid, dy = 0;
-    let food = {x: 320, y: 320};
-    let score = 0;
-
-    function gameLoop() {
-      requestAnimationFrame(gameLoop);
-      if (++count < 6) return;
-      count = 0;
-      ctx.clearRect(0,0,c.width,c.height);
-
-      // move snake
-      const head = {x: snake[0].x + dx, y: snake[0].y + dy};
-      snake.unshift(head);
-
-      // food collision
-      if (head.x === food.x && head.y === food.y) {
-        score++;
-        food = {
-          x: Math.floor(Math.random() * 20) * grid,
-          y: Math.floor(Math.random() * 20) * grid
-        };
-      } else {
-        snake.pop();
-      }
-
-      // draw
-      ctx.fillStyle = "#0f0";
-      snake.forEach(s => ctx.fillRect(s.x, s.y, grid-2, grid-2));
-      ctx.fillStyle = "#f00";
-      ctx.fillRect(food.x, food.y, grid-2, grid-2);
-
-      // collision
-      if (head.x < 0 || head.x >= c.width || head.y < 0 || head.y >= c.height ||
-          snake.slice(1).some(s => s.x === head.x && s.y === head.y)) {
-        snake = [{x: 160, y: 160}];
-        dx = grid; dy = 0;
-        score = 0;
-      }
-    }
-
-    let count = 0;
-    document.addEventListener("keydown", e => {
-      if (e.key === "ArrowLeft" && dx === 0) { dx = -grid; dy = 0; }
-      if (e.key === "ArrowUp" && dy === 0) { dx = 0; dy = -grid; }
-      if (e.key === "ArrowRight" && dx === 0) { dx = grid; dy = 0; }
-      if (e.key === "ArrowDown" && dy === 0) { dx = 0; dy = grid; }
-    });
-
-    gameLoop();
-  </script>
+  <h1>crespo.world</h1>
+  <ul>
+    <li><a href="/waiterbrain/">waiterbrain</a></li>
+    <li><a href="/timer">timer</a></li>
+    <li><a href="/button/esp32c6/">button (esp32c6)</a></li>
+    <li><a href="/button/keyboard/">button (keyboard)</a></li>
+    <li><a href="/consulting/">consulting</a></li>
+  </ul>
 </body>
 </html>

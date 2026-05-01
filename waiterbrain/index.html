@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>waiterbrain</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 3em 2em;
+      max-width: 720px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    a {
+      color: #0f0;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .back {
+      display: block;
+      margin-bottom: 2.5em;
+      font-size: 0.9rem;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: normal;
+      margin: 0 0 1.5em 0;
+    }
+    h2 {
+      font-size: 1rem;
+      font-weight: normal;
+      margin: 2em 0 0.75em 0;
+      text-transform: lowercase;
+      border-bottom: 1px solid #0f0;
+      padding-bottom: 0.3em;
+    }
+    p {
+      margin: 0 0 0.75em 0;
+      line-height: 1.6;
+    }
+    dl {
+      margin: 0;
+    }
+    dt {
+      display: inline-block;
+      width: 18ch;
+      opacity: 0.7;
+    }
+    dd {
+      display: inline;
+      margin: 0;
+    }
+    dd::after {
+      content: '';
+      display: block;
+      margin-bottom: 0.5em;
+    }
+    .contact {
+      margin-top: 2.5em;
+    }
+  </style>
+</head>
+<body>
+  <a href="/" class="back">&larr; back</a>
+
+  <h1>waiterbrain</h1>
+
+  <p>a local, on-premises voice ordering assistant for restaurants.</p>
+
+  <h2>how it works</h2>
+
+  <p>each server wears a mic. a proximity sensor identifies which table they are near.</p>
+  <p>speech is transcribed locally, structured into an order, and read back to the server for confirmation.</p>
+  <p>confirmed orders are sent to the pos system via the toast api.</p>
+  <p>everything runs on a single machine in the back office. no data leaves the building.</p>
+
+  <h2>specs</h2>
+
+  <dl>
+    <dt>target hardware</dt>
+    <dd>rtx 4070 (or equivalent)</dd>
+    <dt>concurrent voices</dt>
+    <dd>up to 8</dd>
+    <dt>pos integration</dt>
+    <dd>toast api</dd>
+    <dt>data storage</dt>
+    <dd>local only, resets nightly</dd>
+    <dt>footprint</dt>
+    <dd>one machine, runs all day</dd>
+    <dt>pilot location</dt>
+    <dd>amigos mexican kitchen and tequila bar</dd>
+  </dl>
+
+  <p style="margin-top:1.5em">waiterbrain is a tool for servers, not a replacement for them.</p>
+
+  <p class="contact">contact &nbsp;<a href="mailto:alex@crespo.world">alex@crespo.world</a></p>
+</body>
+</html>
