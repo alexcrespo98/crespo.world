@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>party emergency setup</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 2.5em 1.5em;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    a { color: #0f0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: block; margin-bottom: 2em; font-size: 0.8rem; opacity: 0.6; }
+    h1 { font-size: 1rem; font-weight: normal; margin: 0 0 0.4em 0; }
+    .subtitle { font-size: 0.78rem; opacity: 0.5; margin: 0 0 2em 0; }
+    .section { margin-bottom: 2em; }
+    .section-label {
+      font-size: 0.7rem;
+      opacity: 0.5;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.8em;
+    }
+    label { display: block; font-size: 0.82rem; margin-bottom: 0.25em; }
+    input, select {
+      width: 100%;
+      background: #000;
+      color: #0f0;
+      border: 1px solid #0f0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding: 0.45em 0.6em;
+      margin-bottom: 1em;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      border-radius: 0;
+    }
+    input:focus, select:focus { border-color: #5fffaa; }
+    .hint { font-size: 0.72rem; opacity: 0.45; margin-top: -0.75em; margin-bottom: 0.9em; }
+    .row { display: flex; gap: 0.8em; }
+    .row > div { flex: 1; }
+    button {
+      width: 100%;
+      background: #0f0;
+      color: #000;
+      border: none;
+      font-family: monospace;
+      font-size: 0.9rem;
+      padding: 0.65em;
+      cursor: pointer;
+      margin-top: 0.5em;
+    }
+    button:hover { background: #5fffaa; }
+    button:active { background: #0c0; }
+    #status {
+      margin-top: 1.2em;
+      font-size: 0.8rem;
+      min-height: 1.2em;
+      text-align: center;
+    }
+    .ok { color: #0f0; }
+    .err { color: #f55; }
+    .warn { opacity: 0.55; }
+    hr { border: none; border-top: 1px solid #0f0; opacity: 0.2; margin: 2em 0; }
+  </style>
+</head>
+<body>
+  <a href="/button/esp32c6/" class="back">&larr; party emergency</a>
+
+  <h1>party emergency setup</h1>
+  <p class="subtitle">connect your phone to the button's wi-fi first, then fill this out.</p>
+
+  <form id="setupForm">
+
+    <div class="section">
+      <div class="section-label">wi-fi</div>
+
+      <label>network name (ssid)</label>
+      <input type="text" id="ssid" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="your home wi-fi">
+
+      <label>password</label>
+      <input type="password" id="wifiPass" autocomplete="current-password" placeholder="••••••••">
+    </div>
+
+    <div class="section">
+      <div class="section-label">sonos</div>
+
+      <label>sonos room / group name</label>
+      <input type="text" id="sonosRoom" autocorrect="off" spellcheck="false" placeholder="e.g. Kitchen or Living Room">
+      <p class="hint">exactly as it appears in the sonos app under rooms.</p>
+
+      <label>your sonos account email</label>
+      <input type="email" id="sonosEmail" autocomplete="email" placeholder="you@example.com">
+      <p class="hint">used to authorize playlist lookups. stored only on the button.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-label">interrupt playlist</div>
+
+      <label>playlist to blast (spotify uri or name)</label>
+      <input type="text" id="partyPlaylist" autocorrect="off" spellcheck="false" placeholder="spotify:playlist:xxxxxxxx or 'Happy Birthday'">
+      <p class="hint">paste a spotify uri from share &rarr; copy song/playlist link, or just type a playlist name.</p>
+
+      <label>how long to play</label>
+      <select id="duration">
+        <option value="whole">whole playlist / song</option>
+        <option value="30">30 seconds</option>
+        <option value="60">1 minute</option>
+        <option value="90">1.5 minutes</option>
+        <option value="120">2 minutes</option>
+        <option value="custom">custom (seconds)…</option>
+      </select>
+
+      <input type="number" id="customDur" placeholder="seconds" min="5" max="3600" style="display:none">
+    </div>
+
+    <div class="section">
+      <div class="section-label">return-to playlist</div>
+
+      <label>playlist to resume after</label>
+      <input type="text" id="returnPlaylist" autocorrect="off" spellcheck="false" placeholder="default: shuffle your liked songs">
+      <p class="hint">leave blank to shuffle liked songs. paste a spotify uri or playlist name.</p>
+    </div>
+
+    <button type="submit">save to button &rarr;</button>
+    <div id="status"></div>
+
+  </form>
+
+  <hr>
+  <p style="font-size:0.72rem; opacity:0.4; text-align:center;">settings are sent directly to the button at 192.168.4.1 over its local wi-fi. nothing goes to crespo.world.</p>
+
+  <script>
+    const durSel = document.getElementById('duration');
+    const customDur = document.getElementById('customDur');
+    durSel.addEventListener('change', () => {
+      customDur.style.display = durSel.value === 'custom' ? 'block' : 'none';
+    });
+
+    document.getElementById('setupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const status = document.getElementById('status');
+      status.textContent = 'sending…';
+      status.className = 'warn';
+
+      const dur = durSel.value === 'custom'
+        ? parseInt(customDur.value) || 60
+        : durSel.value;
+
+      const payload = {
+        ssid:           document.getElementById('ssid').value.trim(),
+        wifi_pass:      document.getElementById('wifiPass').value,
+        sonos_room:     document.getElementById('sonosRoom').value.trim(),
+        sonos_email:    document.getElementById('sonosEmail').value.trim(),
+        party_playlist: document.getElementById('partyPlaylist').value.trim(),
+        duration:       dur,
+        return_playlist: document.getElementById('returnPlaylist').value.trim() || 'shuffle_liked'
+      };
+
+      if (!payload.ssid || !payload.sonos_room || !payload.party_playlist) {
+        status.textContent = 'fill in wi-fi name, sonos room, and a playlist first.';
+        status.className = 'err';
+        return;
+      }
+
+      try {
+        const res = await fetch('http://192.168.4.1/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(8000)
+        });
+        if (res.ok) {
+          status.textContent = '✓ saved. the button will restart and connect to your wi-fi.';
+          status.className = 'ok';
+        } else {
+          status.textContent = 'button returned an error (' + res.status + '). try again.';
+          status.className = 'err';
+        }
+      } catch (err) {
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+          status.textContent = "can't reach the button. are you connected to its wi-fi?";
+        } else {
+          status.textContent = 'connection failed. make sure you're on the button\'s wi-fi network.';
+        }
+        status.className = 'err';
+      }
+    });
+  </script>
+</body>
+</html>

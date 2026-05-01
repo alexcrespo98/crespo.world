@@ -3,71 +3,61 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>button esp32c6</title>
+  <title>party emergency — crespo.world</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       background: #000;
       color: #0f0;
       font-family: monospace;
       padding: 3em 2em;
-      max-width: 720px;
+      max-width: 680px;
       margin-left: auto;
       margin-right: auto;
     }
-    a {
-      color: #0f0;
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-    .back {
-      display: block;
-      margin-bottom: 2.5em;
-      font-size: 0.9rem;
-    }
-    h1 {
-      font-size: 2rem;
-      font-weight: normal;
-      margin: 0 0 1.5em 0;
-    }
-    p {
-      margin: 0 0 0.75em 0;
-      line-height: 1.6;
-    }
+    a { color: #0f0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: block; margin-bottom: 2.5em; font-size: 0.85rem; opacity: 0.7; }
+    h1 { font-size: 1.1rem; font-weight: normal; margin: 0 0 1.5em 0; }
+    p { margin: 0 0 0.85em 0; line-height: 1.65; font-size: 0.9rem; }
     ul {
       list-style: none;
       padding: 0;
       margin: 1.5em 0 0 0;
     }
-    li {
-      margin: 0.4em 0;
+    li { margin: 0.4em 0; font-size: 0.85rem; }
+    li::before { content: '+ '; opacity: 0.5; }
+    .setup-link {
+      display: inline-block;
+      margin-top: 1.5em;
+      padding: 0.5em 1em;
+      border: 1px solid #0f0;
+      font-size: 0.85rem;
+      opacity: 0.9;
     }
-    li::before {
-      content: '+ ';
-      opacity: 0.6;
-    }
+    .setup-link:hover { background: #0f0; color: #000; text-decoration: none; }
   </style>
 </head>
 <body>
-  <a href="/" class="back">&larr; back</a>
+  <a href="/button/" class="back">&larr; buttons</a>
 
-  <h1>button &nbsp; esp32c6</h1>
+  <h1>party emergency</h1>
 
-  <p>a minimalist bluetooth button for sonos systems.</p>
+  <p>a button. press it and your sonos speakers immediately drop whatever they're playing and start your pre-loaded song or playlist — then return to your normal queue when it's done.</p>
 
-  <p>plug in via usb-c. hold to enter pairing mode. enter wi-fi and sonos credentials.</p>
-  <p>assign a happy birthday playlist and a regular playlist.</p>
-  <p>press the button. happy birthday plays on sonos, then returns to the regular playlist automatically.</p>
-  <p>works with any sonos system.</p>
+  <p>great for happy birthday at a restaurant. you can even cut the song off short early. no phone needed once it's set up.</p>
+
+  <p>it just needs to be on the same wi-fi as your sonos speakers. setup takes about a minute.</p>
+
+  <a href="/button/esp32c6/setup" class="setup-link">set it up &rarr;</a>
+
+  <p style="margin-top: 1.8em; font-size: 0.8rem; opacity: 0.5;">tip: save crespo.world/button/esp32c6/setup to your phone's home screen so it's always one tap away.</p>
 
   <ul>
-    <li>led indicator (5v or 3.3v selectable)</li>
     <li>powered by usb-c (wall or computer)</li>
+    <li>led indicator (5v or 3.3v selectable)</li>
+    <li>works with any sonos system</li>
   </ul>
 </body>
 </html>
