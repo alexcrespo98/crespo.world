@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>superstopper — crespo.world</title>
+  <title>superstopper &mdash; crespo.world</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -21,11 +21,18 @@
     .back { display: block; margin-bottom: 2.5em; font-size: 0.85rem; opacity: 0.7; }
     h1 { font-size: 1.1rem; font-weight: normal; margin: 0 0 1.5em 0; }
     p { margin: 0 0 0.85em 0; line-height: 1.65; font-size: 0.9rem; }
+    .controls { list-style: none; padding: 0; margin: 0 0 1.5em 0; }
+    .controls li { font-size: 0.85rem; margin: 0.45em 0; }
+    .controls li::before { content: '+ '; opacity: 0.5; }
     .meta { font-size: 0.8rem; opacity: 0.55; margin-top: 1.8em; }
     .meta a { opacity: 1; }
     ul { list-style: none; padding: 0; margin: 1.5em 0 0 0; }
     li { margin: 0.4em 0; font-size: 0.85rem; }
     li::before { content: '+ '; opacity: 0.5; }
+    details { margin-top: 2.5em; border-top: 1px solid #0f03; padding-top: 1.5em; }
+    summary { cursor: pointer; font-size: 0.78rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 1em; }
+    .diy p { font-size: 0.82rem; margin: 0 0 0.5em 0; }
+    .diy .label { opacity: 0.5; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 1em 0 0.3em 0; }
   </style>
 </head>
 <body>
@@ -33,12 +40,18 @@
 
   <h1>superstopper</h1>
 
-  <p>a physical button that sends a spacebar keystroke over usb-c. plug it in and it controls the timer &mdash; one press to start, one to pause, one to reset. the led blinks while the timer is idle and goes solid while it's running.</p>
+  <p>plugs right into your phone or computer via usb-c (use a data cable). sub-10ms from press to response. the button lights up and flashes too.</p>
 
-  <p>no drivers. no software. your computer sees it as a keyboard. about 20ms from press to response.</p>
+  <ul class="controls">
+    <li>tap to start</li>
+    <li>tap while running to pause</li>
+    <li>double tap to reset</li>
+    <li>triple tap to cycle the goal time</li>
+    <li>hold to cycle precision</li>
+  </ul>
 
   <p class="meta">
-    <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">see it here</a> &nbsp;&middot;&nbsp;
+    <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">see it here</a> &nbsp; &nbsp;
     <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">buy it here</a>
   </p>
 
@@ -46,7 +59,21 @@
 
   <ul>
     <li>powered by usb-c</li>
+    <li>works with iphone (use a data cable)</li>
     <li>modify friendly</li>
   </ul>
+
+  <details>
+    <summary>diy</summary>
+    <div class="diy">
+      <div class="label">microcontroller</div>
+      <p>Teyleten Robot Type-C Pro Micro (ATmega32U4, 5V/16MHz)</p>
+      <div class="label">firmware</div>
+      <p><a href="/random/spacebar_firmware.ino">spacebar_firmware.ino</a></p>
+      <div class="label">wiring</div>
+      <p>momentary switch: one leg to pin 2, other leg to GND. INPUT_PULLUP is set in firmware so no external resistor needed.</p>
+      <p>LED: anode through a 330 ohm resistor to pin 9, cathode to GND.</p>
+    </div>
+  </details>
 </body>
 </html>

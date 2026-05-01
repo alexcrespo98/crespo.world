@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>partyemergency — crespo.world</title>
+  <title>partyemergency &mdash; crespo.world</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -21,18 +21,23 @@
     .back { display: block; margin-bottom: 2.5em; font-size: 0.85rem; opacity: 0.7; }
     h1 { font-size: 1.1rem; font-weight: normal; margin: 0 0 1.5em 0; }
     p { margin: 0 0 0.85em 0; line-height: 1.65; font-size: 0.9rem; }
-    .save { font-size: 0.8rem; opacity: 0.55; margin-top: 1.8em; }
     .setup-link {
       display: inline-block;
-      margin-top: 1.5em;
+      margin-top: 1em;
       padding: 0.5em 1em;
       border: 1px solid #0f0;
       font-size: 0.85rem;
     }
     .setup-link:hover { background: #0f0; color: #000; text-decoration: none; }
+    .meta { font-size: 0.8rem; opacity: 0.55; margin-top: 1.8em; }
+    .meta a { opacity: 1; }
     ul { list-style: none; padding: 0; margin: 1.5em 0 0 0; }
     li { margin: 0.4em 0; font-size: 0.85rem; }
     li::before { content: '+ '; opacity: 0.5; }
+    details { margin-top: 2.5em; border-top: 1px solid #0f03; padding-top: 1.5em; }
+    summary { cursor: pointer; font-size: 0.78rem; opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 1em; }
+    .diy p { font-size: 0.82rem; margin: 0 0 0.5em 0; }
+    .diy .label { opacity: 0.5; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 1em 0 0.3em 0; }
   </style>
 </head>
 <body>
@@ -40,17 +45,33 @@
 
   <h1>partyemergency</h1>
 
-  <p>press the button and your sonos speakers switch to a pre-selected song or playlist, then return to whatever was playing when it's done. it just needs to be on the same wi-fi as your speakers.</p>
+  <p>press the button and your sonos speakers switch to a pre-selected song or playlist, then return to whatever was playing when done. great for happy birthday at restaurants. can even cut songs off early.</p>
 
-  <p>you can set a duration or let the whole thing play out. works with any sonos system.</p>
+  <p>connects to your sonos over wi-fi. you set the interrupt playlist, how long to play it, and what to go back to after.</p>
 
   <a href="/button/partyemergency/setup" class="setup-link">set it up &rarr;</a>
 
-  <p class="save">save <em>crespo.world/button/partyemergency/setup</em> to your home screen to get back to the setup page easily.</p>
+  <p class="meta">
+    <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">see it here</a> &nbsp; &nbsp;
+    <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">buy it here</a>
+  </p>
 
   <ul>
     <li>powered by usb-c</li>
+    <li>works with any sonos system on the same wi-fi</li>
     <li>modify friendly</li>
   </ul>
+
+  <details>
+    <summary>diy</summary>
+    <div class="diy">
+      <div class="label">microcontroller</div>
+      <p>ESP32-C6</p>
+      <div class="label">firmware</div>
+      <p><a href="https://github.com/alexcrespo98/crespo.world" target="_blank">github repo</a></p>
+      <div class="label">wiring</div>
+      <p>momentary switch between a GPIO pin and GND. LED through a current-limiting resistor to another GPIO pin.</p>
+    </div>
+  </details>
 </body>
 </html>

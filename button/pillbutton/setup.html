@@ -21,23 +21,15 @@
     .back { display: block; margin-bottom: 2em; font-size: 0.8rem; opacity: 0.6; }
     h1 { font-size: 1rem; font-weight: normal; margin: 0 0 0.3em 0; }
     .subtitle { font-size: 0.78rem; opacity: 0.5; margin: 0 0 2em 0; }
-    .first-time {
+    .how-to {
       border: 1px solid #0f04;
       padding: 1em 1.1em;
       margin-bottom: 2em;
       font-size: 0.8rem;
       line-height: 1.7;
     }
-    .first-time summary {
-      cursor: pointer;
-      opacity: 0.6;
-      font-size: 0.78rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      margin-bottom: 0.5em;
-    }
-    .first-time ol { margin: 0.6em 0 0 1.2em; padding: 0; }
-    .first-time li { margin: 0.4em 0; }
+    .how-to ol { margin: 0.5em 0 0 1.2em; padding: 0; }
+    .how-to li { margin: 0.4em 0; }
     .section { margin-bottom: 2em; }
     .section-label {
       font-size: 0.7rem;
@@ -47,7 +39,7 @@
       margin-bottom: 0.8em;
     }
     label { display: block; font-size: 0.82rem; margin-bottom: 0.25em; }
-    input, select {
+    select {
       width: 100%;
       background: #000;
       color: #0f0;
@@ -61,16 +53,21 @@
       -webkit-appearance: none;
       border-radius: 0;
     }
-    input:focus, select:focus { border-color: #5fffaa; }
-    .hint { font-size: 0.72rem; opacity: 0.45; margin-top: -0.75em; margin-bottom: 0.9em; }
-    .placeholder-block {
-      border: 1px dashed #0f04;
-      padding: 0.8em 1em;
-      font-size: 0.75rem;
-      opacity: 0.45;
-      margin-bottom: 1.5em;
-      line-height: 1.6;
+    select:focus { border-color: #5fffaa; }
+    input[type=time] {
+      background: #000;
+      color: #0f0;
+      border: 1px solid #0f0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding: 0.45em 0.6em;
+      margin-bottom: 0;
+      outline: none;
+      border-radius: 0;
+      flex: 1;
     }
+    input[type=time]:focus { border-color: #5fffaa; }
+    .hint { font-size: 0.72rem; opacity: 0.45; margin-top: -0.75em; margin-bottom: 0.9em; }
     .dose-row {
       display: flex;
       gap: 0.6em;
@@ -78,7 +75,15 @@
       margin-bottom: 0.8em;
     }
     .dose-row label { margin: 0; min-width: 5ch; opacity: 0.6; font-size: 0.8rem; }
-    .dose-row select, .dose-row input[type=time] { margin-bottom: 0; flex: 1; }
+    .dose-row select { margin-bottom: 0; flex: 1; }
+    .placeholder-block {
+      border: 1px dashed #0f04;
+      padding: 0.8em 1em;
+      font-size: 0.75rem;
+      opacity: 0.4;
+      margin-bottom: 1.5em;
+      line-height: 1.7;
+    }
     button[type=submit] {
       width: 100%;
       background: #0f0;
@@ -100,28 +105,20 @@
   <a href="/button/pillbutton/" class="back">&larr; pillbutton</a>
 
   <h1>pillbutton setup</h1>
-  <p class="subtitle">connect your phone to the button's wi-fi, then fill this out.</p>
+  <p class="subtitle">it comes ready to go. just connect and configure.</p>
 
-  <details class="first-time">
-    <summary>first time? start here</summary>
+  <div class="how-to">
+    <strong style="font-size:0.8rem;">first time</strong>
     <ol>
-      <li>flash the firmware onto your ESP32-C6 &mdash; <a href="https://github.com/alexcrespo98/crespo.world" target="_blank">see the repo</a> for the sketch.</li>
-      <li>power it on. it will broadcast a wi-fi network called <strong>pillbuttonsetup</strong>.</li>
+      <li>plug in the button. it will broadcast a wi-fi hotspot called <strong>pillbuttonsetup</strong>.</li>
       <li>on your phone, go to wi-fi settings and connect to <strong>pillbuttonsetup</strong>. no password.</li>
-      <li>come back here and fill out the form below.</li>
-      <li>next time: hold the button for 5 seconds to re-enter setup mode.</li>
+      <li>come back here, fill in your alarm times, and hit save.</li>
+      <li>the button restarts and is ready. no internet needed after this.</li>
+      <li>to reconfigure: hold the button for 5 seconds to re-enter setup mode.</li>
     </ol>
-  </details>
+  </div>
 
   <form id="setupForm">
-
-    <div class="section">
-      <div class="section-label">wi-fi</div>
-      <label>network name (ssid)</label>
-      <input type="text" id="ssid" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="your home wi-fi">
-      <label>password</label>
-      <input type="password" id="wifiPass" autocomplete="current-password" placeholder="••••••••">
-    </div>
 
     <div class="section">
       <div class="section-label">schedule</div>
@@ -132,15 +129,15 @@
         <option value="3">three times a day</option>
         <option value="4">four times a day</option>
       </select>
-      <p class="hint">the led restarts its green → yellow → red cycle after each dose.</p>
+      <p class="hint">the led resets its cycle after each dose.</p>
       <div id="doseSlots"></div>
     </div>
 
     <div class="section">
-      <div class="section-label">reference</div>
+      <div class="section-label">coming soon</div>
       <div class="placeholder-block">
-        placeholder for shopping link &mdash; add purchase url here when ready.<br>
-        placeholder for picture / video &mdash; add media here when ready.
+        placeholder for shopping link<br>
+        placeholder for picture / video
       </div>
     </div>
 
@@ -149,7 +146,7 @@
   </form>
 
   <hr>
-  <p style="font-size:0.72rem; opacity:0.4; text-align:center;">settings are sent directly to the button at 192.168.4.1 over its local wi-fi. nothing goes to crespo.world.</p>
+  <p style="font-size:0.72rem; opacity:0.4; text-align:center;">settings go directly to the button over its local hotspot. nothing reaches the internet.</p>
 
   <script>
     const PRESETS = ['morning', 'noon', 'night', 'custom'];
@@ -164,22 +161,18 @@
         row.className = 'dose-row';
         row.innerHTML =
           '<label>dose ' + (i + 1) + '</label>' +
-          '<select class="dose-preset" data-index="' + i + '">' +
+          '<select class="dose-preset">' +
             '<option value="morning"' + (preset === 'morning' ? ' selected' : '') + '>morning</option>' +
             '<option value="noon"'    + (preset === 'noon'    ? ' selected' : '') + '>noon</option>' +
             '<option value="night"'   + (preset === 'night'   ? ' selected' : '') + '>night</option>' +
-            '<option value="custom"'  + (preset === 'custom'  ? ' selected' : '') + '>custom time</option>' +
+            '<option value="custom"'  + (preset === 'custom'  ? ' selected' : '') + '>custom</option>' +
           '</select>' +
-          '<input type="time" class="dose-time" style="display:' + (preset === 'custom' ? 'block' : 'none') + '" value="' + (PRESET_TIMES[preset] || '09:00') + '">';
+          '<input type="time" class="dose-time" style="display:' + (preset === 'custom' ? 'flex' : 'none') + '" value="' + (PRESET_TIMES[preset] || '09:00') + '">';
         container.appendChild(row);
         row.querySelector('.dose-preset').addEventListener('change', function() {
-          const timeInput = row.querySelector('.dose-time');
-          if (this.value === 'custom') {
-            timeInput.style.display = 'block';
-          } else {
-            timeInput.style.display = 'none';
-            timeInput.value = PRESET_TIMES[this.value];
-          }
+          const t = row.querySelector('.dose-time');
+          if (this.value === 'custom') { t.style.display = 'flex'; }
+          else { t.style.display = 'none'; t.value = PRESET_TIMES[this.value]; }
         });
       }
     }
@@ -192,36 +185,23 @@
     document.getElementById('setupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const status = document.getElementById('status');
-      status.textContent = 'sending…'; status.className = 'warn';
+      status.textContent = 'sending...'; status.className = 'warn';
 
       const doses = Array.from(document.querySelectorAll('.dose-row')).map(row => {
         const preset = row.querySelector('.dose-preset').value;
-        const time = preset === 'custom'
-          ? row.querySelector('.dose-time').value
-          : PRESET_TIMES[preset];
+        const time = preset === 'custom' ? row.querySelector('.dose-time').value : PRESET_TIMES[preset];
         return { label: preset, time };
       });
-
-      const payload = {
-        ssid:      document.getElementById('ssid').value.trim(),
-        wifi_pass: document.getElementById('wifiPass').value,
-        doses
-      };
-
-      if (!payload.ssid) {
-        status.textContent = 'fill in your wi-fi name first.';
-        status.className = 'err'; return;
-      }
 
       try {
         const res = await fetch('http://192.168.4.1/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ doses }),
           signal: AbortSignal.timeout(8000)
         });
         if (res.ok) {
-          status.textContent = '✓ saved. the button will restart and connect to your wi-fi.';
+          status.textContent = 'saved. the button will restart.';
           status.className = 'ok';
         } else {
           status.textContent = 'button returned an error (' + res.status + '). try again.';
@@ -229,8 +209,8 @@
         }
       } catch (err) {
         status.textContent = err.name === 'TimeoutError' || err.name === 'AbortError'
-          ? "can't reach the button. are you connected to its wi-fi?"
-          : "connection failed. make sure you're on the button's wi-fi network.";
+          ? "can't reach the button. are you connected to pillbuttonsetup?"
+          : 'connection failed. make sure you are on the button hotspot.';
         status.className = 'err';
       }
     });
