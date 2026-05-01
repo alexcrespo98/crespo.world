@@ -19,8 +19,25 @@
     a { color: #0f0; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .back { display: block; margin-bottom: 2em; font-size: 0.8rem; opacity: 0.6; }
-    h1 { font-size: 1rem; font-weight: normal; margin: 0 0 0.4em 0; }
+    h1 { font-size: 1rem; font-weight: normal; margin: 0 0 0.3em 0; }
     .subtitle { font-size: 0.78rem; opacity: 0.5; margin: 0 0 2em 0; }
+    .first-time {
+      border: 1px solid #0f04;
+      padding: 1em 1.1em;
+      margin-bottom: 2em;
+      font-size: 0.8rem;
+      line-height: 1.7;
+    }
+    .first-time summary {
+      cursor: pointer;
+      opacity: 0.6;
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 0.5em;
+    }
+    .first-time ol { margin: 0.6em 0 0 1.2em; padding: 0; }
+    .first-time li { margin: 0.4em 0; }
     .section { margin-bottom: 2em; }
     .section-label {
       font-size: 0.7rem;
@@ -68,7 +85,18 @@
   <a href="/button/partyemergency/" class="back">&larr; partyemergency</a>
 
   <h1>partyemergency setup</h1>
-  <p class="subtitle">connect your phone to the button's wi-fi first, then fill this out.</p>
+  <p class="subtitle">connect your phone to the button's wi-fi, then fill this out.</p>
+
+  <details class="first-time">
+    <summary>first time? start here</summary>
+    <ol>
+      <li>flash the firmware onto your ESP32-C6 — <a href="https://github.com/alexcrespo98/crespo.world" target="_blank">see the repo</a> for the sketch.</li>
+      <li>power it on. it will broadcast a wi-fi network called <strong>partyemergency-setup</strong>.</li>
+      <li>on your phone, go to wi-fi settings and connect to <strong>partyemergency-setup</strong>. no password.</li>
+      <li>come back here and fill out the form below.</li>
+      <li>next time: hold the button for 5 seconds to re-enter setup mode.</li>
+    </ol>
+  </details>
 
   <form id="setupForm">
 
