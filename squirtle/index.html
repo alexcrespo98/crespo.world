@@ -109,6 +109,21 @@
     .result-buttons { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; margin-top: 1em; }
     .result-buttons button { padding: 0.35em 1em; font-size: 0.95rem; }
 
+    /* score +1 pop */
+    @keyframes scorePop {
+      0%   { opacity: 1; transform: translateY(0) scale(1); }
+      60%  { opacity: 1; transform: translateY(-18px) scale(1.25); }
+      100% { opacity: 0; transform: translateY(-30px) scale(1); }
+    }
+    .score-delta {
+      display: inline-block;
+      color: #0f0;
+      font-size: 0.95rem;
+      font-weight: bold;
+      margin-left: 0.4em;
+      animation: scorePop 1.1s ease forwards;
+    }
+
     /* Sprite shake */
     @keyframes shake {
       0%,100% { transform: translate(0,0) rotate(0deg); }
@@ -140,11 +155,18 @@
     .stat-row.highlight .stat-name,
     .stat-row.highlight .stat-val { font-weight: bold; }
     .stat-name { min-width: 5em; font-size: 0.82rem; opacity: 0.8; }
-    .stat-bar-wrap { flex: 1; }
+    .stat-bar-wrap { flex: 1; position: relative; }
+    /* redacted bar: grey placeholder shown before reveal */
+    .stat-bar-bg {
+      height: 5px;
+      background: rgba(0,255,0,0.15);
+      width: 100%;
+    }
     .stat-bar { height: 5px; background: #0f0; width: 0; transition: width 0.85s ease; }
     .stat-row.highlight .stat-bar { background: #fff; }
     .stat-val { min-width: 2.2em; text-align: right; font-size: 0.82rem; }
-    .bonus-msg { font-size: 0.88rem; margin-top: 0.4em; min-height: 1.2em; }
+    /* hidden val before reveal */
+    .stat-val.hidden { opacity: 0.2; letter-spacing: 0.1em; }
 
     @media (max-width: 560px) {
       body { padding: 2em 0.9em; }
@@ -190,11 +212,8 @@
       let suggestions = [];
       let suggestionIndex = -1;
 
-      // api data cache (ability + base stats)
-      let cachedApiData = null; // { ability: str, stats: [{name,value}] }
-
-      // stat mini-game state
-      let statGame = null; // { stats, correct[], timerId, answered, bonusEarned }
+      let cachedApiData = null;
+      let statGame = null;
 
       const clues = [
         { key: 'cry',        label: 'Cry' },
@@ -212,7 +231,6 @@
 
       function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
       function fmtSlug(s) { return s.split('-').map(cap).join(' '); }
-
       function scorePenalty(pts) { score = Math.max(0, score - pts); }
 
       function hashString(v) {
@@ -267,7 +285,6 @@
             ability: primaryAbility,
             stats: data.stats.map(s => ({ name: STAT_NAMES[s.stat.name] || s.stat.name, value: s.base_stat }))
           };
-          // patch ability clue live if it's already showing
           const el = document.getElementById('ability-value');
           if (el) el.textContent = fmtSlug(primaryAbility);
         } catch (_) {}
@@ -367,7 +384,7 @@
         showResult(summary);
       }
 
-      // ── Overlay ────────────────────────────────────────────────────────────
+      // ── Overlay ──────────────────────────────────────────────────────────
 
       function showResult(summary) {
         if (statGame && statGame.timerId) clearInterval(statGame.timerId);
@@ -379,7 +396,7 @@
             src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${summary.id}.png"
             alt="${cap(summary.answer)}">
           <div class="result-pokemon-name">${cap(summary.answer)}</div>
-          <div class="result-score">Score: ${summary.score}</div>
+          <div class="result-score" id="result-score-line">Score: ${summary.score}</div>
           <div id="stat-game-area" class="stat-game"></div>
           <div class="result-buttons">
             <button id="overlay-new-game">New Game</button>
@@ -393,19 +410,16 @@
         });
 
         if (summary.won) {
-          // shake + cry
           setTimeout(() => {
             const sprite = document.getElementById('result-sprite');
             if (sprite) {
               sprite.classList.add('sprite-shake');
               sprite.addEventListener('animationend', () => sprite.classList.remove('sprite-shake'), { once: true });
             }
-            const audio = new Audio(currentPokemon.cry_url);
-            audio.play().catch(() => {});
+            new Audio(currentPokemon.cry_url).play().catch(() => {});
           }, 120);
         }
 
-        // kick off stat mini-game once api data ready
         waitForApiThenStartStatGame(summary);
       }
 
@@ -429,16 +443,10 @@
         const maxVal = Math.max(...stats.map(s => s.value));
         const correct = stats.filter(s => s.value === maxVal).map(s => s.name);
 
-        statGame = { stats, correct, answered: false, bonusEarned: false, timerLeft: 5, timerId: null };
+        statGame = { stats, correct, answered: false, bonusEarned: false, timerLeft: 5, timerId: null, summary };
 
         renderStatPanel(area, false);
 
-        // fill bars after a tick
-        setTimeout(() => {
-          area.querySelectorAll('.stat-bar[data-w]').forEach(b => { b.style.width = b.dataset.w + '%'; });
-        }, 60);
-
-        // start countdown
         statGame.timerId = setInterval(() => {
           statGame.timerLeft--;
           const el = document.getElementById('stat-countdown');
@@ -450,14 +458,17 @@
         }, 1000);
       }
 
-      function renderStatPanel(area, refill) {
+      function renderStatPanel(area, revealBars) {
         if (!statGame) return;
         const { stats, correct, answered, bonusEarned, timerLeft } = statGame;
         const MAX_STAT = 255;
 
-        const prompt = answered
-          ? `<div class="stat-prompt">${bonusEarned ? '+1 bonus! nice.' : 'not quite — highlighted is the highest'}</div>`
-          : `<div class="stat-prompt">which is the highest stat? <span id="stat-countdown">${timerLeft}s</span></div>`;
+        let prompt;
+        if (answered) {
+          prompt = `<div class="stat-prompt">${bonusEarned ? 'nice! +1' : 'not quite — highlighted is the highest'}</div>`;
+        } else {
+          prompt = `<div class="stat-prompt">which is the highest stat? <span id="stat-countdown">${timerLeft}s</span></div>`;
+        }
 
         const rows = stats.map(s => {
           const pct = Math.round((s.value / MAX_STAT) * 100);
@@ -467,11 +478,22 @@
             cls += ' answered';
             cls += isCorrect ? ' highlight' : ' dimmed';
           }
-          const barW = refill ? pct : 0;
+
+          let barHtml, valHtml;
+          if (!answered) {
+            // bars hidden: show dim placeholder, values redacted
+            barHtml = `<div class="stat-bar-bg"></div>`;
+            valHtml = `<span class="stat-val hidden">---</span>`;
+          } else {
+            // revealed: animate bars in
+            barHtml = `<div class="stat-bar" data-w="${pct}" style="width:${revealBars ? '0' : pct + '%'}"></div>`;
+            valHtml = `<span class="stat-val">${s.value}</span>`;
+          }
+
           return `<div class="${cls}" data-stat="${s.name}">
             <span class="stat-name">${s.name}</span>
-            <div class="stat-bar-wrap"><div class="stat-bar" data-w="${pct}" style="width:${barW}%"></div></div>
-            <span class="stat-val">${s.value}</span>
+            <div class="stat-bar-wrap">${barHtml}</div>
+            ${valHtml}
           </div>`;
         }).join('');
 
@@ -483,7 +505,7 @@
           });
         }
 
-        if (refill) {
+        if (answered && revealBars) {
           setTimeout(() => {
             area.querySelectorAll('.stat-bar[data-w]').forEach(b => { b.style.width = b.dataset.w + '%'; });
           }, 60);
@@ -494,12 +516,25 @@
         if (!statGame || statGame.answered) return;
         clearInterval(statGame.timerId);
         statGame.answered = true;
-        if (clickedName && statGame.correct.includes(clickedName)) statGame.bonusEarned = true;
+
+        const won = clickedName && statGame.correct.includes(clickedName);
+        statGame.bonusEarned = won;
+
+        if (won) {
+          score += 1;
+          setHighScore(score);
+          // update the score line with animated +1
+          const scoreLine = document.getElementById('result-score-line');
+          if (scoreLine) {
+            scoreLine.innerHTML = `Score: ${score} <span class="score-delta">+1</span>`;
+          }
+        }
+
         const area = document.getElementById('stat-game-area');
         if (area) renderStatPanel(area, true);
       }
 
-      // ── Board ──────────────────────────────────────────────────────────────
+      // ── Board ─────────────────────────────────────────────────────────────
 
       function updateSuggestions(val) {
         const q = val.trim().toLowerCase();
