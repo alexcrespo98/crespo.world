@@ -385,10 +385,6 @@
           </div>
         ` : '';
 
-        const newGameBtn = mode === 'endless'
-          ? `<button id="overlay-new-game">New Game</button>`
-          : `<div style="opacity:0.55;font-size:0.85rem;margin-top:0.3em">Come back tomorrow</div>`;
-
         overlayEl.innerHTML = `
           <div class="result-label">${resultLabel}</div>
           <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${summary.id}.png" alt="${cap(summary.answer)}">
@@ -397,7 +393,7 @@
           ${statsHtml}
           <div class="result-buttons">
             <button id="overlay-view-stats">${showingStats ? 'Hide Stats' : 'View Stats'}</button>
-            ${newGameBtn}
+            <button id="overlay-new-game">New Game</button>
           </div>
         `;
         overlayEl.style.display = 'flex';
@@ -407,14 +403,9 @@
           renderOverlay(summary);
         });
 
-        if (mode === 'endless') {
-          const ngBtn = document.getElementById('overlay-new-game');
-          if (ngBtn) ngBtn.addEventListener('click', () => {
-            currentPokemon = pickRandomPokemon();
-            resetRound();
-            renderBoard();
-          });
-        }
+        document.getElementById('overlay-new-game').addEventListener('click', () => {
+          selectMode('endless');
+        });
       }
 
       function updateSuggestions(inputValue) {
