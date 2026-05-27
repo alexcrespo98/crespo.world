@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>squirtle — crespo.world</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 2.5em 1.2em;
+      max-width: 780px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.5;
+    }
+    a { color: #0f0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-block; margin-bottom: 1.8em; font-size: 0.85rem; opacity: 0.75; }
+    h1 { margin: 0 0 1.2em 0; font-size: 1rem; font-weight: normal; letter-spacing: 0.06em; opacity: 0.75; }
+    .topline { display: flex; flex-wrap: wrap; gap: 0.7em 1em; align-items: center; margin-bottom: 1em; }
+    .mode-buttons { display: flex; gap: 0.5em; flex-wrap: wrap; }
+    button {
+      background: transparent;
+      color: #0f0;
+      border: 1px solid #0f0;
+      font-family: monospace;
+      padding: 0.2em 0.45em;
+      cursor: pointer;
+    }
+    button:hover { background: #0f0; color: #000; }
+    button.active { background: #0f0; color: #000; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .stats { opacity: 0.8; font-size: 0.9rem; }
+    .prompt { margin-top: 1em; margin-bottom: 0.7em; }
+    .clues-title { margin: 1em 0 0.5em; }
+    .clue-buttons { display: flex; flex-wrap: wrap; gap: 0.45em; }
+    .clue-item { margin-top: 0.3em; white-space: pre-line; }
+    .counter { margin-top: 0.8em; }
+    .guess-wrap { margin-top: 1em; position: relative; }
+    .guess-row { display: flex; align-items: center; gap: 0.5em; }
+    .guess-row span { opacity: 0.75; }
+    input {
+      flex: 1;
+      background: #000;
+      color: #0f0;
+      border: 1px solid #0f0;
+      font-family: monospace;
+      padding: 0.5em;
+      min-width: 0;
+    }
+    .suggestions {
+      position: absolute;
+      left: 1.3em;
+      right: 0;
+      top: calc(100% + 0.2em);
+      border: 1px solid #0f0;
+      background: #000;
+      max-height: 11em;
+      overflow: auto;
+      z-index: 10;
+    }
+    .suggestion { padding: 0.35em 0.5em; cursor: pointer; }
+    .suggestion:hover, .suggestion.active { background: #0f0; color: #000; }
+    .history { margin-top: 0.9em; }
+    .wrong { opacity: 0.8; }
+    .correct { font-weight: bold; }
+    .summary { margin-top: 1.2em; border-top: 1px solid #0f0; padding-top: 1em; }
+    .summary img { image-rendering: pixelated; width: 144px; height: 144px; display: block; margin: 0.5em 0; }
+    .error { color: #9f9; border: 1px solid #0f0; padding: 0.7em; }
+    @media (max-width: 560px) {
+      body { padding: 2em 0.9em; }
+      .topline { align-items: flex-start; }
+      .stats { font-size: 0.82rem; }
+      .suggestions { left: 1.2em; }
+    }
+  </style>
+</head>
+<body>
+  <a href="/" class="back">&larr; back</a>
+  <h1>squirtle</h1>
+
+  <div id="app">loading...</div>
+
+  <script>
+    (function () {
+      const LS = {
+        data: 'squirtle_data',
+        dataTs: 'squirtle_data_ts',
+        highScore: 'squirtle_highscore',
+        streak: 'squirtle_streak',
+        bestStreak: 'squirtle_best_streak'
+      };
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      const DATA_TTL = 7 * DAY_MS;
+      const MAX_WRONG = 6;
+      const START_SCORE = 1000;
+
+      const app = document.getElementById('app');
+      let pokemonData = [];
+      let mode = null;
+      let currentPokemon = null;
+      let score = START_SCORE;
+      let wrongGuesses = [];
+      let revealedClues = new Set();
+      let gameOver = false;
+      let suggestions = [];
+      let suggestionIndex = -1;
+
+      const clues = [
+        { key: 'cry', label: '🔊 Cry' },
+        { key: 'generation', label: '⚡ Generation' },
+        { key: 'type', label: '🌿 Type' },
+        { key: 'learnset', label: '📖 Learnset' },
+        { key: 'evolution', label: '🔀 Evolution' },
+        { key: 'location', label: '📍 Location' }
+      ];
+
+      function cap(name) {
+        return name.charAt(0).toUpperCase() + name.slice(1);
+      }
+
+      function scorePenalty(points) {
+        score = Math.max(0, score - points);
+      }
+
+      function hashString(value) {
+        let h = 2166136261;
+        for (let i = 0; i < value.length; i++) {
+          h ^= value.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+      }
+
+      function todayKey() {
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      function dailyStorageKey() {
+        return `squirtle_daily_${todayKey()}`;
+      }
+
+      function getHighScore() {
+        return Number(localStorage.getItem(LS.highScore) || '0');
+      }
+
+      function setHighScore(value) {
+        const prev = getHighScore();
+        if (value > prev) localStorage.setItem(LS.highScore, String(value));
+      }
+
+      function getStreak() {
+        return Number(localStorage.getItem(LS.streak) || '0');
+      }
+
+      function setStreak(value) {
+        localStorage.setItem(LS.streak, String(value));
+        const best = Number(localStorage.getItem(LS.bestStreak) || '0');
+        if (value > best) localStorage.setItem(LS.bestStreak, String(value));
+      }
+
+      function bestStreak() {
+        return Number(localStorage.getItem(LS.bestStreak) || '0');
+      }
+
+      function renderError(message) {
+        app.innerHTML = `<div class="error">${message}</div>`;
+      }
+
+      async function loadData() {
+        const now = Date.now();
+        try {
+          const res = await fetch('./pokemon_data.json', { cache: 'no-store' });
+          if (!res.ok) throw new Error('missing file');
+          pokemonData = await res.json();
+          localStorage.setItem(LS.data, JSON.stringify(pokemonData));
+          localStorage.setItem(LS.dataTs, String(now));
+        } catch (err) {
+          const cached = localStorage.getItem(LS.data);
+          const cachedTs = Number(localStorage.getItem(LS.dataTs) || '0');
+          if (cached && cachedTs && (now - cachedTs) < DATA_TTL) {
+            pokemonData = JSON.parse(cached);
+            return;
+          }
+          renderError('Missing pokemon_data.json — run build_data.py to generate it.');
+          throw err;
+        }
+      }
+
+      function pickDailyPokemon() {
+        const idx = hashString(todayKey()) % pokemonData.length;
+        return pokemonData[idx];
+      }
+
+      function pickRandomPokemon() {
+        const idx = Math.floor(Math.random() * pokemonData.length);
+        return pokemonData[idx];
+      }
+
+      function resetRound() {
+        score = START_SCORE;
+        wrongGuesses = [];
+        revealedClues = new Set();
+        gameOver = false;
+        suggestions = [];
+        suggestionIndex = -1;
+      }
+
+      function selectMode(newMode) {
+        mode = newMode;
+        if (mode === 'daily') {
+          const completed = localStorage.getItem(dailyStorageKey());
+          if (completed) {
+            const parsed = JSON.parse(completed);
+            gameOver = true;
+            renderBoard(null, parsed);
+            return;
+          }
+          currentPokemon = pickDailyPokemon();
+        } else {
+          currentPokemon = pickRandomPokemon();
+          gameOver = false;
+        }
+        resetRound();
+        renderBoard();
+      }
+
+      function clueText(key, p) {
+        if (key === 'generation') return `Generation ${p.generation}`;
+        if (key === 'type') return `Type: ${p.types.map(cap).join(' / ')}`;
+        if (key === 'learnset') {
+          if (!p.learnset.length) return 'No learnset data.';
+          return p.learnset.map((m) => `${m.move} (${m.method})`).join('\n');
+        }
+        if (key === 'evolution') {
+          const e = p.evolution || {};
+          if (!e.from && !e.to) return 'Does not evolve.';
+          const lines = [];
+          if (e.from) lines.push(`Evolves from: ${cap(e.from.name)} (${e.from.condition})`);
+          if (e.to) lines.push(`Evolves into: ${cap(e.to.name)} (${e.to.condition})`);
+          return lines.join('\n');
+        }
+        if (key === 'location') return `Location: ${(p.locations || []).join(', ')}`;
+        return '';
+      }
+
+      function revealClue(key) {
+        if (gameOver || revealedClues.has(key)) return;
+        revealedClues.add(key);
+        scorePenalty(50);
+        renderBoard();
+      }
+
+      function submitGuess(guessRaw) {
+        if (gameOver || !currentPokemon) return;
+        const guess = guessRaw.trim().toLowerCase();
+        if (!guess) return;
+
+        if (guess === currentPokemon.name) {
+          finishRound(true);
+          return;
+        }
+
+        if (wrongGuesses.includes(guess)) {
+          renderBoard();
+          return;
+        }
+
+        wrongGuesses.push(guess);
+        scorePenalty(100);
+
+        if (wrongGuesses.length >= MAX_WRONG) {
+          finishRound(false);
+        } else {
+          renderBoard();
+        }
+      }
+
+      function finishRound(won) {
+        gameOver = true;
+        if (won) {
+          setHighScore(score);
+          if (mode === 'endless') {
+            setStreak(getStreak() + 1);
+          }
+        } else if (mode === 'endless') {
+          setStreak(0);
+        }
+
+        const summary = {
+          won,
+          answer: currentPokemon.name,
+          id: currentPokemon.id,
+          score,
+          cluesUsed: revealedClues.size,
+          wrongGuesses: wrongGuesses.length
+        };
+
+        if (mode === 'daily') {
+          localStorage.setItem(dailyStorageKey(), JSON.stringify(summary));
+        }
+
+        renderBoard(summary);
+      }
+
+      function nextEndless() {
+        currentPokemon = pickRandomPokemon();
+        resetRound();
+        renderBoard();
+      }
+
+      function updateSuggestions(inputValue) {
+        const q = inputValue.trim().toLowerCase();
+        if (!q) {
+          suggestions = [];
+          suggestionIndex = -1;
+          renderSuggestions();
+          return;
+        }
+        suggestions = pokemonData
+          .filter((p) => p.name.startsWith(q) || p.name.includes(q))
+          .slice(0, 12)
+          .map((p) => p.name);
+        suggestionIndex = suggestions.length ? 0 : -1;
+        renderSuggestions();
+      }
+
+      function renderSuggestions() {
+        const box = document.getElementById('suggestions');
+        if (!box) return;
+        if (!suggestions.length || gameOver) {
+          box.innerHTML = '';
+          box.style.display = 'none';
+          return;
+        }
+        box.style.display = 'block';
+        box.innerHTML = suggestions
+          .map((name, idx) => `<div class="suggestion ${idx === suggestionIndex ? 'active' : ''}" data-name="${name}">${cap(name)}</div>`)
+          .join('');
+      }
+
+      function handleGuessKeydown(e) {
+        if (!suggestions.length) {
+          if (e.key === 'Enter') {
+            submitGuess(e.target.value);
+            e.target.value = '';
+            updateSuggestions('');
+          }
+          return;
+        }
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          suggestionIndex = (suggestionIndex + 1) % suggestions.length;
+          renderSuggestions();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          suggestionIndex = (suggestionIndex - 1 + suggestions.length) % suggestions.length;
+          renderSuggestions();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const guess = suggestionIndex >= 0 ? suggestions[suggestionIndex] : e.target.value;
+          submitGuess(guess);
+          e.target.value = '';
+          updateSuggestions('');
+        }
+      }
+
+      function playCry() {
+        if (!currentPokemon) return;
+        const audio = new Audio(currentPokemon.cry_url);
+        audio.play().catch(() => {});
+      }
+
+      function renderBoard(summaryFromDaily) {
+        const summary = summaryFromDaily || null;
+        const high = getHighScore();
+        const streak = mode === 'endless' ? getStreak() : 0;
+
+        app.innerHTML = `
+          <div class="topline">
+            <div class="mode-buttons">
+              <button id="mode-daily" class="${mode === 'daily' ? 'active' : ''}">daily</button>
+              <button id="mode-endless" class="${mode === 'endless' ? 'active' : ''}">endless</button>
+            </div>
+            <div class="stats">high score: ${high} | streak: ${streak} | best streak: ${bestStreak()}</div>
+          </div>
+          <div class="prompt">Guess the Pokémon!</div>
+          <div class="clues-title">Clues:</div>
+          <div class="clue-buttons">
+            ${clues.map((c) => `<button class="clue-btn" data-clue="${c.key}" ${gameOver ? 'disabled' : ''}>[${c.label}]</button>`).join('')}
+          </div>
+          <div id="clue-content"></div>
+          <div class="counter">Wrong guesses: ${wrongGuesses.length} / ${MAX_WRONG}</div>
+          <div class="counter">Score: ${score}</div>
+          <div class="guess-wrap">
+            <div class="guess-row"><span>&gt;</span><input id="guess-input" type="text" autocomplete="off" spellcheck="false" ${gameOver ? 'disabled' : ''}></div>
+            <div id="suggestions" class="suggestions" style="display:none"></div>
+          </div>
+          <div class="history">
+            ${wrongGuesses.map((g) => `<div class="wrong">✗ ${cap(g)}</div>`).join('')}
+          </div>
+          <div id="summary" class="summary"></div>
+        `;
+
+        document.getElementById('mode-daily').addEventListener('click', () => selectMode('daily'));
+        document.getElementById('mode-endless').addEventListener('click', () => selectMode('endless'));
+
+        const clueContent = document.getElementById('clue-content');
+        clues.forEach((c) => {
+          if (!revealedClues.has(c.key)) return;
+          const text = c.key === 'cry'
+            ? `<button id="play-cry" ${gameOver ? 'disabled' : ''}>Play cry</button>`
+            : clueText(c.key, currentPokemon);
+          const row = document.createElement('div');
+          row.className = 'clue-item';
+          row.innerHTML = `[${c.label}] ${text}`;
+          clueContent.appendChild(row);
+        });
+
+        document.querySelectorAll('.clue-btn').forEach((btn) => {
+          btn.addEventListener('click', () => revealClue(btn.dataset.clue));
+        });
+
+        const playBtn = document.getElementById('play-cry');
+        if (playBtn) playBtn.addEventListener('click', playCry);
+
+        const input = document.getElementById('guess-input');
+        if (input) {
+          input.addEventListener('input', (e) => updateSuggestions(e.target.value));
+          input.addEventListener('keydown', handleGuessKeydown);
+          input.focus();
+        }
+
+        document.getElementById('suggestions').addEventListener('click', (e) => {
+          const node = e.target.closest('.suggestion');
+          if (!node) return;
+          submitGuess(node.dataset.name);
+          if (input) {
+            input.value = '';
+            updateSuggestions('');
+          }
+        });
+
+        if (!gameOver && !summaryFromDaily) {
+          return;
+        }
+
+        const final = summary || {
+          won: false,
+          answer: currentPokemon.name,
+          id: currentPokemon.id,
+          score,
+          cluesUsed: revealedClues.size,
+          wrongGuesses: wrongGuesses.length
+        };
+
+        const summaryEl = document.getElementById('summary');
+        const correctLine = final.won
+          ? `✓ correct! it was: ${cap(final.answer)}`
+          : `✗ out of guesses. it was: ${cap(final.answer)}`;
+
+        const actionHtml = mode === 'endless'
+          ? '<button id="new-round">new game</button>'
+          : '<div>come back tomorrow</div>';
+
+        summaryEl.innerHTML = `
+          <div class="${final.won ? 'correct' : 'wrong'}">${correctLine}</div>
+          <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${final.id}.png" alt="${cap(final.answer)} sprite">
+          <div>score: ${final.score} | clues used: ${final.cluesUsed} | wrong guesses: ${final.wrongGuesses}</div>
+          <div style="margin-top:0.7em">${actionHtml}</div>
+        `;
+
+        if (mode === 'endless') {
+          const nextBtn = document.getElementById('new-round');
+          if (nextBtn) nextBtn.addEventListener('click', nextEndless);
+        }
+      }
+
+      async function init() {
+        try {
+          await loadData();
+        } catch (_err) {
+          return;
+        }
+        selectMode('daily');
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
