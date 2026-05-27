@@ -37,8 +37,15 @@
     .stats { opacity: 0.8; font-size: 0.9rem; }
     .prompt { margin-top: 1em; margin-bottom: 0.7em; }
     .clues-title { margin: 1em 0 0.5em; }
-    .clue-buttons { display: flex; flex-wrap: wrap; gap: 0.45em; }
-    .clue-item { margin-top: 0.3em; white-space: pre-line; }
+    .clue-list { display: flex; flex-direction: column; gap: 0.5em; }
+    .clue-item {
+      padding: 0.4em 0.6em;
+      border: 1px solid #0f0;
+      white-space: pre-line;
+      transition: opacity 0.3s;
+    }
+    .clue-item.locked { opacity: 0.22; }
+    .clue-item .clue-label { font-weight: bold; margin-bottom: 0.15em; font-size: 0.85rem; opacity: 0.75; }
     .counter { margin-top: 0.8em; }
     .guess-wrap { margin-top: 1em; position: relative; }
     .guess-row { display: flex; align-items: center; gap: 0.5em; }
@@ -67,15 +74,57 @@
     .suggestion:hover, .suggestion.active { background: #0f0; color: #000; }
     .history { margin-top: 0.9em; }
     .wrong { opacity: 0.8; }
-    .correct { font-weight: bold; }
-    .summary { margin-top: 1.2em; border-top: 1px solid #0f0; padding-top: 1em; }
-    .summary img { image-rendering: pixelated; width: 144px; height: 144px; display: block; margin: 0.5em 0; }
     .error { color: #9f9; border: 1px solid #0f0; padding: 0.7em; }
+
+    /* Result overlay */
+    .result-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.93);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      text-align: center;
+      padding: 2em 1.5em;
+    }
+    .result-overlay img {
+      image-rendering: pixelated;
+      width: 200px;
+      height: 200px;
+      display: block;
+      margin: 0.4em auto;
+    }
+    .result-label { font-size: 1rem; opacity: 0.8; margin-bottom: 0.2em; }
+    .result-pokemon-name {
+      font-size: 2.2rem;
+      font-weight: bold;
+      letter-spacing: 0.08em;
+      margin: 0.15em 0 0.3em;
+    }
+    .result-score { font-size: 1rem; margin-bottom: 1.2em; opacity: 0.85; }
+    .result-buttons { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; }
+    .result-buttons button { padding: 0.35em 1em; font-size: 0.95rem; }
+    .stats-panel {
+      border-top: 1px solid #0f0;
+      padding-top: 0.8em;
+      margin-top: 0.2em;
+      margin-bottom: 1em;
+      font-size: 0.9rem;
+      opacity: 0.85;
+      text-align: left;
+      min-width: 200px;
+    }
+    .stats-panel div { margin: 0.2em 0; }
+
     @media (max-width: 560px) {
       body { padding: 2em 0.9em; }
       .topline { align-items: flex-start; }
       .stats { font-size: 0.82rem; }
       .suggestions { left: 1.2em; }
+      .result-overlay img { width: 144px; height: 144px; }
+      .result-pokemon-name { font-size: 1.6rem; }
     }
   </style>
 </head>
@@ -84,6 +133,7 @@
   <h1>squirtle</h1>
 
   <div id="app">loading...</div>
+  <div id="result-overlay" class="result-overlay"></div>
 
   <script>
     (function () {
@@ -100,6 +150,7 @@
       const START_SCORE = 1000;
 
       const app = document.getElementById('app');
+      const overlayEl = document.getElementById('result-overlay');
       let pokemonData = [];
       let mode = null;
       let currentPokemon = null;
@@ -109,14 +160,15 @@
       let gameOver = false;
       let suggestions = [];
       let suggestionIndex = -1;
+      let showingStats = false;
 
       const clues = [
-        { key: 'cry', label: '🔊 Cry' },
-        { key: 'generation', label: '⚡ Generation' },
-        { key: 'type', label: '🌿 Type' },
-        { key: 'learnset', label: '📖 Learnset' },
-        { key: 'evolution', label: '🔀 Evolution' },
-        { key: 'location', label: '📍 Location' }
+        { key: 'cry',        label: 'Cry' },
+        { key: 'generation', label: 'Generation' },
+        { key: 'type',       label: 'Type' },
+        { key: 'learnset',   label: 'Learnset' },
+        { key: 'evolution',  label: 'Evolution' },
+        { key: 'location',   label: 'Location' }
       ];
 
       function cap(name) {
@@ -212,24 +264,26 @@
         gameOver = false;
         suggestions = [];
         suggestionIndex = -1;
+        showingStats = false;
+        overlayEl.style.display = 'none';
       }
 
       function selectMode(newMode) {
         mode = newMode;
+        resetRound();
         if (mode === 'daily') {
+          currentPokemon = pickDailyPokemon();
           const completed = localStorage.getItem(dailyStorageKey());
           if (completed) {
             const parsed = JSON.parse(completed);
             gameOver = true;
-            renderBoard(null, parsed);
+            renderBoard();
+            showResult(parsed);
             return;
           }
-          currentPokemon = pickDailyPokemon();
         } else {
           currentPokemon = pickRandomPokemon();
-          gameOver = false;
         }
-        resetRound();
         renderBoard();
       }
 
@@ -244,19 +298,21 @@
           const e = p.evolution || {};
           if (!e.from && !e.to) return 'Does not evolve.';
           const lines = [];
-          if (e.from) lines.push(`Evolves from: ${cap(e.from.name)} (${e.from.condition})`);
-          if (e.to) lines.push(`Evolves into: ${cap(e.to.name)} (${e.to.condition})`);
+          if (e.from) lines.push(`Has a pre-evolution (${e.from.condition})`);
+          if (e.to) lines.push(`Evolves into a next stage (${e.to.condition})`);
           return lines.join('\n');
         }
         if (key === 'location') return `Location: ${(p.locations || []).join(', ')}`;
         return '';
       }
 
-      function revealClue(key) {
-        if (gameOver || revealedClues.has(key)) return;
-        revealedClues.add(key);
-        scorePenalty(50);
-        renderBoard();
+      function autoRevealNextClue() {
+        for (const c of clues) {
+          if (!revealedClues.has(c.key)) {
+            revealedClues.add(c.key);
+            break;
+          }
+        }
       }
 
       function submitGuess(guessRaw) {
@@ -276,6 +332,7 @@
 
         wrongGuesses.push(guess);
         scorePenalty(100);
+        autoRevealNextClue();
 
         if (wrongGuesses.length >= MAX_WRONG) {
           finishRound(false);
@@ -288,9 +345,7 @@
         gameOver = true;
         if (won) {
           setHighScore(score);
-          if (mode === 'endless') {
-            setStreak(getStreak() + 1);
-          }
+          if (mode === 'endless') setStreak(getStreak() + 1);
         } else if (mode === 'endless') {
           setStreak(0);
         }
@@ -308,13 +363,58 @@
           localStorage.setItem(dailyStorageKey(), JSON.stringify(summary));
         }
 
-        renderBoard(summary);
+        renderBoard();
+        showResult(summary);
       }
 
-      function nextEndless() {
-        currentPokemon = pickRandomPokemon();
-        resetRound();
-        renderBoard();
+      function showResult(summary) {
+        showingStats = false;
+        renderOverlay(summary);
+      }
+
+      function renderOverlay(summary) {
+        const resultLabel = summary.won ? 'Correct!' : 'Out of guesses.';
+
+        const statsHtml = showingStats ? `
+          <div class="stats-panel">
+            <div>Score: ${summary.score}</div>
+            <div>Clues used: ${summary.cluesUsed}</div>
+            <div>Wrong guesses: ${summary.wrongGuesses}</div>
+            <div>High score: ${getHighScore()}</div>
+            ${mode === 'endless' ? `<div>Streak: ${getStreak()} | Best: ${bestStreak()}</div>` : ''}
+          </div>
+        ` : '';
+
+        const newGameBtn = mode === 'endless'
+          ? `<button id="overlay-new-game">New Game</button>`
+          : `<div style="opacity:0.55;font-size:0.85rem;margin-top:0.3em">Come back tomorrow</div>`;
+
+        overlayEl.innerHTML = `
+          <div class="result-label">${resultLabel}</div>
+          <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${summary.id}.png" alt="${cap(summary.answer)}">
+          <div class="result-pokemon-name">${cap(summary.answer)}</div>
+          <div class="result-score">Score: ${summary.score}</div>
+          ${statsHtml}
+          <div class="result-buttons">
+            <button id="overlay-view-stats">${showingStats ? 'Hide Stats' : 'View Stats'}</button>
+            ${newGameBtn}
+          </div>
+        `;
+        overlayEl.style.display = 'flex';
+
+        document.getElementById('overlay-view-stats').addEventListener('click', () => {
+          showingStats = !showingStats;
+          renderOverlay(summary);
+        });
+
+        if (mode === 'endless') {
+          const ngBtn = document.getElementById('overlay-new-game');
+          if (ngBtn) ngBtn.addEventListener('click', () => {
+            currentPokemon = pickRandomPokemon();
+            resetRound();
+            renderBoard();
+          });
+        }
       }
 
       function updateSuggestions(inputValue) {
@@ -356,7 +456,6 @@
           }
           return;
         }
-
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           suggestionIndex = (suggestionIndex + 1) % suggestions.length;
@@ -380,8 +479,7 @@
         audio.play().catch(() => {});
       }
 
-      function renderBoard(summaryFromDaily) {
-        const summary = summaryFromDaily || null;
+      function renderBoard() {
         const high = getHighScore();
         const streak = mode === 'endless' ? getStreak() : 0;
 
@@ -393,12 +491,9 @@
             </div>
             <div class="stats">high score: ${high} | streak: ${streak} | best streak: ${bestStreak()}</div>
           </div>
-          <div class="prompt">Guess the Pokémon!</div>
+          <div class="prompt">Guess the Pokemon!</div>
           <div class="clues-title">Clues:</div>
-          <div class="clue-buttons">
-            ${clues.map((c) => `<button class="clue-btn" data-clue="${c.key}" ${gameOver ? 'disabled' : ''}>[${c.label}]</button>`).join('')}
-          </div>
-          <div id="clue-content"></div>
+          <div class="clue-list" id="clue-list"></div>
           <div class="counter">Wrong guesses: ${wrongGuesses.length} / ${MAX_WRONG}</div>
           <div class="counter">Score: ${score}</div>
           <div class="guess-wrap">
@@ -406,28 +501,30 @@
             <div id="suggestions" class="suggestions" style="display:none"></div>
           </div>
           <div class="history">
-            ${wrongGuesses.map((g) => `<div class="wrong">✗ ${cap(g)}</div>`).join('')}
+            ${wrongGuesses.map((g) => `<div class="wrong">x ${cap(g)}</div>`).join('')}
           </div>
-          <div id="summary" class="summary"></div>
         `;
 
         document.getElementById('mode-daily').addEventListener('click', () => selectMode('daily'));
         document.getElementById('mode-endless').addEventListener('click', () => selectMode('endless'));
 
-        const clueContent = document.getElementById('clue-content');
+        const clueList = document.getElementById('clue-list');
         clues.forEach((c) => {
-          if (!revealedClues.has(c.key)) return;
-          const text = c.key === 'cry'
-            ? `<button id="play-cry" ${gameOver ? 'disabled' : ''}>Play cry</button>`
-            : clueText(c.key, currentPokemon);
-          const row = document.createElement('div');
-          row.className = 'clue-item';
-          row.innerHTML = `[${c.label}] ${text}`;
-          clueContent.appendChild(row);
-        });
+          const revealed = revealedClues.has(c.key);
+          const item = document.createElement('div');
+          item.className = `clue-item${revealed ? '' : ' locked'}`;
 
-        document.querySelectorAll('.clue-btn').forEach((btn) => {
-          btn.addEventListener('click', () => revealClue(btn.dataset.clue));
+          if (revealed) {
+            if (c.key === 'cry') {
+              item.innerHTML = `<div class="clue-label">${c.label}</div><button id="play-cry" ${gameOver ? 'disabled' : ''}>Play cry</button>`;
+            } else {
+              item.innerHTML = `<div class="clue-label">${c.label}</div><div>${clueText(c.key, currentPokemon)}</div>`;
+            }
+          } else {
+            item.innerHTML = `<div class="clue-label">${c.label}</div>`;
+          }
+
+          clueList.appendChild(item);
         });
 
         const playBtn = document.getElementById('play-cry');
@@ -440,48 +537,14 @@
           input.focus();
         }
 
-        document.getElementById('suggestions').addEventListener('click', (e) => {
-          const node = e.target.closest('.suggestion');
-          if (!node) return;
-          submitGuess(node.dataset.name);
-          if (input) {
-            input.value = '';
-            updateSuggestions('');
-          }
-        });
-
-        if (!gameOver && !summaryFromDaily) {
-          return;
-        }
-
-        const final = summary || {
-          won: false,
-          answer: currentPokemon.name,
-          id: currentPokemon.id,
-          score,
-          cluesUsed: revealedClues.size,
-          wrongGuesses: wrongGuesses.length
-        };
-
-        const summaryEl = document.getElementById('summary');
-        const correctLine = final.won
-          ? `✓ correct! it was: ${cap(final.answer)}`
-          : `✗ out of guesses. it was: ${cap(final.answer)}`;
-
-        const actionHtml = mode === 'endless'
-          ? '<button id="new-round">new game</button>'
-          : '<div>come back tomorrow</div>';
-
-        summaryEl.innerHTML = `
-          <div class="${final.won ? 'correct' : 'wrong'}">${correctLine}</div>
-          <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${final.id}.png" alt="${cap(final.answer)} sprite">
-          <div>score: ${final.score} | clues used: ${final.cluesUsed} | wrong guesses: ${final.wrongGuesses}</div>
-          <div style="margin-top:0.7em">${actionHtml}</div>
-        `;
-
-        if (mode === 'endless') {
-          const nextBtn = document.getElementById('new-round');
-          if (nextBtn) nextBtn.addEventListener('click', nextEndless);
+        const suggestionsEl = document.getElementById('suggestions');
+        if (suggestionsEl) {
+          suggestionsEl.addEventListener('click', (e) => {
+            const node = e.target.closest('.suggestion');
+            if (!node) return;
+            submitGuess(node.dataset.name);
+            if (input) { input.value = ''; updateSuggestions(''); }
+          });
         }
       }
 
