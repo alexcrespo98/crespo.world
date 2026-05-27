@@ -46,6 +46,14 @@
     }
     .clue-item.locked { opacity: 0.22; }
     .clue-item .clue-label { font-weight: bold; margin-bottom: 0.15em; font-size: 0.85rem; opacity: 0.75; }
+    .type-icons { display: flex; gap: 0.4em; align-items: center; flex-wrap: wrap; margin-top: 0.2em; }
+    .type-icons img { height: 20px; image-rendering: pixelated; }
+    .type-icons .type-fallback {
+      font-size: 0.8rem;
+      border: 1px solid #0f0;
+      padding: 0 0.3em;
+      opacity: 0.85;
+    }
     .counter { margin-top: 0.8em; }
     .guess-wrap { margin-top: 1em; position: relative; }
     .guess-row { display: flex; align-items: center; gap: 0.5em; }
@@ -88,8 +96,9 @@
       z-index: 100;
       text-align: center;
       padding: 2em 1.5em;
+      overflow-y: auto;
     }
-    .result-overlay img {
+    .result-overlay img.sprite {
       image-rendering: pixelated;
       width: 200px;
       height: 200px;
@@ -107,23 +116,40 @@
     .result-buttons { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; }
     .result-buttons button { padding: 0.35em 1em; font-size: 0.95rem; }
     .stats-panel {
-      border-top: 1px solid #0f0;
-      padding-top: 0.8em;
-      margin-top: 0.2em;
-      margin-bottom: 1em;
-      font-size: 0.9rem;
-      opacity: 0.85;
+      border: 1px solid #0f0;
+      padding: 0.8em 1em;
+      margin: 0.8em 0;
+      font-size: 0.88rem;
       text-align: left;
-      min-width: 200px;
+      min-width: 220px;
+      max-width: 320px;
+      width: 100%;
     }
-    .stats-panel div { margin: 0.2em 0; }
+    .stats-panel .stat-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1em;
+      margin: 0.2em 0;
+    }
+    .stats-panel .stat-bar-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+    .stats-panel .stat-bar {
+      height: 6px;
+      background: #0f0;
+      min-width: 2px;
+    }
+    .stats-panel .stat-val { min-width: 2.5em; text-align: right; }
+    .stats-loading { opacity: 0.6; margin: 0.5em 0; }
 
     @media (max-width: 560px) {
       body { padding: 2em 0.9em; }
       .topline { align-items: flex-start; }
       .stats { font-size: 0.82rem; }
       .suggestions { left: 1.2em; }
-      .result-overlay img { width: 144px; height: 144px; }
+      .result-overlay img.sprite { width: 144px; height: 144px; }
       .result-pokemon-name { font-size: 1.6rem; }
     }
   </style>
@@ -149,6 +175,9 @@
       const MAX_WRONG = 6;
       const START_SCORE = 1000;
 
+      // Type icon sprite source (pokesprite)
+      const TYPE_ICON_BASE = 'https://raw.githubusercontent.com/msikma/pokesprite/master/misc/types/gen8';
+
       const app = document.getElementById('app');
       const overlayEl = document.getElementById('result-overlay');
       let pokemonData = [];
@@ -161,6 +190,7 @@
       let suggestions = [];
       let suggestionIndex = -1;
       let showingStats = false;
+      let cachedBaseStats = null; // cache fetched stats per round
 
       const clues = [
         { key: 'cry',        label: 'Cry' },
@@ -260,11 +290,12 @@
       function resetRound() {
         score = START_SCORE;
         wrongGuesses = [];
-        revealedClues = new Set();
+        revealedClues = new Set(['cry']); // always start with cry revealed
         gameOver = false;
         suggestions = [];
         suggestionIndex = -1;
         showingStats = false;
+        cachedBaseStats = null;
         overlayEl.style.display = 'none';
       }
 
@@ -287,9 +318,18 @@
         renderBoard();
       }
 
-      function clueText(key, p) {
+      function typeIconHtml(type) {
+        const src = `${TYPE_ICON_BASE}/${type}.png`;
+        return `<img src="${src}" alt="${cap(type)}" title="${cap(type)}" onerror="this.style.display='none';this.nextSibling.style.display='inline'">` +
+               `<span class="type-fallback" style="display:none">${cap(type)}</span>`;
+      }
+
+      function clueContentHtml(key, p) {
         if (key === 'generation') return `Generation ${p.generation}`;
-        if (key === 'type') return `Type: ${p.types.map(cap).join(' / ')}`;
+        if (key === 'type') {
+          const icons = p.types.map(typeIconHtml).join('');
+          return `<div class="type-icons">${icons}</div>`;
+        }
         if (key === 'learnset') {
           if (!p.learnset.length) return 'No learnset data.';
           return p.learnset.map((m) => `${m.move} (${m.method})`).join('\n');
@@ -369,38 +409,75 @@
 
       function showResult(summary) {
         showingStats = false;
+        cachedBaseStats = null;
         renderOverlay(summary);
+      }
+
+      async function fetchBaseStats(pokemonId) {
+        if (cachedBaseStats) return cachedBaseStats;
+        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonId}`);
+        const data = await res.json();
+        const statNames = {
+          'hp': 'HP',
+          'attack': 'Attack',
+          'defense': 'Defense',
+          'special-attack': 'Sp. Atk',
+          'special-defense': 'Sp. Def',
+          'speed': 'Speed'
+        };
+        cachedBaseStats = data.stats.map(s => ({
+          name: statNames[s.stat.name] || s.stat.name,
+          value: s.base_stat
+        }));
+        return cachedBaseStats;
       }
 
       function renderOverlay(summary) {
         const resultLabel = summary.won ? 'Correct!' : 'Out of guesses.';
 
-        const statsHtml = showingStats ? `
-          <div class="stats-panel">
-            <div>Score: ${summary.score}</div>
-            <div>Clues used: ${summary.cluesUsed}</div>
-            <div>Wrong guesses: ${summary.wrongGuesses}</div>
-            <div>High score: ${getHighScore()}</div>
-            ${mode === 'endless' ? `<div>Streak: ${getStreak()} | Best: ${bestStreak()}</div>` : ''}
-          </div>
-        ` : '';
-
         overlayEl.innerHTML = `
           <div class="result-label">${resultLabel}</div>
-          <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${summary.id}.png" alt="${cap(summary.answer)}">
+          <img class="sprite" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${summary.id}.png" alt="${cap(summary.answer)}">
           <div class="result-pokemon-name">${cap(summary.answer)}</div>
           <div class="result-score">Score: ${summary.score}</div>
-          ${statsHtml}
+          <div id="stats-container"></div>
           <div class="result-buttons">
-            <button id="overlay-view-stats">${showingStats ? 'Hide Stats' : 'View Stats'}</button>
+            <button id="overlay-view-stats">View Stats</button>
             <button id="overlay-new-game">New Game</button>
           </div>
         `;
         overlayEl.style.display = 'flex';
 
-        document.getElementById('overlay-view-stats').addEventListener('click', () => {
-          showingStats = !showingStats;
-          renderOverlay(summary);
+        document.getElementById('overlay-view-stats').addEventListener('click', async () => {
+          const btn = document.getElementById('overlay-view-stats');
+          const container = document.getElementById('stats-container');
+
+          if (showingStats) {
+            showingStats = false;
+            container.innerHTML = '';
+            btn.textContent = 'View Stats';
+            return;
+          }
+
+          showingStats = true;
+          btn.textContent = 'Hide Stats';
+          container.innerHTML = `<div class="stats-loading">loading stats...</div>`;
+
+          try {
+            const stats = await fetchBaseStats(summary.id);
+            const maxStat = 255;
+            const rows = stats.map(s => {
+              const pct = Math.round((s.value / maxStat) * 100);
+              return `<div class="stat-row">
+                <span style="min-width:5.5em;opacity:0.75">${s.name}</span>
+                <div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>
+                <span class="stat-val">${s.value}</span>
+              </div>`;
+            }).join('');
+            container.innerHTML = `<div class="stats-panel">${rows}</div>`;
+          } catch (e) {
+            container.innerHTML = `<div class="stats-loading">could not load stats</div>`;
+          }
         });
 
         document.getElementById('overlay-new-game').addEventListener('click', () => {
@@ -508,8 +585,10 @@
           if (revealed) {
             if (c.key === 'cry') {
               item.innerHTML = `<div class="clue-label">${c.label}</div><button id="play-cry" ${gameOver ? 'disabled' : ''}>Play cry</button>`;
+            } else if (c.key === 'type') {
+              item.innerHTML = `<div class="clue-label">${c.label}</div>${clueContentHtml(c.key, currentPokemon)}`;
             } else {
-              item.innerHTML = `<div class="clue-label">${c.label}</div><div>${clueText(c.key, currentPokemon)}</div>`;
+              item.innerHTML = `<div class="clue-label">${c.label}</div><div>${clueContentHtml(c.key, currentPokemon)}</div>`;
             }
           } else {
             item.innerHTML = `<div class="clue-label">${c.label}</div>`;
