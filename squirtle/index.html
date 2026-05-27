@@ -34,7 +34,7 @@
     button:hover { background: #0f0; color: #000; }
     button.active { background: #0f0; color: #000; }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
-    .stats { opacity: 0.8; font-size: 0.9rem; }
+    .stats-bar { opacity: 0.8; font-size: 0.9rem; }
     .prompt { margin-top: 1em; margin-bottom: 0.7em; }
     .clues-title { margin: 1em 0 0.5em; }
     .clue-list { display: flex; flex-direction: column; gap: 0.5em; }
@@ -88,7 +88,7 @@
     .result-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.93);
+      background: rgba(0,0,0,0.93);
       display: none;
       flex-direction: column;
       align-items: center;
@@ -98,58 +98,60 @@
       padding: 2em 1.5em;
       overflow-y: auto;
     }
-    .result-overlay img.sprite {
-      image-rendering: pixelated;
-      width: 200px;
-      height: 200px;
-      display: block;
-      margin: 0.4em auto;
-    }
     .result-label { font-size: 1rem; opacity: 0.8; margin-bottom: 0.2em; }
     .result-pokemon-name {
       font-size: 2.2rem;
       font-weight: bold;
       letter-spacing: 0.08em;
-      margin: 0.15em 0 0.3em;
+      margin: 0.1em 0 0.2em;
     }
-    .result-score { font-size: 1rem; margin-bottom: 1.2em; opacity: 0.85; }
-    .result-buttons { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; }
+    .result-score { font-size: 0.95rem; margin-bottom: 0.8em; opacity: 0.85; }
+    .result-buttons { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; margin-top: 1em; }
     .result-buttons button { padding: 0.35em 1em; font-size: 0.95rem; }
-    .stats-panel {
-      border: 1px solid #0f0;
-      padding: 0.8em 1em;
-      margin: 0.8em 0;
-      font-size: 0.88rem;
-      text-align: left;
-      min-width: 220px;
-      max-width: 320px;
-      width: 100%;
+
+    /* Sprite shake */
+    @keyframes shake {
+      0%,100% { transform: translate(0,0) rotate(0deg); }
+      15%      { transform: translate(-7px,0) rotate(-3deg); }
+      30%      { transform: translate(7px,0) rotate(3deg); }
+      45%      { transform: translate(-5px,0) rotate(-2deg); }
+      60%      { transform: translate(5px,0) rotate(2deg); }
+      80%      { transform: translate(-2px,0) rotate(0deg); }
     }
-    .stats-panel .stat-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 1em;
-      margin: 0.2em 0;
-    }
-    .stats-panel .stat-bar-wrap {
-      flex: 1;
+    .sprite { image-rendering: pixelated; width: 180px; height: 180px; display: block; margin: 0.3em auto; }
+    .sprite-shake { animation: shake 0.7s ease; }
+
+    /* Stat mini-game */
+    .stat-game { width: 100%; max-width: 300px; margin: 0 auto; }
+    .stat-prompt { font-size: 0.88rem; margin-bottom: 0.5em; opacity: 0.85; min-height: 1.4em; }
+    .stat-panel { border: 1px solid #0f0; padding: 0.5em 0.8em; }
+    .stat-row {
       display: flex;
       align-items: center;
+      gap: 0.5em;
+      padding: 0.22em 0.3em;
+      cursor: pointer;
+      transition: opacity 0.3s;
     }
-    .stats-panel .stat-bar {
-      height: 6px;
-      background: #0f0;
-      min-width: 2px;
-    }
-    .stats-panel .stat-val { min-width: 2.5em; text-align: right; }
-    .stats-loading { opacity: 0.6; margin: 0.5em 0; }
+    .stat-row:hover { background: rgba(0,255,0,0.07); }
+    .stat-row.answered { cursor: default; }
+    .stat-row.answered:hover { background: transparent; }
+    .stat-row.dimmed { opacity: 0.3; }
+    .stat-row.highlight .stat-name,
+    .stat-row.highlight .stat-val { font-weight: bold; }
+    .stat-name { min-width: 5em; font-size: 0.82rem; opacity: 0.8; }
+    .stat-bar-wrap { flex: 1; }
+    .stat-bar { height: 5px; background: #0f0; width: 0; transition: width 0.85s ease; }
+    .stat-row.highlight .stat-bar { background: #fff; }
+    .stat-val { min-width: 2.2em; text-align: right; font-size: 0.82rem; }
+    .bonus-msg { font-size: 0.88rem; margin-top: 0.4em; min-height: 1.2em; }
 
     @media (max-width: 560px) {
       body { padding: 2em 0.9em; }
       .topline { align-items: flex-start; }
-      .stats { font-size: 0.82rem; }
+      .stats-bar { font-size: 0.82rem; }
       .suggestions { left: 1.2em; }
-      .result-overlay img.sprite { width: 144px; height: 144px; }
+      .sprite { width: 130px; height: 130px; }
       .result-pokemon-name { font-size: 1.6rem; }
     }
   </style>
@@ -157,7 +159,6 @@
 <body>
   <a href="/" class="back">&larr; back</a>
   <h1>squirtle</h1>
-
   <div id="app">loading...</div>
   <div id="result-overlay" class="result-overlay"></div>
 
@@ -174,12 +175,11 @@
       const DATA_TTL = 7 * DAY_MS;
       const MAX_WRONG = 6;
       const START_SCORE = 1000;
-
-      // Type icon sprite source (pokesprite)
       const TYPE_ICON_BASE = 'https://raw.githubusercontent.com/msikma/pokesprite/master/misc/types/gen8';
 
       const app = document.getElementById('app');
       const overlayEl = document.getElementById('result-overlay');
+
       let pokemonData = [];
       let mode = null;
       let currentPokemon = null;
@@ -189,113 +189,100 @@
       let gameOver = false;
       let suggestions = [];
       let suggestionIndex = -1;
-      let showingStats = false;
-      let cachedBaseStats = null; // cache fetched stats per round
+
+      // api data cache (ability + base stats)
+      let cachedApiData = null; // { ability: str, stats: [{name,value}] }
+
+      // stat mini-game state
+      let statGame = null; // { stats, correct[], timerId, answered, bonusEarned }
 
       const clues = [
         { key: 'cry',        label: 'Cry' },
         { key: 'generation', label: 'Generation' },
+        { key: 'ability',    label: 'Ability' },
         { key: 'type',       label: 'Type' },
         { key: 'learnset',   label: 'Learnset' },
         { key: 'evolution',  label: 'Evolution' },
-        { key: 'location',   label: 'Location' }
       ];
 
-      function cap(name) {
-        return name.charAt(0).toUpperCase() + name.slice(1);
-      }
+      const STAT_NAMES = {
+        'hp': 'HP', 'attack': 'Attack', 'defense': 'Defense',
+        'special-attack': 'Sp. Atk', 'special-defense': 'Sp. Def', 'speed': 'Speed'
+      };
 
-      function scorePenalty(points) {
-        score = Math.max(0, score - points);
-      }
+      function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+      function fmtSlug(s) { return s.split('-').map(cap).join(' '); }
 
-      function hashString(value) {
+      function scorePenalty(pts) { score = Math.max(0, score - pts); }
+
+      function hashString(v) {
         let h = 2166136261;
-        for (let i = 0; i < value.length; i++) {
-          h ^= value.charCodeAt(i);
-          h = Math.imul(h, 16777619);
-        }
+        for (let i = 0; i < v.length; i++) { h ^= v.charCodeAt(i); h = Math.imul(h, 16777619); }
         return h >>> 0;
       }
 
       function todayKey() {
         const d = new Date();
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       }
-
-      function dailyStorageKey() {
-        return `squirtle_daily_${todayKey()}`;
-      }
-
-      function getHighScore() {
-        return Number(localStorage.getItem(LS.highScore) || '0');
-      }
-
-      function setHighScore(value) {
-        const prev = getHighScore();
-        if (value > prev) localStorage.setItem(LS.highScore, String(value));
-      }
-
-      function getStreak() {
-        return Number(localStorage.getItem(LS.streak) || '0');
-      }
-
-      function setStreak(value) {
-        localStorage.setItem(LS.streak, String(value));
+      function dailyStorageKey() { return `squirtle_daily_${todayKey()}`; }
+      function getHighScore() { return Number(localStorage.getItem(LS.highScore) || '0'); }
+      function setHighScore(v) { if (v > getHighScore()) localStorage.setItem(LS.highScore, String(v)); }
+      function getStreak() { return Number(localStorage.getItem(LS.streak) || '0'); }
+      function setStreak(v) {
+        localStorage.setItem(LS.streak, String(v));
         const best = Number(localStorage.getItem(LS.bestStreak) || '0');
-        if (value > best) localStorage.setItem(LS.bestStreak, String(value));
+        if (v > best) localStorage.setItem(LS.bestStreak, String(v));
       }
-
-      function bestStreak() {
-        return Number(localStorage.getItem(LS.bestStreak) || '0');
-      }
-
-      function renderError(message) {
-        app.innerHTML = `<div class="error">${message}</div>`;
-      }
+      function bestStreak() { return Number(localStorage.getItem(LS.bestStreak) || '0'); }
+      function renderError(msg) { app.innerHTML = `<div class="error">${msg}</div>`; }
 
       async function loadData() {
         const now = Date.now();
         try {
           const res = await fetch('./pokemon_data.json', { cache: 'no-store' });
-          if (!res.ok) throw new Error('missing file');
+          if (!res.ok) throw new Error('missing');
           pokemonData = await res.json();
           localStorage.setItem(LS.data, JSON.stringify(pokemonData));
           localStorage.setItem(LS.dataTs, String(now));
         } catch (err) {
           const cached = localStorage.getItem(LS.data);
-          const cachedTs = Number(localStorage.getItem(LS.dataTs) || '0');
-          if (cached && cachedTs && (now - cachedTs) < DATA_TTL) {
-            pokemonData = JSON.parse(cached);
-            return;
-          }
+          const ts = Number(localStorage.getItem(LS.dataTs) || '0');
+          if (cached && (now - ts) < DATA_TTL) { pokemonData = JSON.parse(cached); return; }
           renderError('Missing pokemon_data.json — run build_data.py to generate it.');
           throw err;
         }
       }
 
-      function pickDailyPokemon() {
-        const idx = hashString(todayKey()) % pokemonData.length;
-        return pokemonData[idx];
-      }
+      function pickDailyPokemon() { return pokemonData[hashString(todayKey()) % pokemonData.length]; }
+      function pickRandomPokemon() { return pokemonData[Math.floor(Math.random() * pokemonData.length)]; }
 
-      function pickRandomPokemon() {
-        const idx = Math.floor(Math.random() * pokemonData.length);
-        return pokemonData[idx];
+      async function prefetchApiData(pokemonId) {
+        cachedApiData = null;
+        try {
+          const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonId}`);
+          const data = await res.json();
+          const primaryAbility = (data.abilities.find(a => !a.is_hidden) || data.abilities[0])?.ability.name || 'unknown';
+          cachedApiData = {
+            ability: primaryAbility,
+            stats: data.stats.map(s => ({ name: STAT_NAMES[s.stat.name] || s.stat.name, value: s.base_stat }))
+          };
+          // patch ability clue live if it's already showing
+          const el = document.getElementById('ability-value');
+          if (el) el.textContent = fmtSlug(primaryAbility);
+        } catch (_) {}
       }
 
       function resetRound() {
         score = START_SCORE;
         wrongGuesses = [];
-        revealedClues = new Set(['cry']); // always start with cry revealed
+        revealedClues = new Set(['cry']);
         gameOver = false;
         suggestions = [];
         suggestionIndex = -1;
-        showingStats = false;
-        cachedBaseStats = null;
+        cachedApiData = null;
+        if (statGame && statGame.timerId) clearInterval(statGame.timerId);
+        statGame = null;
         overlayEl.style.display = 'none';
       }
 
@@ -304,35 +291,37 @@
         resetRound();
         if (mode === 'daily') {
           currentPokemon = pickDailyPokemon();
-          const completed = localStorage.getItem(dailyStorageKey());
-          if (completed) {
-            const parsed = JSON.parse(completed);
+          const done = localStorage.getItem(dailyStorageKey());
+          if (done) {
             gameOver = true;
             renderBoard();
-            showResult(parsed);
+            showResult(JSON.parse(done));
+            prefetchApiData(currentPokemon.id);
             return;
           }
         } else {
           currentPokemon = pickRandomPokemon();
         }
+        prefetchApiData(currentPokemon.id);
         renderBoard();
       }
 
       function typeIconHtml(type) {
-        const src = `${TYPE_ICON_BASE}/${type}.png`;
-        return `<img src="${src}" alt="${cap(type)}" title="${cap(type)}" onerror="this.style.display='none';this.nextSibling.style.display='inline'">` +
+        return `<img src="${TYPE_ICON_BASE}/${type}.png" alt="${cap(type)}" title="${cap(type)}"
+                  onerror="this.style.display='none';this.nextSibling.style.display='inline'">` +
                `<span class="type-fallback" style="display:none">${cap(type)}</span>`;
       }
 
-      function clueContentHtml(key, p) {
+      function clueBodyHtml(key, p) {
         if (key === 'generation') return `Generation ${p.generation}`;
-        if (key === 'type') {
-          const icons = p.types.map(typeIconHtml).join('');
-          return `<div class="type-icons">${icons}</div>`;
+        if (key === 'ability') {
+          const val = cachedApiData ? fmtSlug(cachedApiData.ability) : 'loading...';
+          return `<span id="ability-value">${val}</span>`;
         }
+        if (key === 'type') return `<div class="type-icons">${p.types.map(typeIconHtml).join('')}</div>`;
         if (key === 'learnset') {
           if (!p.learnset.length) return 'No learnset data.';
-          return p.learnset.map((m) => `${m.move} (${m.method})`).join('\n');
+          return p.learnset.map(m => `${m.move} (${m.method})`).join('\n');
         }
         if (key === 'evolution') {
           const e = p.evolution || {};
@@ -342,43 +331,26 @@
           if (e.to) lines.push(`Evolves into a next stage (${e.to.condition})`);
           return lines.join('\n');
         }
-        if (key === 'location') return `Location: ${(p.locations || []).join(', ')}`;
         return '';
       }
 
       function autoRevealNextClue() {
         for (const c of clues) {
-          if (!revealedClues.has(c.key)) {
-            revealedClues.add(c.key);
-            break;
-          }
+          if (!revealedClues.has(c.key)) { revealedClues.add(c.key); break; }
         }
       }
 
-      function submitGuess(guessRaw) {
+      function submitGuess(raw) {
         if (gameOver || !currentPokemon) return;
-        const guess = guessRaw.trim().toLowerCase();
+        const guess = raw.trim().toLowerCase();
         if (!guess) return;
-
-        if (guess === currentPokemon.name) {
-          finishRound(true);
-          return;
-        }
-
-        if (wrongGuesses.includes(guess)) {
-          renderBoard();
-          return;
-        }
-
+        if (guess === currentPokemon.name) { finishRound(true); return; }
+        if (wrongGuesses.includes(guess)) { renderBoard(); return; }
         wrongGuesses.push(guess);
         scorePenalty(100);
         autoRevealNextClue();
-
-        if (wrongGuesses.length >= MAX_WRONG) {
-          finishRound(false);
-        } else {
-          renderBoard();
-        }
+        if (wrongGuesses.length >= MAX_WRONG) finishRound(false);
+        else renderBoard();
       }
 
       function finishRound(won) {
@@ -389,114 +361,150 @@
         } else if (mode === 'endless') {
           setStreak(0);
         }
-
-        const summary = {
-          won,
-          answer: currentPokemon.name,
-          id: currentPokemon.id,
-          score,
-          cluesUsed: revealedClues.size,
-          wrongGuesses: wrongGuesses.length
-        };
-
-        if (mode === 'daily') {
-          localStorage.setItem(dailyStorageKey(), JSON.stringify(summary));
-        }
-
+        const summary = { won, answer: currentPokemon.name, id: currentPokemon.id, score, cluesUsed: revealedClues.size, wrongGuesses: wrongGuesses.length };
+        if (mode === 'daily') localStorage.setItem(dailyStorageKey(), JSON.stringify(summary));
         renderBoard();
         showResult(summary);
       }
 
+      // ── Overlay ────────────────────────────────────────────────────────────
+
       function showResult(summary) {
-        showingStats = false;
-        cachedBaseStats = null;
-        renderOverlay(summary);
-      }
-
-      async function fetchBaseStats(pokemonId) {
-        if (cachedBaseStats) return cachedBaseStats;
-        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonId}`);
-        const data = await res.json();
-        const statNames = {
-          'hp': 'HP',
-          'attack': 'Attack',
-          'defense': 'Defense',
-          'special-attack': 'Sp. Atk',
-          'special-defense': 'Sp. Def',
-          'speed': 'Speed'
-        };
-        cachedBaseStats = data.stats.map(s => ({
-          name: statNames[s.stat.name] || s.stat.name,
-          value: s.base_stat
-        }));
-        return cachedBaseStats;
-      }
-
-      function renderOverlay(summary) {
-        const resultLabel = summary.won ? 'Correct!' : 'Out of guesses.';
+        if (statGame && statGame.timerId) clearInterval(statGame.timerId);
+        statGame = null;
 
         overlayEl.innerHTML = `
-          <div class="result-label">${resultLabel}</div>
-          <img class="sprite" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${summary.id}.png" alt="${cap(summary.answer)}">
+          <div class="result-label">${summary.won ? 'Correct!' : 'Out of guesses.'}</div>
+          <img id="result-sprite" class="sprite"
+            src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${summary.id}.png"
+            alt="${cap(summary.answer)}">
           <div class="result-pokemon-name">${cap(summary.answer)}</div>
           <div class="result-score">Score: ${summary.score}</div>
-          <div id="stats-container"></div>
+          <div id="stat-game-area" class="stat-game"></div>
           <div class="result-buttons">
-            <button id="overlay-view-stats">View Stats</button>
             <button id="overlay-new-game">New Game</button>
           </div>
         `;
         overlayEl.style.display = 'flex';
 
-        document.getElementById('overlay-view-stats').addEventListener('click', async () => {
-          const btn = document.getElementById('overlay-view-stats');
-          const container = document.getElementById('stats-container');
-
-          if (showingStats) {
-            showingStats = false;
-            container.innerHTML = '';
-            btn.textContent = 'View Stats';
-            return;
-          }
-
-          showingStats = true;
-          btn.textContent = 'Hide Stats';
-          container.innerHTML = `<div class="stats-loading">loading stats...</div>`;
-
-          try {
-            const stats = await fetchBaseStats(summary.id);
-            const maxStat = 255;
-            const rows = stats.map(s => {
-              const pct = Math.round((s.value / maxStat) * 100);
-              return `<div class="stat-row">
-                <span style="min-width:5.5em;opacity:0.75">${s.name}</span>
-                <div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>
-                <span class="stat-val">${s.value}</span>
-              </div>`;
-            }).join('');
-            container.innerHTML = `<div class="stats-panel">${rows}</div>`;
-          } catch (e) {
-            container.innerHTML = `<div class="stats-loading">could not load stats</div>`;
-          }
-        });
-
         document.getElementById('overlay-new-game').addEventListener('click', () => {
+          if (statGame && statGame.timerId) clearInterval(statGame.timerId);
           selectMode('endless');
         });
+
+        if (summary.won) {
+          // shake + cry
+          setTimeout(() => {
+            const sprite = document.getElementById('result-sprite');
+            if (sprite) {
+              sprite.classList.add('sprite-shake');
+              sprite.addEventListener('animationend', () => sprite.classList.remove('sprite-shake'), { once: true });
+            }
+            const audio = new Audio(currentPokemon.cry_url);
+            audio.play().catch(() => {});
+          }, 120);
+        }
+
+        // kick off stat mini-game once api data ready
+        waitForApiThenStartStatGame(summary);
       }
 
-      function updateSuggestions(inputValue) {
-        const q = inputValue.trim().toLowerCase();
-        if (!q) {
-          suggestions = [];
-          suggestionIndex = -1;
-          renderSuggestions();
-          return;
+      function waitForApiThenStartStatGame(summary, attempts) {
+        attempts = attempts || 0;
+        if (cachedApiData) {
+          startStatGame(summary);
+        } else if (attempts < 20) {
+          setTimeout(() => waitForApiThenStartStatGame(summary, attempts + 1), 300);
+        } else {
+          const area = document.getElementById('stat-game-area');
+          if (area) area.innerHTML = `<div style="opacity:0.4;font-size:0.8rem;margin-top:0.5em">stats unavailable</div>`;
         }
-        suggestions = pokemonData
-          .filter((p) => p.name.startsWith(q) || p.name.includes(q))
-          .slice(0, 12)
-          .map((p) => p.name);
+      }
+
+      function startStatGame(summary) {
+        const area = document.getElementById('stat-game-area');
+        if (!area) return;
+
+        const stats = cachedApiData.stats;
+        const maxVal = Math.max(...stats.map(s => s.value));
+        const correct = stats.filter(s => s.value === maxVal).map(s => s.name);
+
+        statGame = { stats, correct, answered: false, bonusEarned: false, timerLeft: 5, timerId: null };
+
+        renderStatPanel(area, false);
+
+        // fill bars after a tick
+        setTimeout(() => {
+          area.querySelectorAll('.stat-bar[data-w]').forEach(b => { b.style.width = b.dataset.w + '%'; });
+        }, 60);
+
+        // start countdown
+        statGame.timerId = setInterval(() => {
+          statGame.timerLeft--;
+          const el = document.getElementById('stat-countdown');
+          if (el) el.textContent = statGame.timerLeft + 's';
+          if (statGame.timerLeft <= 0) {
+            clearInterval(statGame.timerId);
+            resolveStatGame(null);
+          }
+        }, 1000);
+      }
+
+      function renderStatPanel(area, refill) {
+        if (!statGame) return;
+        const { stats, correct, answered, bonusEarned, timerLeft } = statGame;
+        const MAX_STAT = 255;
+
+        const prompt = answered
+          ? `<div class="stat-prompt">${bonusEarned ? '+1 bonus! nice.' : 'not quite — highlighted is the highest'}</div>`
+          : `<div class="stat-prompt">which is the highest stat? <span id="stat-countdown">${timerLeft}s</span></div>`;
+
+        const rows = stats.map(s => {
+          const pct = Math.round((s.value / MAX_STAT) * 100);
+          const isCorrect = correct.includes(s.name);
+          let cls = 'stat-row';
+          if (answered) {
+            cls += ' answered';
+            cls += isCorrect ? ' highlight' : ' dimmed';
+          }
+          const barW = refill ? pct : 0;
+          return `<div class="${cls}" data-stat="${s.name}">
+            <span class="stat-name">${s.name}</span>
+            <div class="stat-bar-wrap"><div class="stat-bar" data-w="${pct}" style="width:${barW}%"></div></div>
+            <span class="stat-val">${s.value}</span>
+          </div>`;
+        }).join('');
+
+        area.innerHTML = `${prompt}<div class="stat-panel">${rows}</div>`;
+
+        if (!answered) {
+          area.querySelectorAll('.stat-row').forEach(row => {
+            row.addEventListener('click', () => resolveStatGame(row.dataset.stat));
+          });
+        }
+
+        if (refill) {
+          setTimeout(() => {
+            area.querySelectorAll('.stat-bar[data-w]').forEach(b => { b.style.width = b.dataset.w + '%'; });
+          }, 60);
+        }
+      }
+
+      function resolveStatGame(clickedName) {
+        if (!statGame || statGame.answered) return;
+        clearInterval(statGame.timerId);
+        statGame.answered = true;
+        if (clickedName && statGame.correct.includes(clickedName)) statGame.bonusEarned = true;
+        const area = document.getElementById('stat-game-area');
+        if (area) renderStatPanel(area, true);
+      }
+
+      // ── Board ──────────────────────────────────────────────────────────────
+
+      function updateSuggestions(val) {
+        const q = val.trim().toLowerCase();
+        if (!q) { suggestions = []; suggestionIndex = -1; renderSuggestions(); return; }
+        suggestions = pokemonData.filter(p => p.name.startsWith(q) || p.name.includes(q)).slice(0, 12).map(p => p.name);
         suggestionIndex = suggestions.length ? 0 : -1;
         renderSuggestions();
       }
@@ -504,60 +512,41 @@
       function renderSuggestions() {
         const box = document.getElementById('suggestions');
         if (!box) return;
-        if (!suggestions.length || gameOver) {
-          box.innerHTML = '';
-          box.style.display = 'none';
-          return;
-        }
+        if (!suggestions.length || gameOver) { box.innerHTML = ''; box.style.display = 'none'; return; }
         box.style.display = 'block';
-        box.innerHTML = suggestions
-          .map((name, idx) => `<div class="suggestion ${idx === suggestionIndex ? 'active' : ''}" data-name="${name}">${cap(name)}</div>`)
-          .join('');
+        box.innerHTML = suggestions.map((n, i) =>
+          `<div class="suggestion${i === suggestionIndex ? ' active' : ''}" data-name="${n}">${cap(n)}</div>`
+        ).join('');
       }
 
       function handleGuessKeydown(e) {
         if (!suggestions.length) {
-          if (e.key === 'Enter') {
-            submitGuess(e.target.value);
-            e.target.value = '';
-            updateSuggestions('');
-          }
+          if (e.key === 'Enter') { submitGuess(e.target.value); e.target.value = ''; updateSuggestions(''); }
           return;
         }
-        if (e.key === 'ArrowDown') {
+        if (e.key === 'ArrowDown') { e.preventDefault(); suggestionIndex = (suggestionIndex + 1) % suggestions.length; renderSuggestions(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); suggestionIndex = (suggestionIndex - 1 + suggestions.length) % suggestions.length; renderSuggestions(); }
+        else if (e.key === 'Enter') {
           e.preventDefault();
-          suggestionIndex = (suggestionIndex + 1) % suggestions.length;
-          renderSuggestions();
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          suggestionIndex = (suggestionIndex - 1 + suggestions.length) % suggestions.length;
-          renderSuggestions();
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          const guess = suggestionIndex >= 0 ? suggestions[suggestionIndex] : e.target.value;
-          submitGuess(guess);
-          e.target.value = '';
-          updateSuggestions('');
+          submitGuess(suggestionIndex >= 0 ? suggestions[suggestionIndex] : e.target.value);
+          e.target.value = ''; updateSuggestions('');
         }
       }
 
       function playCry() {
         if (!currentPokemon) return;
-        const audio = new Audio(currentPokemon.cry_url);
-        audio.play().catch(() => {});
+        new Audio(currentPokemon.cry_url).play().catch(() => {});
       }
 
       function renderBoard() {
-        const high = getHighScore();
         const streak = mode === 'endless' ? getStreak() : 0;
-
         app.innerHTML = `
           <div class="topline">
             <div class="mode-buttons">
               <button id="mode-daily" class="${mode === 'daily' ? 'active' : ''}">daily</button>
               <button id="mode-endless" class="${mode === 'endless' ? 'active' : ''}">endless</button>
             </div>
-            <div class="stats">high score: ${high} | streak: ${streak} | best streak: ${bestStreak()}</div>
+            <div class="stats-bar">high score: ${getHighScore()} | streak: ${streak} | best: ${bestStreak()}</div>
           </div>
           <div class="prompt">Guess the Pokemon!</div>
           <div class="clues-title">Clues:</div>
@@ -568,32 +557,28 @@
             <div class="guess-row"><span>&gt;</span><input id="guess-input" type="text" autocomplete="off" spellcheck="false" ${gameOver ? 'disabled' : ''}></div>
             <div id="suggestions" class="suggestions" style="display:none"></div>
           </div>
-          <div class="history">
-            ${wrongGuesses.map((g) => `<div class="wrong">x ${cap(g)}</div>`).join('')}
-          </div>
+          <div class="history">${wrongGuesses.map(g => `<div class="wrong">x ${cap(g)}</div>`).join('')}</div>
         `;
 
         document.getElementById('mode-daily').addEventListener('click', () => selectMode('daily'));
         document.getElementById('mode-endless').addEventListener('click', () => selectMode('endless'));
 
         const clueList = document.getElementById('clue-list');
-        clues.forEach((c) => {
+        clues.forEach(c => {
           const revealed = revealedClues.has(c.key);
           const item = document.createElement('div');
           item.className = `clue-item${revealed ? '' : ' locked'}`;
-
           if (revealed) {
             if (c.key === 'cry') {
               item.innerHTML = `<div class="clue-label">${c.label}</div><button id="play-cry" ${gameOver ? 'disabled' : ''}>Play cry</button>`;
             } else if (c.key === 'type') {
-              item.innerHTML = `<div class="clue-label">${c.label}</div>${clueContentHtml(c.key, currentPokemon)}`;
+              item.innerHTML = `<div class="clue-label">${c.label}</div>${clueBodyHtml(c.key, currentPokemon)}`;
             } else {
-              item.innerHTML = `<div class="clue-label">${c.label}</div><div>${clueContentHtml(c.key, currentPokemon)}</div>`;
+              item.innerHTML = `<div class="clue-label">${c.label}</div><div>${clueBodyHtml(c.key, currentPokemon)}</div>`;
             }
           } else {
             item.innerHTML = `<div class="clue-label">${c.label}</div>`;
           }
-
           clueList.appendChild(item);
         });
 
@@ -602,14 +587,14 @@
 
         const input = document.getElementById('guess-input');
         if (input) {
-          input.addEventListener('input', (e) => updateSuggestions(e.target.value));
+          input.addEventListener('input', e => updateSuggestions(e.target.value));
           input.addEventListener('keydown', handleGuessKeydown);
           input.focus();
         }
 
-        const suggestionsEl = document.getElementById('suggestions');
-        if (suggestionsEl) {
-          suggestionsEl.addEventListener('click', (e) => {
+        const sugBox = document.getElementById('suggestions');
+        if (sugBox) {
+          sugBox.addEventListener('click', e => {
             const node = e.target.closest('.suggestion');
             if (!node) return;
             submitGuess(node.dataset.name);
@@ -619,11 +604,7 @@
       }
 
       async function init() {
-        try {
-          await loadData();
-        } catch (_err) {
-          return;
-        }
+        try { await loadData(); } catch (_) { return; }
         selectMode('daily');
       }
 
