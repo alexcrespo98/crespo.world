@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chat</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2em;
+    }
+    main {
+      width: min(100%, 34rem);
+      text-align: center;
+    }
+    a {
+      color: #0f0;
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    .back {
+      display: inline-block;
+      margin-bottom: 2rem;
+      opacity: 0.7;
+      font-size: 0.9rem;
+    }
+    h1 {
+      margin: 0 0 1rem 0;
+      font-size: 1.1rem;
+      font-weight: normal;
+      letter-spacing: 0.08em;
+    }
+    p {
+      margin: 0 0 1rem 0;
+      line-height: 1.7;
+      font-size: 0.95rem;
+    }
+    .open {
+      display: inline-block;
+      margin-top: 1rem;
+      padding: 0.85rem 1.1rem;
+      border: 1px solid #0f0;
+    }
+    .hint {
+      margin-top: 1.25rem;
+      opacity: 0.75;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="/" class="back">&larr; back</a>
+    <h1>chat</h1>
+    <p id="status">opening odysseus...</p>
+    <p>if it does not open, make sure Tailscale is connected.</p>
+    <p><a id="open-link" class="open" href="http://100.82.98.73:7860/">open chat</a></p>
+    <p class="hint">requires Tailscale. odysseus runs on petri (port 7860).</p>
+  </main>
+  <script>
+    (function () {
+      const target = 'http://100.82.98.73:7860/';
+      const link = document.getElementById('open-link');
+      const status = document.getElementById('status');
+      if (link) {
+        link.href = target;
+      }
+      status.textContent = 'opening odysseus...';
+      window.setTimeout(function () {
+        window.location.href = target;
+      }, 150);
+    })();
+  </script>
+</body>
+</html>
