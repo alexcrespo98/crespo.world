@@ -175,9 +175,8 @@
 <body>
   <a href="/random/" class="back">&larr; random</a>
   <h1>recipeasy</h1>
-  <p class="subtitle">paste a url, recipe text, or html &mdash; or just search</p>
 
-  <textarea id="input" placeholder="chocolate chip cookies&#10;https://allrecipes.com/recipe/...&#10;or paste recipe text / html"></textarea>
+  <textarea id="input" placeholder="type a recipe or paste a url"></textarea>
   <button id="go-btn" onclick="simplify()">simplify</button>
   <div class="status" id="status"></div>
 
@@ -278,7 +277,8 @@
 
     function parseAmount(ing) {
       // split "1 cup flour" into {amount: "1", unit: "cup", name: "flour"}
-      const m = ing.match(/^([\d\s\/\.]+)\s*(cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|ml|l|clove|cloves|pinch|dash|can|cans|slice|slices|piece|pieces)?\s*(.+)$/i);
+      // match plurals first (cups before cup) to avoid "s" bleeding into ingredient name
+      const m = ing.match(/^([\d\s\/\.]+)\s*(cups?|tablespoons?|tbsp|teaspoons?|tsp|ounces?|oz|pounds?|lbs?|grams?|g|ml|l|cloves?|pinch|dash|cans?|slices?|pieces?)?\s*(.+)$/i);
       if (m) return {amount: m[1].trim(), unit: m[2] || '', name: m[3].trim(), original: ing};
       return {amount: '', unit: '', name: ing, original: ing};
     }

@@ -88,26 +88,39 @@ def fetch_url_content(url):
     return extract_text_from_html(resp.text)
 
 def search_for_recipe(query):
+    """Return a list of candidate recipe URLs from multiple sources."""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    urls = []
+    # allrecipes direct search
     try:
         resp = requests.get(f"https://www.allrecipes.com/search?q={query.replace(' ', '+')}", headers=headers, timeout=10)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
             for a in soup.find_all("a", href=True):
                 href = a["href"]
-                if "/recipe/" in href and href.startswith("http"):
-                    return href
+                if "/recipe/" in href and href.startswith("http") and href not in urls:
+                    urls.append(href)
     except Exception as e:
         print(f"AllRecipes failed: {e}")
+    # duckduckgo fallback for allrecipes
     try:
         resp = requests.get(f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}+recipe+site:allrecipes.com", headers=headers, timeout=10)
         soup = BeautifulSoup(resp.text, "html.parser")
         for a in soup.find_all("a", class_="result__a", href=True):
-            if a["href"].startswith("http"):
-                return a["href"]
+            if a["href"].startswith("http") and a["href"] not in urls:
+                urls.append(a["href"])
     except Exception as e:
-        print(f"DuckDuckGo failed: {e}")
-    return None
+        print(f"DuckDuckGo allrecipes failed: {e}")
+    # duckduckgo general recipe search
+    try:
+        resp = requests.get(f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}+recipe", headers=headers, timeout=10)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for a in soup.find_all("a", class_="result__a", href=True):
+            if a["href"].startswith("http") and a["href"] not in urls:
+                urls.append(a["href"])
+    except Exception as e:
+        print(f"DuckDuckGo general failed: {e}")
+    return urls
 
 # --- OLLAMA ---
 
@@ -199,11 +212,26 @@ def simplify():
         elif len(user_input) > 200:
             content = user_input[:8000]
         else:
-            source_url = search_for_recipe(user_input)
-            if not source_url:
+            # search mode: try multiple URLs until one works
+            candidate_urls = search_for_recipe(user_input)
+            if not candidate_urls:
                 log_usage(ip, user_input[:200], success=False)
                 return jsonify({"error": f"Could not find a recipe for \"{user_input}\". Try pasting a URL or the recipe text."}), 404
-            content = fetch_url_content(source_url)
+            
+            content = None
+            source_url = None
+            for url in candidate_urls:
+                try:
+                    content = fetch_url_content(url)
+                    source_url = url
+                    break
+                except Exception as e:
+                    print(f"Failed to fetch {url}: {e}")
+                    continue
+            
+            if not content:
+                log_usage(ip, user_input[:200], success=False)
+                return jsonify({"error": f"Found recipes but couldn't fetch any for \"{user_input}\". Try pasting a URL directly."}), 404
 
         simplified = simplify_with_ollama(content)
         log_usage(ip, user_input[:200], source_url, success=True)
