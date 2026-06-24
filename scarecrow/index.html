@@ -72,11 +72,9 @@
       const status = document.getElementById('status');
       if (link) {
         link.href = target;
+        link.target = '_blank';
       }
-      status.textContent = 'opening greenhouse dashboard...';
-      window.setTimeout(function () {
-        window.location.href = target;
-      }, 150);
+      status.textContent = 'click the button below to open scarecrow in a new tab';
     })();
   </script>
 </body>
