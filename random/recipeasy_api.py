@@ -1,502 +1,405 @@
 #!/usr/bin/env python3
 """
-Recipeasy API - AI-powered recipe simplifier
-Runs on your homeserver and simplifies recipes from any website.
+Recipeasy API - AI-powered recipe simplifier using Ollama
+Runs on Petri, accessible via Tailscale Funnel.
 
-Usage:
-    1. Install dependencies: pip install flask openai requests beautifulsoup4 flask-cors python-dotenv
-    2. Configure your API keys (see below)
-    3. Run: python recipeasy_api.py
-    4. Access at: http://localhost:5000 (or via your server IP)
+Features:
+- Uses local Ollama (qwen2.5:7b) instead of OpenAI
+- Rate limited: 50 requests per IP per day
+- Usage tracking with SQLite
+- Public stats endpoint
 """
 
 import os
 import re
+import json
+import sqlite3
 import requests
-import subprocess
+from datetime import datetime, timedelta
 from urllib.parse import unquote
 from functools import wraps
 from bs4 import BeautifulSoup
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
-from openai import OpenAI
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
-# ============================================================================
-# CONFIGURATION - PASTE YOUR API KEYS HERE
-# ============================================================================
-
-# API KEY FOR ENDPOINT PROTECTION
-# This key protects your /simplify endpoint from unauthorized access.
-# IMPORTANT: Change this to a secure random string!
-# Example: Use a password manager to generate a strong random key.
-# This key must match the API_KEY in your recipeasy.html file.
-API_KEY = "PASTE_YOUR_API_KEY_HERE"  # TODO: Replace with your secure API key
-
-# OPENAI API KEY
-# Get your OpenAI API key from: https://platform.openai.com/api-keys
-# Your key should start with: sk-proj-... or sk-...
-# You can set this here OR use environment variable OPENAI_API_KEY
-OPENAI_API_KEY = " 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"  # TODO: Replace with your OpenAI API key (sk-...)
-
-# ============================================================================
 
 app = Flask(__name__)
-# Enable CORS for all routes, allowing requests from crespo.world and any origin
 CORS(app, origins=["*"])
 
-# Get OpenAI API key from hardcoded value or environment variable
-# Priority: 1) Environment variable, 2) Hardcoded value above
-openai_key = os.environ.get("OPENAI_API_KEY")
-if not openai_key or openai_key == "":
-    openai_key = OPENAI_API_KEY if OPENAI_API_KEY != "PASTE_YOUR_OPENAI_API_KEY_HERE" else None
+# Configuration
+OLLAMA_BASE = "http://localhost:11434"
+OLLAMA_MODEL = "qwen2.5:7b"
+RATE_LIMIT_PER_DAY = 50
+DB_PATH = "/Users/crespo/recipeasy/usage.db"
 
-# Initialize OpenAI client
-client = OpenAI(api_key=openai_key) if openai_key else None
+# Ensure directory exists
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
-# Get API key for endpoint protection
-# Priority: 1) Environment variable, 2) Hardcoded value above
-api_protection_key = os.environ.get("RECIPEASY_API_KEY") or API_KEY
+# ============================================================================
+# DATABASE SETUP
+# ============================================================================
 
+def get_db():
+    """Get database connection for current request"""
+    if 'db' not in g:
+        g.db = sqlite3.connect(DB_PATH)
+        g.db.row_factory = sqlite3.Row
+    return g.db
 
-def require_api_key(f):
-    """
-    Decorator to require API key authentication for endpoints.
-    
-    API key should be provided in the request headers as:
-    - Authorization: Bearer YOUR_API_KEY
-    - OR X-API-Key: YOUR_API_KEY
-    
-    Returns 401 Unauthorized if API key is missing or incorrect.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Check if API key is configured
-        if api_protection_key == "PASTE_YOUR_API_KEY_HERE":
-            return jsonify({
-                'error': 'API key not configured on server. Please set API_KEY in recipeasy_api.py or RECIPEASY_API_KEY environment variable.'
-            }), 500
-        
-        # Get API key from request headers
-        auth_header = request.headers.get('Authorization', '')
-        api_key_header = request.headers.get('X-API-Key', '')
-        
-        # Extract key from Authorization: Bearer format
-        provided_key = None
-        if auth_header.startswith('Bearer '):
-            provided_key = auth_header[7:]  # Remove 'Bearer ' prefix
-        elif api_key_header:
-            provided_key = api_key_header
-        
-        # Validate API key
-        if not provided_key:
-            return jsonify({
-                'error': 'Missing API key. Include "Authorization: Bearer YOUR_API_KEY" or "X-API-Key: YOUR_API_KEY" in request headers.'
-            }), 401
-        
-        if provided_key != api_protection_key:
-            return jsonify({
-                'error': 'Invalid API key.'
-            }), 401
-        
-        return f(*args, **kwargs)
-    
-    return decorated_function
+@app.teardown_appcontext
+def close_db(exception):
+    """Close database connection at end of request"""
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
 
-# Recipe site patterns for search and validation
+def init_db():
+    """Initialize database tables"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            input TEXT,
+            source_url TEXT,
+            success INTEGER DEFAULT 1
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_usage_ip_timestamp 
+        ON usage(ip, timestamp)
+    """)
+    conn.commit()
+    conn.close()
+
+def check_rate_limit(ip):
+    """Check if IP has exceeded daily rate limit"""
+    db = get_db()
+    cutoff = (datetime.now() - timedelta(days=1)).isoformat()
+    cursor = db.execute(
+        "SELECT COUNT(*) as count FROM usage WHERE ip = ? AND timestamp > ?",
+        (ip, cutoff)
+    )
+    count = cursor.fetchone()['count']
+    return count < RATE_LIMIT_PER_DAY
+
+def log_usage(ip, input_text, source_url=None, success=True):
+    """Log API usage"""
+    db = get_db()
+    db.execute(
+        "INSERT INTO usage (ip, timestamp, input, source_url, success) VALUES (?, ?, ?, ?, ?)",
+        (ip, datetime.now().isoformat(), input_text, source_url, 1 if success else 0)
+    )
+    db.commit()
+
+# ============================================================================
+# RECIPE FETCHING AND PARSING
+# ============================================================================
+
 RECIPE_SITE_PATTERNS = [
-    'allrecipes.com',
-    'foodnetwork.com',
-    'bonappetit.com',
-    'epicurious.com',
-    'seriouseats.com',
-    'simplyrecipes.com',
-    'tasteofhome.com'
+    'allrecipes.com', 'foodnetwork.com', 'bonappetit.com',
+    'epicurious.com', 'seriouseats.com', 'simplyrecipes.com',
+    'tasteofhome.com', 'kingarthurbaking.com', 'nytcooking.com'
 ]
 
-RECIPE_KEYWORDS = ['recipe', 'food', 'cook', 'kitchen', 'tasty', 'delish']
-
-def get_tailscale_ip():
-    """Get the Tailscale IPv4 address of this machine"""
-    try:
-        result = subprocess.run(['tailscale', 'ip', '-4'], 
-                              capture_output=True, 
-                              text=True, 
-                              timeout=5)
-        if result.returncode == 0:
-            ip = result.stdout.strip()
-            if ip:
-                return ip
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-        pass
-    return None
-
-
 def is_url(text):
-    """Check if the input text is a URL"""
+    """Check if text is a URL"""
     url_pattern = re.compile(
-        r'^https?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
-        r'localhost|'  # localhost...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-        r'(?::\d+)?'  # optional port
+        r'^https?://'
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
+        r'localhost|'
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+        r'(?::\d+)?'
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
     return url_pattern.match(text) is not None
 
 def is_recipe_url(url):
-    """Check if URL is from a known recipe site or contains recipe keywords"""
+    """Check if URL is from a recipe site"""
     url_lower = url.lower()
-    return (any(site in url_lower for site in RECIPE_SITE_PATTERNS) or
-            any(keyword in url_lower for keyword in RECIPE_KEYWORDS))
+    return any(site in url_lower for site in RECIPE_SITE_PATTERNS)
 
 def search_recipe(query):
-    """Search for a recipe using multiple strategies and return the first valid URL"""
-    
-    # Strategy 1: Try popular recipe sites directly
-    recipe_sites = [
-        f"https://www.allrecipes.com/search?q={query.replace(' ', '+')}",
-        f"https://www.foodnetwork.com/search/{query.replace(' ', '-')}-",
-        f"https://www.bonappetit.com/search?q={query.replace(' ', '+')}",
-        f"https://www.epicurious.com/search/{query.replace(' ', '%20')}",
-        f"https://www.seriouseats.com/search?q={query.replace(' ', '+')}",
-    ]
-    
-    print(f"Trying direct recipe site searches for: {query}")
-    for site_url in recipe_sites[:2]:  # Try first 2 sites
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-            response = requests.get(site_url, headers=headers, timeout=10, allow_redirects=True)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Look for recipe links in search results
-                for link in soup.find_all('a', href=True):
-                    href = link.get('href', '')
-                    if href.startswith('http') and is_recipe_url(href):
-                        print(f"Found recipe URL: {href}")
-                        return href
-        except Exception as e:
-            print(f"Error trying recipe site {site_url}: {e}")
-            continue
-    
-    # Strategy 2: Try Google search with improved parsing
+    """Search for a recipe and return URL"""
+    # Try AllRecipes search
     try:
-        print(f"Trying Google search for: {query}")
-        search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}+recipe"
+        search_url = f"https://www.allrecipes.com/search?q={query.replace(' ', '+')}"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         response = requests.get(search_url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Try multiple methods to extract URLs
-        # Method 1: Look for /url?q= pattern
-        for link in soup.find_all('a', href=True):
-            href = link.get('href', '')
-            if '/url?q=' in href:
-                try:
-                    url = href.split('/url?q=')[1].split('&')[0]
-                    url = unquote(url)
-                    if url.startswith('http') and 'google.com' not in url.lower() and is_recipe_url(url):
-                        print(f"Found recipe URL from Google: {url}")
-                        return url
-                except Exception:
-                    continue
-        
-        # Method 2: Look for direct recipe site links
-        for link in soup.find_all('a', href=True):
-            href = link.get('href', '')
-            if href.startswith('http') and any(site in href.lower() for site in RECIPE_SITE_PATTERNS):
-                print(f"Found direct recipe URL: {href}")
-                return href
-                
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            for link in soup.find_all('a', href=True):
+                href = link.get('href', '')
+                if '/recipe/' in href and href.startswith('http'):
+                    return href
     except Exception as e:
-        print(f"Error with Google search: {e}")
+        print(f"AllRecipes search failed: {e}")
     
-    # Strategy 3: Try DuckDuckGo as a fallback
+    # Try DuckDuckGo
     try:
-        print(f"Trying DuckDuckGo search for: {query}")
         search_url = f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}+recipe"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         response = requests.get(search_url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
         for link in soup.find_all('a', href=True, class_='result__a'):
             href = link.get('href', '')
             if href.startswith('http') and is_recipe_url(href):
-                print(f"Found recipe URL from DuckDuckGo: {href}")
                 return href
     except Exception as e:
-        print(f"Error with DuckDuckGo search: {e}")
+        print(f"DuckDuckGo search failed: {e}")
     
-    print(f"Could not find recipe URL for query: {query}")
     return None
 
 def fetch_webpage_content(url):
-    """Fetch and extract text content from a webpage"""
+    """Fetch and extract text from webpage"""
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Remove script and style elements
-        for script in soup(["script", "style", "nav", "header", "footer"]):
-            script.decompose()
+        # Remove unwanted elements
+        for element in soup(["script", "style", "nav", "header", "footer", "aside"]):
+            element.decompose()
         
-        # Get text and clean it up
+        # Get text
         text = soup.get_text()
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text = ' '.join(chunk for chunk in chunks if chunk)
         
-        # Limit to first 8000 characters to avoid token limits
         return text[:8000]
     except Exception as e:
         print(f"Error fetching webpage: {e}")
         raise
 
-def simplify_recipe_with_ai(content, include_optional=True, unit_preference='original'):
-    """Use OpenAI to extract and simplify the recipe"""
-    try:
-        # Build unit conversion instructions
-        unit_instructions = ""
-        if unit_preference == 'metric':
-            unit_instructions = """
+# ============================================================================
+# AI SIMPLIFICATION WITH OLLAMA
+# ============================================================================
+
+def simplify_with_ollama(content, include_optional=True, unit_preference='original'):
+    """Use Ollama to simplify recipe"""
+    
+    # Build unit instructions
+    unit_instructions = ""
+    if unit_preference == 'metric':
+        unit_instructions = """
 UNIT CONVERSION:
 - Convert ALL measurements to metric (grams, ml, celsius)
 - For dry ingredients: provide grams AND practical volume (e.g., "100g flour (about 3/4 cup)")
 - For liquids: provide ml AND practical volume (e.g., "240ml milk (1 cup)")
-- For items like meat: use grams AND practical descriptions (e.g., "450g chicken breast (2 medium breasts)")
 """
-        elif unit_preference == 'imperial':
-            unit_instructions = """
+    elif unit_preference == 'imperial':
+        unit_instructions = """
 UNIT CONVERSION:
 - Convert ALL measurements to imperial (cups, tablespoons, teaspoons, fahrenheit)
 - For weights: convert to volume when practical (e.g., "1 cup flour" instead of "125g")
-- For items like meat: use practical descriptions (e.g., "2 medium chicken breasts" instead of "1 pound")
-- Provide ounces AND volume for clarity (e.g., "8oz (1 cup)")
 """
-        
-        optional_instructions = ""
-        if not include_optional:
-            optional_instructions = "- EXCLUDE all optional ingredients and garnishes"
-        
-        system_prompt = f"""You are a recipe extraction expert. Your job is to extract recipes from web content and format them in a clean, no-nonsense way.
+    
+    optional_instructions = ""
+    if not include_optional:
+        optional_instructions = "- EXCLUDE all optional ingredients and garnishes"
+    
+    system_prompt = f"""You are a recipe extraction expert. Extract recipes from web content and format cleanly.
 
 CRITICAL REQUIREMENTS:
 1. Extract ALL ingredients with SPECIFIC measurements (NEVER use ranges like "2-3 cups")
-2. For ranges, always use the middle or most practical value (e.g., "2.5 cups" or round to "2.5 cups")
+2. For ranges, use middle value (e.g., "2-3 cups" → "2.5 cups")
 3. Extract ALL instructions in order
-4. Format EXACTLY as shown below
-5. Remove ALL fluff, stories, tips, and extra content
-6. ALWAYS include preheat temperature if there's baking
-7. ALWAYS include prep steps like "line baking sheet" at the start of instructions
+4. Remove ALL fluff, stories, tips
+5. ALWAYS include preheat temperature if baking
 {optional_instructions}
 
 MEASUREMENT RULES:
-- NO RANGES: Convert "2-3 teaspoons" to "2.5 teaspoons" or "2.5 tsp"
-- NO RANGES: Convert "1/2 to 1 cup" to "3/4 cup"
+- NO RANGES: Convert "2-3 teaspoons" to "2.5 teaspoons"
 - Be specific and practical
-- Round to common fractions (1/4, 1/3, 1/2, 2/3, 3/4) when possible
+- Round to common fractions (1/4, 1/3, 1/2, 2/3, 3/4)
 {unit_instructions}
 
 OUTPUT FORMAT (MUST MATCH EXACTLY):
 INGREDIENTS:
 - ingredient 1 with measurement
 - ingredient 2 with measurement
-(etc.)
 
 INSTRUCTIONS:
 1. Preheat oven to [temperature] (if applicable)
 2. Line/prepare pans (if applicable)
 3. [clear, direct instruction]
-4. [clear, direct instruction]
-(etc.)
 
-CRITICAL FORMATTING RULES:
-- Instructions MUST be numbered with format "1. ", "2. ", "3. " etc. (number, period, space)
-- NEVER use "Step 1:" or "1)" or any other format
-- ALWAYS use the exact format shown above
+FORMATTING RULES:
+- Instructions MUST be numbered: "1. ", "2. ", "3. "
+- NEVER use "Step 1:" or "1)"
+- Be concise but complete"""
 
-Be concise but complete. Each instruction should be one clear action."""
-
-        user_prompt = f"""Extract and simplify this recipe. Remove all stories, tips, and fluff. 
-Format it with INGREDIENTS first (with measurements), then INSTRUCTIONS (numbered steps).
+    user_prompt = f"""Extract and simplify this recipe. Remove all stories and fluff.
+Format with INGREDIENTS first (with measurements), then INSTRUCTIONS (numbered).
 
 Content:
 {content}"""
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Using cost-effective model
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.3,  # Lower temperature for more consistent formatting
-            max_tokens=2000
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE}/api/chat",
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,
+                    "num_predict": 2000
+                }
+            },
+            timeout=60
         )
-        
-        return response.choices[0].message.content.strip()
+        response.raise_for_status()
+        data = response.json()
+        return data['message']['content'].strip()
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}")
+        print(f"Ollama error: {e}")
         raise
+
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
+    """Health check"""
     return jsonify({
         'status': 'ok',
-        'version': '1.0',
-        'message': 'Recipeasy API is running'
+        'model': OLLAMA_MODEL,
+        'rate_limit': f'{RATE_LIMIT_PER_DAY} per day'
+    })
+
+@app.route('/stats', methods=['GET'])
+def stats():
+    """Usage statistics"""
+    db = get_db()
+    
+    # Today's usage
+    today = datetime.now().date().isoformat()
+    cursor = db.execute(
+        "SELECT COUNT(*) as count FROM usage WHERE timestamp LIKE ?",
+        (f"{today}%",)
+    )
+    today_count = cursor.fetchone()['count']
+    
+    # Total usage
+    cursor = db.execute("SELECT COUNT(*) as count FROM usage")
+    total_count = cursor.fetchone()['count']
+    
+    # Unique IPs today
+    cursor = db.execute(
+        "SELECT COUNT(DISTINCT ip) as count FROM usage WHERE timestamp LIKE ?",
+        (f"{today}%",)
+    )
+    unique_ips_today = cursor.fetchone()['count']
+    
+    return jsonify({
+        'today': {
+            'requests': today_count,
+            'unique_users': unique_ips_today
+        },
+        'total_requests': total_count,
+        'rate_limit': f'{RATE_LIMIT_PER_DAY} per IP per day'
     })
 
 @app.route('/simplify', methods=['POST'])
-@require_api_key
 def simplify():
-    """
-    Main endpoint to simplify recipes (requires API key authentication).
-    
-    Accepts BOTH:
-    - Direct recipe URLs (e.g., "https://www.allrecipes.com/recipe/...")
-    - Search queries (e.g., "chocolate chip cookies", "butter chicken recipe")
-    
-    When a search query is provided, the API will:
-    1. Search popular recipe sites (AllRecipes, Food Network, etc.)
-    2. Find the first matching recipe URL
-    3. Fetch and parse that recipe
-    4. Return the simplified version
-    """
+    """Simplify a recipe"""
     try:
+        # Get client IP
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ',' in ip:
+            ip = ip.split(',')[0].strip()
+        
+        # Check rate limit
+        if not check_rate_limit(ip):
+            log_usage(ip, None, success=False)
+            return jsonify({
+                'error': f'Rate limit exceeded. Maximum {RATE_LIMIT_PER_DAY} requests per day.'
+            }), 429
+        
+        # Parse request
         data = request.json
         if not data or 'input' not in data:
-            return jsonify({'error': 'Missing "input" field in request'}), 400
+            return jsonify({'error': 'Missing "input" field'}), 400
         
         user_input = data['input'].strip()
         if not user_input:
             return jsonify({'error': 'Input cannot be empty'}), 400
         
-        # Get optional parameters
         include_optional = data.get('include_optional', True)
-        unit_preference = data.get('unit_preference', 'original')  # 'metric', 'imperial', or 'original'
+        unit_preference = data.get('unit_preference', 'original')
         
-        # Determine if input is URL or search query
-        # The API intelligently handles BOTH URLs and search queries!
+        # Determine if URL or search query
         if is_url(user_input):
             recipe_url = user_input
             print(f"Processing URL: {recipe_url}")
         else:
-            # Not a URL - treat as search query and find a recipe
-            print(f"Searching for recipe: {user_input}")
+            print(f"Searching for: {user_input}")
             recipe_url = search_recipe(user_input)
             if not recipe_url:
-                error_msg = (
-                    f'Could not find a recipe for "{user_input}". '
-                    'Try: (1) A direct recipe URL, (2) A more specific search like "butter chicken recipe", '
-                    'or (3) A recipe from AllRecipes, Food Network, or similar sites.'
-                )
-                print(f"ERROR: {error_msg}")
-                return jsonify({'error': error_msg}), 404
-            print(f"Found recipe URL: {recipe_url}")
+                log_usage(ip, user_input, success=False)
+                return jsonify({
+                    'error': f'Could not find recipe for "{user_input}". Try a direct URL.'
+                }), 404
+            print(f"Found: {recipe_url}")
         
-        # Fetch webpage content
-        print("Fetching webpage content...")
+        # Fetch content
+        print("Fetching content...")
         content = fetch_webpage_content(recipe_url)
         
-        # Simplify with AI
-        print("Simplifying recipe with AI...")
-        simplified = simplify_recipe_with_ai(content, include_optional, unit_preference)
+        # Simplify
+        print("Simplifying with Ollama...")
+        simplified = simplify_with_ollama(content, include_optional, unit_preference)
+        
+        # Log success
+        log_usage(ip, user_input, recipe_url, success=True)
         
         return jsonify({
             'simplified_recipe': simplified,
             'source_url': recipe_url
         })
         
-    except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'Failed to fetch recipe: {str(e)}'}), 500
     except Exception as e:
         print(f"Error: {e}")
-        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/', methods=['GET'])
 def index():
-    """Root endpoint with API information"""
+    """API info"""
     return jsonify({
         'name': 'Recipeasy API',
-        'version': '1.0',
+        'version': '2.0',
+        'model': OLLAMA_MODEL,
         'endpoints': {
             '/health': 'GET - Health check',
-            '/simplify': 'POST - Simplify a recipe (requires "input" field with URL or recipe name)',
-        },
-        'example': {
-            'method': 'POST',
-            'endpoint': '/simplify',
-            'body': {
-                'input': 'https://example.com/recipe or "chocolate chip cookies"'
-            }
+            '/stats': 'GET - Usage statistics',
+            '/simplify': 'POST - Simplify recipe (JSON: {"input": "url or query"})'
         }
     })
 
+# ============================================================================
+# MAIN
+# ============================================================================
+
 if __name__ == '__main__':
-    # Check for OpenAI API key
-    if not openai_key:
-        print("=" * 60)
-        print("WARNING: OPENAI_API_KEY not configured!")
-        print("Set it by:")
-        print("  1. Edit OPENAI_API_KEY in recipeasy_api.py (line ~42)")
-        print("  2. OR set environment variable: export OPENAI_API_KEY='sk-...'")
-        print("  3. OR create .env file with: OPENAI_API_KEY=sk-...")
-        print("Get your key from: https://platform.openai.com/api-keys")
-        print("=" * 60)
-    
-    # Check for API protection key
-    if api_protection_key == "PASTE_YOUR_API_KEY_HERE":
-        print("=" * 60)
-        print("WARNING: API_KEY not configured!")
-        print("Your /simplify endpoint will be protected but not functional")
-        print("until you set a secure API key.")
-        print("Set it by:")
-        print("  1. Edit API_KEY in recipeasy_api.py (line ~35)")
-        print("  2. OR set environment variable: export RECIPEASY_API_KEY='your-secure-key'")
-        print("=" * 60)
-    
-    # Get Tailscale IP
-    tailscale_ip = get_tailscale_ip()
-    
-    print("\n" + "=" * 60)
-    print("Recipeasy API Server Starting")
+    init_db()
     print("=" * 60)
-    print(f"Server will be available at:")
-    print(f"  - http://localhost:5000")
-    print(f"  - http://0.0.0.0:5000")
-    if tailscale_ip:
-        print(f"  - http://{tailscale_ip}:5000")
-        print(f"\nTailscale IP detected: {tailscale_ip}")
-        print(f"API endpoint: http://{tailscale_ip}:5000/simplify")
-    else:
-        print(f"  - http://[your-server-ip]:5000")
-        print(f"\nNote: Tailscale IP could not be auto-detected")
-    print("\nEndpoints:")
-    print("  GET  /health   - Health check (public, no auth required)")
-    print("  POST /simplify - Simplify recipe (requires API key)")
-    print("\nAuthentication:")
-    print("  The /simplify endpoint requires an API key in the request headers:")
-    print("  - Authorization: Bearer YOUR_API_KEY")
-    print("  - OR X-API-Key: YOUR_API_KEY")
-    print("=" * 60 + "\n")
-    
-    # Run the server
-    # Using 0.0.0.0 to allow external connections (Tailscale)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("Recipeasy API v2.0")
+    print("=" * 60)
+    print(f"Model: {OLLAMA_MODEL}")
+    print(f"Rate limit: {RATE_LIMIT_PER_DAY} per IP per day")
+    print(f"Database: {DB_PATH}")
+    print("=" * 60)
+    app.run(host='0.0.0.0', port=8092, debug=False)
