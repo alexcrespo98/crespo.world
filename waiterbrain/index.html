@@ -6,6 +6,7 @@
   <title>waiterbrain</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       background: #000;
       color: #0f0;
@@ -14,166 +15,414 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 2em;
+      padding: 2.5em 2em 4em;
     }
-    .container { max-width: 720px; width: 100%; }
+
+    .container {
+      max-width: 760px;
+      width: 100%;
+    }
+
+    a { color: #0f0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
     .back {
-      display: block; margin-bottom: 2em; font-size: 0.85rem;
-      opacity: 0.7; color: #0f0; text-decoration: none;
+      display: inline-block;
+      font-size: 0.85rem;
+      opacity: 0.6;
+      margin-bottom: 2.5em;
     }
-    .back:hover { text-decoration: underline; }
-    h1 { font-size: 1.3rem; font-weight: normal; margin-bottom: 1.5em; letter-spacing: 0.05em; }
-    .section { display: none; animation: fadeIn 0.3s ease-in; }
-    .section.active { display: block; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    p { font-size: 0.9rem; line-height: 1.7; margin-bottom: 1em; }
-    .nav-links { margin: 2em 0; padding: 0; list-style: none; }
-    .nav-links li { margin: 0.6em 0; }
-    .nav-links a { color: #0f0; text-decoration: none; font-size: 0.9rem; cursor: pointer; }
-    .nav-links a:hover { text-decoration: underline; }
-    .content-section { margin-top: 2em; }
-    .content-section h2 { font-size: 1rem; font-weight: normal; margin-bottom: 1em; opacity: 0.9; }
-    table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.85rem; }
-    th, td { text-align: left; padding: 0.5em; border-bottom: 1px solid #0f03; }
-    th { opacity: 0.7; font-weight: normal; }
-    ol { margin: 1em 0 1em 1.5em; font-size: 0.9rem; line-height: 1.8; }
-    .back-to-menu {
-      display: inline-block; margin-top: 2em; color: #0f0;
-      text-decoration: none; font-size: 0.85rem; opacity: 0.7; cursor: pointer;
+
+    /* ---- sections ---- */
+    .section { display: none; }
+    .section.active { display: block; animation: fade 0.2s ease-in; }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ---- HOME ---- */
+    .home-title {
+      font-size: 2rem;
+      font-weight: normal;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.4em;
     }
-    .back-to-menu:hover { text-decoration: underline; opacity: 1; }
-    .contact { margin-top: 3em; font-size: 0.85rem; opacity: 0.7; }
+
+    .home-sub {
+      font-size: 0.95rem;
+      opacity: 0.75;
+      line-height: 1.6;
+      margin-bottom: 2.5em;
+      max-width: 520px;
+    }
+
+    .nav-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      border: 1px solid #0f04;
+      margin-bottom: 3em;
+    }
+
+    .nav-card {
+      padding: 1.4em 1.2em;
+      border: none;
+      background: transparent;
+      color: #0f0;
+      font-family: monospace;
+      text-align: left;
+      cursor: pointer;
+      border-right: 1px solid #0f04;
+      border-bottom: 1px solid #0f04;
+      transition: background 0.15s;
+    }
+
+    .nav-card:hover { background: #0f01; }
+
+    .nav-card .label {
+      font-size: 0.75rem;
+      opacity: 0.5;
+      margin-bottom: 0.35em;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .nav-card .title {
+      font-size: 1rem;
+    }
+
+    /* ---- INNER SECTIONS ---- */
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: normal;
+      opacity: 0.5;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 2em;
+    }
+
+    /* how it works */
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: grid;
+      grid-template-columns: 2.5em 1fr;
+      align-items: baseline;
+      padding: 0.9em 0;
+      border-bottom: 1px solid #0f03;
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      font-size: 0.75rem;
+      opacity: 0.35;
+      padding-top: 0.15em;
+    }
+
+    /* hardware */
+    .hw-block { margin-bottom: 2.5em; }
+    .hw-block h3 {
+      font-size: 0.75rem;
+      opacity: 0.5;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 1em;
+      font-weight: normal;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    td { padding: 0.55em 0.6em; border-bottom: 1px solid #0f03; vertical-align: top; }
+    td:first-child { opacity: 0.55; width: 38%; }
+
+    /* cost */
+    .cost-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.75em 0;
+      border-bottom: 1px solid #0f03;
+      font-size: 0.95rem;
+    }
+
+    .cost-row.total {
+      border-top: 1px solid #0f06;
+      border-bottom: none;
+      margin-top: 0.3em;
+      padding-top: 1em;
+    }
+
+    .cost-row.total .cost-label { opacity: 1; }
+    .cost-row .cost-label { opacity: 0.65; }
+    .cost-row .cost-val { letter-spacing: 0.03em; }
+
+    /* bandwidth */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      border: 1px solid #0f03;
+    }
+
+    .stat-cell {
+      padding: 1.2em 1em;
+      border-right: 1px solid #0f03;
+      border-bottom: 1px solid #0f03;
+    }
+
+    .stat-cell .val {
+      font-size: 1.5rem;
+      display: block;
+      margin-bottom: 0.2em;
+    }
+
+    .stat-cell .desc {
+      font-size: 0.75rem;
+      opacity: 0.5;
+    }
+
+    /* principles */
+    .principle {
+      padding: 0.75em 0;
+      border-bottom: 1px solid #0f03;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .principle .p-name {
+      opacity: 0.45;
+      margin-right: 0.5em;
+    }
+
+    /* back link */
+    .back-link {
+      display: inline-block;
+      margin-top: 3em;
+      font-size: 0.85rem;
+      opacity: 0.5;
+      cursor: pointer;
+    }
+    .back-link:hover { opacity: 1; text-decoration: underline; }
+
+    @media (max-width: 520px) {
+      .nav-grid { grid-template-columns: 1fr; }
+      .stat-grid { grid-template-columns: 1fr; }
+      .home-title { font-size: 1.5rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <a href="/" class="back">&larr; back</a>
-    <h1>waiterbrain</h1>
+<div class="container">
 
-    <div id="menu" class="section active">
-      <p>voice-to-order AI for restaurants. servers wear a lapel mic and belt pack. the system listens, transcribes, parses orders, and pushes them to Toast POS automatically. no manual re-entry. all processing runs locally on a Mac Mini. no cloud.</p>
-      <ul class="nav-links">
-        <li><a onclick="showSection('how-it-works')">how it works</a></li>
-        <li><a onclick="showSection('hardware')">hardware architecture</a></li>
-        <li><a onclick="showSection('software')">software pipeline</a></li>
-        <li><a onclick="showSection('bandwidth')">bandwidth and scale</a></li>
-        <li><a onclick="showSection('privacy')">privacy and principles</a></li>
-      </ul>
-      <p class="contact">contact: <a href="mailto:alex@crespo.world">alex@crespo.world</a></p>
+  <!-- ======= HOME ======= -->
+  <div id="home" class="section active">
+    <a href="https://crespo.world/" class="back">&larr; crespo.world</a>
+
+    <div class="home-title">waiterbrain</div>
+    <p class="home-sub">voice-to-order AI for restaurants. servers wear a lapel mic and belt pack. orders are transcribed, parsed, and pushed to Toast POS automatically. everything runs locally on a Mac Mini. no cloud.</p>
+
+    <div class="nav-grid">
+      <button class="nav-card" onclick="show('how-it-works')">
+        <div class="label">01</div>
+        <div class="title">how it works</div>
+      </button>
+      <button class="nav-card" onclick="show('hardware')">
+        <div class="label">02</div>
+        <div class="title">hardware</div>
+      </button>
+      <button class="nav-card" onclick="show('bandwidth')">
+        <div class="label">03</div>
+        <div class="title">scale + bandwidth</div>
+      </button>
+      <button class="nav-card" onclick="show('cost')">
+        <div class="label">04</div>
+        <div class="title">cost per restaurant</div>
+      </button>
+      <button class="nav-card" onclick="show('software')">
+        <div class="label">05</div>
+        <div class="title">software pipeline</div>
+      </button>
+      <button class="nav-card" onclick="show('principles')">
+        <div class="label">06</div>
+        <div class="title">principles + privacy</div>
+      </button>
     </div>
 
-    <div id="how-it-works" class="section">
-      <div class="content-section">
-        <h2>how it works</h2>
-        <ol>
-          <li>server speaks order naturally into lapel mic</li>
-          <li>belt pack captures audio, finds position via UWB, reads heading via IMU</li>
-          <li>audio compressed with Opus codec, streamed over 915MHz radio to Mac Mini</li>
-          <li>Mac Mini runs Whisper for transcription, local LLM for order parsing</li>
-          <li>UWB position matched to nearest table from restaurant floor map</li>
-          <li>structured order JSON pushed to Toast POS at the correct table</li>
-          <li>staff approves, edits, or discards the draft on screen</li>
-        </ol>
-      </div>
-      <a class="back-to-menu" onclick="showSection('menu')">&larr; back to menu</a>
-    </div>
-
-    <div id="hardware" class="section">
-      <div class="content-section">
-        <h2>server belt pack (worn on hip)</h2>
-        <table>
-          <tr><th>component</th><th>part</th><th>purpose</th></tr>
-          <tr><td>microcontroller</td><td>ESP32-S3</td><td>brain, runs all sensors</td></tr>
-          <tr><td>microphone</td><td>INMP441 I2S MEMS</td><td>captures voice</td></tr>
-          <tr><td>UWB module</td><td>DWM3000</td><td>position via trilateration</td></tr>
-          <tr><td>IMU</td><td>BNO085 9-axis</td><td>heading and orientation</td></tr>
-          <tr><td>barometer</td><td>BMP390</td><td>floor detection via pressure</td></tr>
-          <tr><td>radio</td><td>SX1262 915MHz</td><td>streams data to Mac Mini</td></tr>
-          <tr><td>battery</td><td>5000mAh LiPo</td><td>full shift, recharges overnight</td></tr>
-          <tr><td>housing</td><td>3D printed</td><td>belt clip, discreet</td></tr>
-        </table>
-        <p style="margin-top:1.5em">the pack compresses audio to Opus (24kbps), packages position + heading + audio into a 30kbps stream, and transmits over 915MHz FSK to the Mac Mini receiver.</p>
-
-        <h2 style="margin-top:2em">UWB anchors (permanent, on walls)</h2>
-        <table>
-          <tr><th>component</th><th>part</th><th>purpose</th></tr>
-          <tr><td>UWB module</td><td>DWM3000</td><td>responds to ranging pings</td></tr>
-          <tr><td>microcontroller</td><td>ESP32-S3</td><td>handles UWB protocol</td></tr>
-          <tr><td>power</td><td>USB wall wart</td><td>permanent, always on</td></tr>
-          <tr><td>housing</td><td>plastic enclosure</td><td>mounted on wall or ceiling</td></tr>
-        </table>
-        <p style="margin-top:1.5em">3-6 anchors per restaurant, placed on walls at the perimeter. calibrated once during setup. the tag on each server does trilateration to find its position with 10-30cm accuracy.</p>
-
-        <h2 style="margin-top:2em">Mac Mini (back office)</h2>
-        <table>
-          <tr><th>component</th><th>purpose</th></tr>
-          <tr><td>USB 915MHz receiver dongle</td><td>receives streams from all server packs</td></tr>
-          <tr><td>Whisper large-v3-turbo</td><td>speech-to-text, runs locally</td></tr>
-          <tr><td>local LLM (7-14B quantized)</td><td>parses transcript into structured order JSON</td></tr>
-          <tr><td>Toast POS API</td><td>pushes orders to the correct table</td></tr>
-        </table>
-        <p style="margin-top:1.5em">one Mac Mini handles the full restaurant. 10 servers simultaneously on one radio channel.</p>
-      </div>
-      <a class="back-to-menu" onclick="showSection('menu')">&larr; back to menu</a>
-    </div>
-
-    <div id="software" class="section">
-      <div class="content-section">
-        <h2>software pipeline</h2>
-        <ol>
-          <li><strong>audio capture:</strong> INMP441 mic on ESP32-S3, 16kHz mono</li>
-          <li><strong>Opus compression:</strong> 256kbps raw down to 24kbps</li>
-          <li><strong>915MHz streaming:</strong> FSK mode, TDMA for multiple servers</li>
-          <li><strong>Whisper transcription:</strong> mlx-whisper large-v3-turbo on Mac Mini</li>
-          <li><strong>LLM order parsing:</strong> local 7-14B model, structured JSON output</li>
-          <li><strong>menu validation:</strong> checks items, modifiers, rules against restaurant menu</li>
-          <li><strong>table association:</strong> UWB position matched to floor map</li>
-          <li><strong>Toast POS push:</strong> order appears as draft for staff confirmation</li>
-        </ol>
-      </div>
-      <a class="back-to-menu" onclick="showSection('menu')">&larr; back to menu</a>
-    </div>
-
-    <div id="bandwidth" class="section">
-      <div class="content-section">
-        <h2>bandwidth and scale</h2>
-        <table>
-          <tr><th>metric</th><th>value</th></tr>
-          <tr><td>per server bandwidth</td><td>30kbps (24 audio + 6 telemetry)</td></tr>
-          <tr><td>915MHz FSK usable throughput</td><td>300kbps per channel</td></tr>
-          <tr><td>servers per channel</td><td>10</td></tr>
-          <tr><td>servers with dual channel</td><td>20</td></tr>
-          <tr><td>UWB anchor range (indoor)</td><td>25-40m</td></tr>
-          <tr><td>UWB accuracy</td><td>10-30cm</td></tr>
-          <tr><td>915MHz range (through walls)</td><td>100m+</td></tr>
-        </table>
-      </div>
-      <a class="back-to-menu" onclick="showSection('menu')">&larr; back to menu</a>
-    </div>
-
-    <div id="privacy" class="section">
-      <div class="content-section">
-        <h2>privacy</h2>
-        <p>all processing local. no cloud dependency. no conversation data stored permanently. no audio leaves the building.</p>
-        <h2 style="margin-top:2em">product principles</h2>
-        <p>. invisible: works in the background, servers don't change behavior</p>
-        <p>. assistive: supports staff, does not replace them</p>
-        <p>. private: everything runs on-premise</p>
-        <p>. accurate: reduces missed items, modifier errors, re-entry mistakes</p>
-        <p>. learnable: improves from staff edits and discards over time</p>
-        <p>. practical: full shift battery, overnight charging, minimal setup</p>
-      </div>
-      <a class="back-to-menu" onclick="showSection('menu')">&larr; back to menu</a>
-    </div>
-
+    <div style="font-size:0.8rem; opacity:0.4;">contact: <a href="mailto:alex@crespo.world">alex@crespo.world</a></div>
   </div>
-  <script>
-    function showSection(id) {
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
-      window.scrollTo(0, 0);
-    }
-  </script>
+
+  <!-- ======= HOW IT WORKS ======= -->
+  <div id="how-it-works" class="section">
+    <a href="https://crespo.world/" class="back">&larr; crespo.world</a>
+    <div class="section-title">how it works</div>
+
+    <ol class="steps">
+      <li>server speaks order naturally into lapel mic</li>
+      <li>belt pack captures audio, finds position via UWB, reads heading via IMU</li>
+      <li>audio compressed with Opus, streamed over 915MHz radio to Mac Mini</li>
+      <li>Mac Mini runs Whisper for transcription, local LLM for order parsing</li>
+      <li>UWB position matched to nearest table from restaurant floor map</li>
+      <li>structured order JSON pushed to Toast POS at the correct table</li>
+      <li>staff approves, edits, or discards the draft on screen</li>
+    </ol>
+
+    <span class="back-link" onclick="show('home')">&larr; back</span>
+  </div>
+
+  <!-- ======= HARDWARE ======= -->
+  <div id="hardware" class="section">
+    <a href="https://crespo.world/" class="back">&larr; crespo.world</a>
+    <div class="section-title">hardware</div>
+
+    <div class="hw-block">
+      <h3>server belt pack (worn on hip)</h3>
+      <table>
+        <tr><td>microcontroller</td><td>ESP32-S3</td></tr>
+        <tr><td>microphone</td><td>INMP441 I2S MEMS</td></tr>
+        <tr><td>positioning</td><td>DWM3000 UWB — trilateration to wall anchors</td></tr>
+        <tr><td>orientation</td><td>BNO085 9-axis IMU</td></tr>
+        <tr><td>floor detection</td><td>BMP390 barometer</td></tr>
+        <tr><td>radio</td><td>SX1262 915MHz — streams to Mac Mini</td></tr>
+        <tr><td>battery</td><td>5000mAh LiPo — full shift, overnight charge</td></tr>
+        <tr><td>housing</td><td>3D printed belt clip</td></tr>
+      </table>
+    </div>
+
+    <div class="hw-block">
+      <h3>UWB anchors (wall-mounted, permanent)</h3>
+      <table>
+        <tr><td>UWB</td><td>DWM3000 — responds to ranging pings from packs</td></tr>
+        <tr><td>microcontroller</td><td>ESP32-S3</td></tr>
+        <tr><td>power</td><td>USB wall wart — always on</td></tr>
+        <tr><td>count</td><td>3-6 per restaurant, calibrated once at setup</td></tr>
+      </table>
+    </div>
+
+    <div class="hw-block">
+      <h3>Mac Mini (back office)</h3>
+      <table>
+        <tr><td>receiver</td><td>USB 915MHz dongle</td></tr>
+        <tr><td>transcription</td><td>Whisper large-v3-turbo (local)</td></tr>
+        <tr><td>order parsing</td><td>local LLM 7-14B quantized</td></tr>
+        <tr><td>POS</td><td>Toast API — pushes draft orders per table</td></tr>
+      </table>
+    </div>
+
+    <span class="back-link" onclick="show('home')">&larr; back</span>
+  </div>
+
+  <!-- ======= BANDWIDTH ======= -->
+  <div id="bandwidth" class="section">
+    <a href="https://crespo.world/" class="back">&larr; crespo.world</a>
+    <div class="section-title">scale + bandwidth</div>
+
+    <div class="stat-grid">
+      <div class="stat-cell">
+        <span class="val">30kbps</span>
+        <span class="desc">per server (24 audio + 6 telemetry)</span>
+      </div>
+      <div class="stat-cell">
+        <span class="val">300kbps</span>
+        <span class="desc">915MHz FSK usable throughput per channel</span>
+      </div>
+      <div class="stat-cell">
+        <span class="val">10 / 20</span>
+        <span class="desc">servers per channel / dual channel</span>
+      </div>
+      <div class="stat-cell">
+        <span class="val">10-30cm</span>
+        <span class="desc">UWB positioning accuracy indoors</span>
+      </div>
+      <div class="stat-cell">
+        <span class="val">25-40m</span>
+        <span class="desc">UWB anchor range indoors</span>
+      </div>
+      <div class="stat-cell">
+        <span class="val">100m+</span>
+        <span class="desc">915MHz range through walls</span>
+      </div>
+    </div>
+
+    <span class="back-link" onclick="show('home')">&larr; back</span>
+  </div>
+
+  <!-- ======= COST ======= -->
+  <div id="cost" class="section">
+    <a href="https://crespo.world/" class="back">&larr; crespo.world</a>
+    <div class="section-title">cost per restaurant</div>
+
+    <div class="cost-row">
+      <span class="cost-label">4 UWB anchors (one-time install)</span>
+      <span class="cost-val">$60 - 80</span>
+    </div>
+    <div class="cost-row">
+      <span class="cost-label">USB 915MHz receiver dongle</span>
+      <span class="cost-val">$8 - 13</span>
+    </div>
+    <div class="cost-row">
+      <span class="cost-label">per server belt pack</span>
+      <span class="cost-val">$39 - 59</span>
+    </div>
+    <div class="cost-row total">
+      <span class="cost-label">6-server restaurant total</span>
+      <span class="cost-val">$302 - 449</span>
+    </div>
+
+    <p style="font-size:0.8rem; opacity:0.45; margin-top:1.5em;">Mac Mini already owned. anchors are a one-time fixed cost. server packs scale with staff.</p>
+
+    <span class="back-link" onclick="show('home')">&larr; back</span>
+  </div>
+
+  <!-- ======= SOFTWARE ======= -->
+  <div id="software" class="section">
+    <a href="https://crespo.world/" class="back">&larr; crespo.world</a>
+    <div class="section-title">software pipeline</div>
+
+    <ol class="steps">
+      <li>audio capture — INMP441 mic on ESP32-S3, 16kHz mono</li>
+      <li>Opus compression — 256kbps raw down to 24kbps</li>
+      <li>915MHz streaming — FSK mode, TDMA for multiple servers</li>
+      <li>Whisper transcription — mlx-whisper large-v3-turbo on Mac Mini</li>
+      <li>LLM order parsing — local 7-14B model, structured JSON output</li>
+      <li>menu validation — checks items, modifiers, and rules against restaurant menu</li>
+      <li>table association — UWB position matched to floor map</li>
+      <li>Toast POS push — order appears as draft for staff confirmation</li>
+    </ol>
+
+    <span class="back-link" onclick="show('home')">&larr; back</span>
+  </div>
+
+  <!-- ======= PRINCIPLES ======= -->
+  <div id="principles" class="section">
+    <a href="https://crespo.world/" class="back">&larr; crespo.world</a>
+    <div class="section-title">principles + privacy</div>
+
+    <p style="font-size:0.9rem; line-height:1.6; margin-bottom:2em; opacity:0.8;">all processing runs locally. no cloud dependency. no audio leaves the building. no conversation data stored permanently.</p>
+
+    <div class="principle"><span class="p-name">invisible</span> works in the background, servers don't change their behavior</div>
+    <div class="principle"><span class="p-name">assistive</span> supports staff, does not replace them</div>
+    <div class="principle"><span class="p-name">private</span> everything runs on-premise</div>
+    <div class="principle"><span class="p-name">accurate</span> reduces missed items, modifier errors, re-entry mistakes</div>
+    <div class="principle"><span class="p-name">learnable</span> improves from staff edits and discards over time</div>
+    <div class="principle"><span class="p-name">practical</span> full shift battery, overnight charging, minimal setup</div>
+
+    <span class="back-link" onclick="show('home')">&larr; back</span>
+  </div>
+
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo(0, 0);
+  }
+</script>
 </body>
 </html>
